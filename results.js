@@ -166,6 +166,11 @@ function renderViewer(il, tracks) {
   const pad = withData.length > 1 ? 0.08 * (withData[withData.length - 1] - withData[0]) : 5;
   const zRange = withData.length ? [withData[0] - pad, withData[withData.length - 1] + pad] : [z[0], z[np - 1]];   // zoom to where there is signal
   const iTop = 1 + tracks.length, iRight = iTop + 1;
+  // One fixed amplitude scale for both side panels (from the whole map), so relative amplitudes survive sweeping the sliders.
+  let fMax = 0, fMin = 0;
+  for (const row of il.spectra) for (const v of row) if (v !== null) { if (v > fMax) fMax = v; if (v < fMin) fMin = v; }
+  const fRange = [fMin < 0 ? 1.05 * fMin : 0, 1.05 * fMax];
+  const fixedScale = () => $("view-fixed").checked;
   const data = [
     { type: "heatmap", x: z, y: tau, z: zmap, colorscale: "Viridis", zsmooth: false, xaxis: "x", yaxis: "y",
       colorbar: { title: "f", len: 0.7, y: 0, yanchor: "bottom", x: 1.02 }, hovertemplate: "z %{x:.1f} µm<br>T₂ %{y:.2e} s<br>f %{z:.3g}<extra></extra>" },
@@ -182,8 +187,8 @@ function renderViewer(il, tracks) {
     xaxis: { ...grid, title: "z (µm)", domain: [0, 0.74], anchor: "y", range: zRange },
     yaxis: { ...grid, title: "T₂ (s)", type: "log", tickformat: ".0e", domain: [0, 0.7], anchor: "x", range: [Math.log10(tau[0]), Math.log10(tau[nt - 1])] },
     xaxis2: { ...grid, domain: [0, 0.74], anchor: "y2", matches: "x", showticklabels: false },
-    yaxis2: { ...grid, title: "Signal", domain: [0.77, 1], anchor: "x2" },
-    xaxis3: { ...grid, title: "Signal", domain: [0.8, 1], anchor: "y3" },
+    yaxis2: { ...grid, title: "Signal", domain: [0.77, 1], anchor: "x2", range: fixedScale() ? fRange : undefined, autorange: !fixedScale() },
+    xaxis3: { ...grid, title: "Signal", domain: [0.8, 1], anchor: "y3", range: fixedScale() ? fRange : undefined, autorange: !fixedScale() },
     yaxis3: { ...grid, domain: [0, 0.7], anchor: "x3", type: "log", matches: "y", showticklabels: false },
     shapes: [
       { type: "line", xref: "x", yref: "y domain", x0: z[view.i], x1: z[view.i], y0: 0, y1: 1, line: cross },
@@ -205,6 +210,11 @@ function renderViewer(il, tracks) {
     });
   };
   const nearest = (arr, v, log = false) => arr.reduce((best, x, k) => (Math.abs((log ? Math.log(x) : x) - (log ? Math.log(v) : v)) < Math.abs((log ? Math.log(arr[best]) : arr[best]) - (log ? Math.log(v) : v)) ? k : best), 0);
+  $("view-fixed").onchange = () => {
+    Plotly.relayout(gd, fixedScale()
+      ? { "yaxis2.range": fRange, "yaxis2.autorange": false, "xaxis3.range": fRange, "xaxis3.autorange": false }
+      : { "yaxis2.autorange": true, "xaxis3.autorange": true });
+  };
   zi.oninput = () => { view.i = +zi.value; update(); };
   tj.oninput = () => { view.j = +tj.value; update(); };
   gd.removeAllListeners?.("plotly_click");
