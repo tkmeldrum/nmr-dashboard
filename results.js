@@ -1,6 +1,6 @@
 // Results tab: spatial profile and per-position fits (FT mode), decay + fits, fit tables, ILT spectrum.
 import { $, state } from "./state.js";
-import { baseLayout, CFG, COLORS, fmt, fmtCI as fmtCIplain, fmtCIWith, fmtPair, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
+import { baseLayout, CFG, COLORS, ink, fmt, fmtCI as fmtCIplain, fmtCIWith, fmtPair, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
 import { ILT_EQUATION, meDefinitions, meEquation } from "./equations.js";
 
 const LINKS = {
@@ -261,7 +261,8 @@ function renderFit(r) {
     margin: { ...base.margin, b: 70 },
     xaxis: { ...base.xaxis, anchor: "y2" },
     yaxis: { ...base.yaxis, domain: [0.3, 1], type: $("fit-log").checked ? "log" : "linear" },
-    yaxis2: { ...base.yaxis, title: "Residual", domain: [0, 0.22] },
+    // a bold zero line in the text colour, so it is clear where the residuals fall relative to 0
+    yaxis2: { ...base.yaxis, title: "Residual", domain: [0, 0.22], zeroline: true, zerolinewidth: 2.5, zerolinecolor: ink() },
     legend: { orientation: "h", y: -0.22 },
   }, CFG);
 }
