@@ -2,6 +2,7 @@
 import { $, state } from "./state.js";
 import { ILT_EQUATION, meEquation } from "./equations.js";
 import { rpc } from "./rpc.js";
+import { setBusy } from "./busy.js";
 import { download } from "./provenance.js";
 import { exportOptions } from "./uncertainty.js";
 
@@ -103,6 +104,7 @@ export function setProgress(done, total) {
 }
 
 export function processFailed(text) {
+  setBusy(null);
   setRunning(false);
   showMsg("Processing failed: " + text);
 }
@@ -143,6 +145,7 @@ export function initProcess() {
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
     showMsg("");
     state.runOptions = exportOptions();            // what this run used, for the provenance record
+    setBusy("Processing… the 4-component comparison and per-position fits can take a while.");
     setRunning(true, "Running… the 4-component comparison can take several seconds.");
     state.worker.postMessage({ type: "process", settings });
   });

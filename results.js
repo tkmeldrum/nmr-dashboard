@@ -61,15 +61,14 @@ function renderFt(r) {
   const base = baseLayout("Spatial profile", "z (µm)", "|Σ echoes| (arb.)");
   Plotly.react("plot-profile", [{ x: f.z_um, y: f.profile, mode: "lines", name: "Profile", line: { color: COLORS.blue } }], {
     ...base, showlegend: false,
+    xaxis: { ...base.xaxis, range: [w0, w1] },                             // the window set on the Process tab
     shapes: [{ type: "rect", xref: "x", yref: "paper", x0: w0, x1: w1, y0: 0, y1: 1, fillcolor: COLORS.orange, opacity: 0.18, line: { width: 0 } }],
   }, CFG);
   const t = r.decay.t, h = f.heat;
   const base2 = baseLayout("Echo magnitude after FT", "Echo time (s)", "z (µm)");
   Plotly.react("plot-ftmap", [{ type: "heatmap", z: h.mag, x: h.echo_idx.map((i) => t[i]), y: h.z_um, colorscale: "Viridis", colorbar: { title: "|S|" }, zsmooth: false }],
-    { ...base2, yaxis: { ...base2.yaxis, autorange: "reversed" } }, CFG);      // + z (+ frequency) points down, toward the magnet
-  $("ftmap-note").textContent =
-    `Drawn on the full zero-filled grid (${f.nfft} points, Δz = ${fmt(f.zf_step_um)} µm). The natural resolution is ${fmt(f.resolution_um)} µm: ` +
-    `zero-filling interpolates and adds no resolution. + z is down (toward the magnet).`;
+    { ...base2, yaxis: { ...base2.yaxis, range: [w1, w0] } }, CFG);            // + z (+ frequency) points down, toward the magnet
+  $("ftmap-note").textContent = `Full zero-filled grid (${f.nfft} points, Δz = ${fmt(f.zf_step_um)} µm); natural resolution ${fmt(f.resolution_um)} µm; + z is down.`;
 }
 
 // ── FT: fits at every z position ──────────────────────────────────────────
@@ -78,6 +77,12 @@ function renderSpatial(r) {
   $("spatial-results").hidden = !sp;
   if (!sp) return;
   const f = r.ft, linear = $("sp-linear").checked;
+  const [w0, w1] = f.window;
+  // every spatial plot uses the window chosen on the Process tab
+  const zl = (title, yt, extra = {}) => {
+    const b = baseLayout(title, "z (µm)", yt, extra);
+    return { ...b, xaxis: { ...b.xaxis, range: [w0, w1] } };
+  };
   const il0 = sp.ilt;
   $("spatial-stats").textContent =
     (sp.multiexp ? `Exponential fits: ${f.n_positions_kept} of ${f.n_positions} positions (every ${fmt(f.spacing_um)} µm${f.spacing_auto ? ", the natural resolution" : ""}). ` : "") +
@@ -98,20 +103,19 @@ function renderSpatial(r) {
       error_y: { type: "data", array: bars(me.T2_se[k], me.T2[k]), visible: true, thickness: 1, color: palette[k] },
     }));
     if (me.n > 1) traces.push({ x: z, y: me.mean_T2, name: "mean T₂", mode: "lines", line: { color: COLORS.grey, dash: "dot", width: 2 } });
-    Plotly.react("plot-sp-t2", traces, baseLayout("T₂ vs position (multi-exponential)", "z (µm)", "T₂ (s)",
-      { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+    Plotly.react("plot-sp-t2", traces, zl("T₂ vs position (multi-exponential)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
 
     const amps = me.A.map((row, k) => ({
       x: z, y: row, name: me.n === 1 ? "A" : `A${k + 1}`, mode: "markers", marker: { color: palette[k], size: 7, symbol: sym },
       error_y: { type: "data", array: bars(me.A_se[k], me.A[k]), visible: true, thickness: 1, color: palette[k] },
     }));
     if (me.n > 1) amps.push({ x: z, y: me.total_amplitude, name: "total", mode: "lines", line: { color: COLORS.grey, width: 2 } });
-    Plotly.react("plot-sp-amp", amps, baseLayout("Amplitude vs position", "z (µm)", "Amplitude (arb.)"), CFG);
+    Plotly.react("plot-sp-amp", amps, zl("Amplitude vs position", "Amplitude (arb.)"), CFG);
   }
 
   $("card-sp-chi2").hidden = !me;
   if (me) {
-    const base3 = baseLayout("Fit quality vs position", "z (µm)", "Reduced χ²");
+    const base3 = zl("Fit quality vs position", "Reduced χ²");
     Plotly.react("plot-sp-chi2", [{ x: me.z_um, y: me.chi2_red, mode: "lines+markers", name: "reduced χ²", marker: { size: 6, color: COLORS.blue }, line: { color: COLORS.blue }, connectgaps: false }],
       { ...base3, showlegend: false, yaxis: { ...base3.yaxis, rangemode: "tozero" },
         shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: COLORS.grey, dash: "dot" } }] }, CFG);
@@ -128,24 +132,24 @@ function renderSpatial(r) {
       x: z, y: il.band_mean_T2[k], mode: "lines", name: bandName(b), connectgaps: false,
       line: { color: bandColors[k % bandColors.length], width: 2.5 },
     }));
-    renderViewer(il, tracks);
+    renderViewer(il, tracks, [w0, w1]);
 
     const palette = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple, "#56B4E9"];
     Plotly.react("plot-sp-iltsum", il.bands.map((b, k) => ({
       x: z, y: il.band_mean_T2[k], name: bandName(b), mode: "lines+markers", connectgaps: false,
       line: { color: palette[k % palette.length] }, marker: { size: 4 },
-    })), baseLayout("ILT peak T₂ vs position (geometric mean per peak)", "z (µm)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+    })), zl("ILT peak T₂ vs position (geometric mean per peak)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
 
     Plotly.react("plot-sp-iltfrac", il.bands.map((b, k) => ({
       x: z, y: il.band_fraction[k], name: bandName(b), mode: "lines", line: { color: palette[k % palette.length], width: 2 },
-    })), baseLayout("Share of the signal in each ILT peak", "z (µm)", "Fraction", { yaxis: { ...t2, title: "Fraction", range: [0, 1], type: "linear" } }), CFG);
+    })), zl("Share of the signal in each ILT peak", "Fraction", { yaxis: { ...t2, title: "Fraction", range: [0, 1], type: "linear" } }), CFG);
   }
 }
 
 // ── linked cross-section viewer: ILT map (centre), spectrum at a position (right), signal at a T2 (top) ──
 const view = { key: "", i: 0, j: 0 };
 
-function renderViewer(il, tracks) {
+function renderViewer(il, tracks, window) {
   const gd = $("plot-sp-ilt"), z = il.z_um, tau = il.tau;
   const np = z.length, nt = tau.length, key = `${np}x${nt}`;
   const zi = $("view-z"), tj = $("view-t2");
@@ -162,9 +166,7 @@ function renderViewer(il, tracks) {
   const zmap = tau.map((_, j) => il.spectra.map((row) => row[j]));            // [tau][position]
   const colAt = (j) => il.spectra.map((row) => row[j]);                        // signal vs z at one T2
   const grid = baseLayout("", "", "").xaxis;
-  const withData = z.filter((_, p) => il.spectra[p].some((v) => v !== null && v > 0));
-  const pad = withData.length > 1 ? 0.08 * (withData[withData.length - 1] - withData[0]) : 5;
-  const zRange = withData.length ? [withData[0] - pad, withData[withData.length - 1] + pad] : [z[0], z[np - 1]];   // zoom to where there is signal
+  const zRange = window;                           // the processing window, so every spatial axis agrees
   const iTop = 1 + tracks.length, iRight = iTop + 1;
   // One fixed amplitude scale for both side panels (from the whole map), so relative amplitudes survive sweeping the sliders.
   let fMax = 0, fMin = 0;
@@ -341,11 +343,30 @@ function renderIlt(r) {
     traces.push({
       x: il.peaks.map((p) => p.T2_peak), y: il.peaks.map((p) => il.spectrum[il.tau.findIndex((t) => t === p.T2_peak)]),
       name: "Peaks", mode: "markers+text", marker: { color: COLORS.green, size: 8 },
-      text: il.peaks.map((p) => fmtSci(p.T2_peak)), textposition: "top center", showlegend: false,
+      text: il.peaks.map((p) => `${fmtSci(p.T2_peak)} · ${pct(p.fraction, 0)}`), showlegend: false,
+      // put each label on the side away from its matched exp-fit diamond
+      textposition: il.peaks.map((p) => { const m = (il.exp_markers || []).find((x) => x.matched_peak === p.T2_peak); return m && m.T2 > p.T2_peak ? "top left" : "top right"; }),
     });
   }
   const me = r.multiexp && r.multiexp.selected;
-  if (me) {
+  const marks = il.exp_markers || [];
+  if (me && marks.length) {
+    // Each component sits at the height an ILT peak holding the same amount of signal would have, so heights compare directly.
+    const placed = marks.filter((m) => m.height !== null);
+    placed.forEach((m) => traces.push({ x: [m.T2, m.T2], y: [0, m.height], mode: "lines", line: { color: COLORS.orange, width: 1.5, dash: "dot" }, showlegend: false, hoverinfo: "skip" }));
+    if (placed.length) {
+      traces.push({
+        x: placed.map((m) => m.T2), y: placed.map((m) => m.height), name: `${me.n}-exp components (height = amount)`, mode: "markers+text",
+        marker: { symbol: "diamond", size: 10, color: COLORS.orange }, text: placed.map((m) => pct(m.fraction, 0)), textposition: "bottom right",
+        textfont: { color: COLORS.orange },
+        hovertemplate: "T₂ %{x:.2e} s<br>amount %{text}<extra>exp component</extra>",
+      });
+    }
+    const unplaced = marks.filter((m) => m.height === null);
+    if (unplaced.length) {
+      traces.push({ x: unplaced.map((m) => m.T2), y: unplaced.map(() => 0), name: "exp components (no ILT peak to compare)", mode: "markers", marker: { symbol: "diamond-open", size: 10, color: COLORS.orange } });
+    }
+  } else if (me) {
     traces.push({
       x: me.components.map((c) => c.T2), y: me.components.map(() => 0), name: `${me.n}-exp fit T₂`, mode: "markers",
       marker: { symbol: "diamond", size: 10, color: COLORS.orange },
@@ -354,7 +375,9 @@ function renderIlt(r) {
   const base = baseLayout("T₂ spectrum", "T₂ (s)", "Amplitude");
   // x in seconds, one labelled tick per decade: 1e-5, 1e-4, 1e-3, ...
   const xaxis = { ...base.xaxis, type: "log", dtick: 1, tickformat: ".0e", range: [Math.log10(il.t2_min), Math.log10(il.t2_max)] };
-  Plotly.react("plot-spectrum", traces, { ...base, xaxis }, CFG);
+  // headroom above the tallest feature so the peak labels are not clipped
+  const top = Math.max(...il.spectrum, ...marks.map((m) => m.height || 0));
+  Plotly.react("plot-spectrum", traces, { ...base, xaxis, yaxis: { ...base.yaxis, range: [0, 1.25 * top] } }, CFG);
   $("ilt-stats").textContent = `α = ${fmtSci(il.alpha)} · ${il.n_steps} grid points (max ${r.settings.ilt.n_steps}) · T₂ ${fmtSci(il.t2_min)}–${fmtSci(il.t2_max)} s · RMSE ${fmt(il.rmse)}`;
   statTable($("ilt-quality"), [
     ["RSS", fmtSci(il.rss), "Σ residual²", LINKS.RSS],
@@ -390,7 +413,16 @@ export function renderResults() {
   renderIlt(r);
 }
 
+function resizePlots(root) {
+  root.querySelectorAll(".js-plotly-plot").forEach((p) => Plotly.Plots.resize(p));
+}
+
 export function initResults() {
+  // plots drawn inside a collapsed section have no width, so redraw them to fit when it is opened
+  document.addEventListener("toggle", (e) => { if (e.target.matches("details.section") && e.target.open) resizePlots(e.target); }, true);
+  const sections = () => document.querySelectorAll("#panel-results details.section:not([hidden])");
+  $("expand-all").addEventListener("click", () => sections().forEach((d) => { d.open = true; }));
+  $("collapse-all").addEventListener("click", () => sections().forEach((d) => { d.open = false; }));
   $("fit-log").addEventListener("change", renderResults);
   $("sp-linear").addEventListener("change", renderResults);
 }
