@@ -160,7 +160,11 @@ function table(el, headers, rows) {
   headers.forEach((h) => head.appendChild(mk("th", h)));
   el.replaceChildren(head, ...rows.map((r) => {
     const tr = document.createElement("tr");
-    r.forEach((c) => tr.appendChild(mk("td", c)));
+    r.forEach((c) => {
+      const td = mk("td", typeof c === "object" ? c.text : c);
+      if (typeof c === "object") { if (c.cls) td.className = c.cls; if (c.title) td.title = c.title; }
+      tr.appendChild(td);
+    });
     return tr;
   }));
 }
@@ -199,6 +203,16 @@ export function renderUncertainty() {
   renderCompare(u);
 }
 
+const METHODS = ["least squares", "the bootstrap", "MCMC"];
+// A method's value that lies outside the interval another method gives is marked, since the methods should agree
+// where the problem is well determined (a disagreement is the point of running more than one).
+export function flagged(text, i, est) {
+  const me = est[i];
+  if (!me) return text;
+  const against = est.map((e, j) => (j !== i && e && (me.v < e.lo || me.v > e.hi) ? METHODS[j] : null)).filter(Boolean);
+  return against.length ? { text: "⚠ " + text, cls: "outlier", title: `This value lies outside the interval from ${against.join(" and ")}.` } : text;
+}
+
 function renderCompare(u) {
   const names = [], ls = lsRows();
   const add = (n) => { if (!names.includes(n)) names.push(n); };
@@ -215,8 +229,10 @@ function renderCompare(u) {
     const z = ls.__z || Z_FOR[u.level] || 1.96;
     const lsCell = !l ? (ref.ls !== undefined && ref.ls !== null ? f(ref.ls) : "—")
       : okUnc(l.v, l.se) ? interval(f, l.v, l.v - z * l.se, l.v + z * l.se) : `${f(l.v)} (uncertainty undetermined)`;
-    return [n, lsCell, b ? interval(f, b.median, b.lo, b.hi) : "—", m ? interval(f, m.median, m.lo, m.hi) : "—"];
-  });
+    return { n, cells: [lsCell, b ? interval(f, b.median, b.lo, b.hi) : "—", m ? interval(f, m.median, m.lo, m.hi) : "—"],
+             est: [l && okUnc(l.v, l.se) ? { v: l.v, lo: l.v - z * l.se, hi: l.v + z * l.se } : null,
+                   b ? { v: b.median, lo: b.lo, hi: b.hi } : null, m ? { v: m.median, lo: m.lo, hi: m.hi } : null] };
+  }).map(({ n, cells, est }) => [n, ...cells.map((text, i) => flagged(text, i, est))]);
   table($("unc-compare-table"), ["Parameter", `Least squares (±${(Z_FOR[u.level] || 1.96).toFixed(2)} SE)`, `Bootstrap (${Math.round(u.level * 100)}%)`, `MCMC (${Math.round(u.level * 100)}% credible)`], rows);
 }
 
