@@ -1,11 +1,11 @@
 // Processing tab: form defaults, validation, and starting a run.
 import { $, state } from "./state.js";
-import { ILT_EQUATION } from "./equations.js";
+import { ILT_EQUATION, T2D_EQUATION } from "./equations.js";
 import { applyKind, updateEquation } from "./kinds.js";
 import { rpc } from "./rpc.js";
-import { setBusy } from "./busy.js";
+import { setBusy, setStoppable } from "./busy.js";
 import { download } from "./provenance.js";
-import { exportOptions } from "./uncertainty.js";
+import { ask, duration, exportOptions } from "./uncertainty.js";
 
 const DEFAULT_MAX_STEPS = 100;   // user-editable; Python also caps at the echo count
 const STEPS_LIMIT = 1000;        // keep in step with nmrdash/ilt_tools.py
@@ -38,6 +38,26 @@ export function initProcessDefaults(raw) {
   $("exclude-first").value = 0;
 }
 
+// The diffusion coefficients these b-values can tell apart (see nmrdash/ilt2d.py: sensitive_d_window), in m²/s.
+export function resolvableD(bVec) {
+  const b = bVec.map((x) => x * 1e9);                                          // the solver's b-values are in units of 1e9 s/m²
+  return [Number((1 / Math.max(...b)).toPrecision(2)), Number((5 / Math.min(...b)).toPrecision(2))];
+}
+
+export function initT2dDefaults(r) {
+  const d = r.defaults;
+  $("t2d-t2min").value = d.t2_min; $("t2d-t2max").value = d.t2_max; $("t2d-t2steps").value = d.t2_steps;
+  $("t2d-dmin").value = d.d_min; $("t2d-dmax").value = d.d_max; $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
+  $("t2d-alpha").value = d.alpha; $("t2d-peakthr").value = d.peak_threshold_pct;
+  $("t2d-equation").innerHTML = T2D_EQUATION;
+  const b = r.raw.b_vec.map((x) => x * 1e9), [lo, hi] = resolvableD(r.raw.b_vec);
+  $("t2d-window-hint").textContent = `Your b-values (${Math.min(...b).toExponential(1)} – ${Math.max(...b).toExponential(1)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
+    "The range above is yours to choose, but outside this one the solution is regularisation, not data." +
+    " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ.";
+  showMsg("");
+  $("run-status").textContent = "";
+}
+
 function num(id, label) {
   const v = parseFloat($(id).value);
   if (!Number.isFinite(v)) throw new Error(`${label} must be a number.`);
@@ -53,6 +73,20 @@ function excludeFirst() {
 }
 
 export function readSettings() {
+  if (state.result.kind === "t2d") {
+    const t = {
+      t2_min: num("t2d-t2min", "T₂ min"), t2_max: num("t2d-t2max", "T₂ max"), t2_steps: Math.round(num("t2d-t2steps", "T₂ points")),
+      d_min: num("t2d-dmin", "D min"), d_max: num("t2d-dmax", "D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
+      alpha: num("t2d-alpha", "α"), peak_threshold_pct: num("t2d-peakthr", "Region threshold"),
+    };
+    if (t.t2_min <= 0 || t.t2_max <= t.t2_min) throw new Error("T₂ min must be positive and smaller than T₂ max.");
+    if (t.d_min <= 0 || t.d_max <= t.d_min) throw new Error("D min must be positive and smaller than D max.");
+    if (t.t2_steps < 10 || t.t2_steps > 400) throw new Error("T₂ points must be between 10 and 400.");
+    if (t.d_steps < 5 || t.d_steps > 200) throw new Error("D points must be between 5 and 200.");
+    if (t.alpha <= 0) throw new Error("α must be positive.");
+    if (t.peak_threshold_pct < 0 || t.peak_threshold_pct > 100) throw new Error("The region threshold must be between 0 and 100%.");
+    return { kind: "t2d", exclude_first: excludeFirst(), t2d: t };
+  }
   if (state.result.kind === "t1") {                           // saturation recovery: one or two components, no echo processing, no ILT
     const n = +$("me-n").value, offset = $("me-offset").checked;
     if (2 * n + offset + 2 > state.result.raw.n_points) throw new Error(`${n} component${n > 1 ? "s" : ""} need more delays than this dataset has (${state.result.raw.n_points}).`);
@@ -153,14 +187,35 @@ export function initProcess() {
     }
   });
   $("process-form").addEventListener("submit", (e) => e.preventDefault());   // Enter in a field must not reload the page
-  $("run-btn").addEventListener("click", () => {
+  $("t2d-use-window").addEventListener("click", () => {
+    const [lo, hi] = resolvableD(state.result.raw.b_vec);
+    $("t2d-dmin").value = lo; $("t2d-dmax").value = hi;
+  });
+  $("run-btn").addEventListener("click", async () => {
     if (state.running || !state.result || !state.result.supported) return;
     let settings;
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
     showMsg("");
     state.runOptions = exportOptions();            // what this run used, for the provenance record
-    setBusy("Processing… the 4-component comparison and per-position fits can take a while.");
-    setRunning(true, "Running… the 4-component comparison can take several seconds.");
+    let busyText = "Processing… the 4-component comparison and per-position fits can take a while.", stoppable = false;
+    if (settings.kind === "t2d") {                  // one big dense solve with no progress to report: estimate it first, offer to stop it
+      setRunning(true, "Estimating how long the inversion will take…");
+      try {
+        const est = await rpc("t2d_estimate", settings);
+        if (est.seconds > 20 && !(await ask(`The ${est.n_T2} × ${est.n_D} T₂–D inversion (${est.unknowns} unknowns) is estimated to take about ${duration(est.seconds)} on this computer, ` +
+            "based on a short timed trial. The page cannot show progress during the solve, but you can stop it (this restarts Python and keeps your data and settings). Run it?"))) {
+          setRunning(false, "");
+          return;
+        }
+        busyText = `Solving the ${est.n_T2} × ${est.n_D} T₂–D inversion (about ${duration(est.seconds)})…`;
+        stoppable = true;
+      } catch (err) {
+        return processFailed(err.message);
+      }
+    }
+    setBusy(busyText);
+    setStoppable(stoppable);
+    setRunning(true, stoppable ? "Solving… use Stop in the grey bar above to cancel." : "Running… the 4-component comparison can take several seconds.");
     state.worker.postMessage({ type: "process", settings });
   });
 }

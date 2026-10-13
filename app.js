@@ -4,7 +4,7 @@ import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { setBusy, withBusy } from "./busy.js";
 import { applyKind } from "./kinds.js";
 import { initRaw, renderRaw } from "./raw.js";
-import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
+import { initProcess, initProcessDefaults, initT2dDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
 import { handleReply } from "./rpc.js";
 import { initProvenance, refreshProvenance } from "./provenance.js";
@@ -12,9 +12,8 @@ import { initUncertainty, resetUncertainty, runUncertainty } from "./uncertainty
 
 // ── worker ────────────────────────────────────────────────────────────────
 setBusy("Starting Python (the first visit downloads about 30 MB; later visits are cached)…");
-const worker = new Worker("worker.js");
-state.worker = worker;
-worker.onmessage = (e) => {
+let worker;
+const onWorkerMessage = (e) => {
   const m = e.data;
   if (m.type === "status") { $("status").textContent = m.text; if (!state.ready || state.running) setBusy(m.text); }
   else if (m.type === "ready") {
@@ -25,6 +24,14 @@ worker.onmessage = (e) => {
   } else if (m.type === "loaded") {
     state.result = m.result;
     $("status").textContent = "Python ready.";
+    if (state.restoring) {                                   // after Stop: the dataset is back, the form keeps what the user typed
+      state.restoring = false;
+      setBusy(null);
+      const msg = $("process-msg");
+      msg.textContent = "Stopped. Python was restarted; your data and settings are still here.";
+      msg.className = "message warn"; msg.hidden = false;
+      return;
+    }
     showResult(m.result);
     setBusy(null);
   } else if (m.type === "reply") {
@@ -49,9 +56,29 @@ worker.onmessage = (e) => {
     setBusy(null);
   }
 };
-worker.postMessage({ type: "init" });
+
+function startWorker() {
+  worker = new Worker("worker.js");
+  state.worker = worker;
+  worker.onmessage = onWorkerMessage;
+  worker.postMessage({ type: "init" });
+}
+
+// Stop a long solve: the only way to interrupt Python is to start a fresh interpreter, then reload the dataset that was open.
+function restartPython() {
+  worker.terminate();
+  state.ready = false;
+  state.restoring = true;
+  state.pending = state.lastPayload;                       // sent again as soon as the new Python is ready
+  setRunning(false, "");
+  setBusy("Stopped. Restarting Python; your data and settings stay…");
+  startWorker();
+}
+
+startWorker();
 
 function sendLoad(payload) {
+  state.lastPayload = { files: Object.fromEntries(Object.entries(payload.files).map(([k, v]) => [k, v.slice(0)])), timestampMs: payload.timestampMs };   // the transfer below empties the originals
   $("status").textContent = "Reading data…";
   setBusy("Reading and phasing the data…");
   worker.postMessage(
@@ -164,16 +191,17 @@ async function openDataset(i) {
   const ds = datasets[i];
   hideMessage();
   setBusy("Reading the files from disk…");
-  const want = ["acqu.par", "data.2d", "data.dat"];
-  const files = {};
-  let timestampMs = null;
+  const want = ["acqu.par", "data.2d", "data.dat", "data2D_Cp.2d", "data2D.dat", "DiffAxis.dat", "T2Axis.dat"];
+  const files = {}, written = {};
   for (const name of want) {
     const entry = ds.files.find((f) => f.name === name);
     if (!entry) continue;
     const file = await entry.getFile();
     files[name] = await file.arrayBuffer();
-    if (name === "data.2d" || (name === "data.dat" && timestampMs === null)) timestampMs = file.lastModified;   // when the data was written
+    written[name] = file.lastModified;
   }
+  // when the data were written: the main data file of whichever sequence this is
+  const timestampMs = written["data.2d"] ?? written["data2D_Cp.2d"] ?? written["data2D.dat"] ?? written["data.dat"] ?? null;
   $("folder-name").textContent = ds.label;
   const payload = { files, timestampMs };
   if (state.ready) sendLoad(payload);
@@ -293,6 +321,16 @@ function showResult(r) {
     return showMessage("This dataset cannot be analysed: " + r.reason + ". Its parameters are shown above.", "warn");
   }
   applyKind(r.kind);                                  // the sequence name decides which analysis the page offers
+  if (r.kind === "t2d") {
+    const idx = $("echo-idx");
+    idx.max = r.raw.n_echoes - 1;
+    idx.value = 0;
+    initT2dDefaults(r);
+    setTabEnabled("raw", true);
+    setTabEnabled("process", true);
+    setTabEnabled("uncertainty", true);
+    return;
+  }
   if (r.kind === "t1") {
     setTabEnabled("raw", true);
     setTabEnabled("process", true);
@@ -319,5 +357,6 @@ initRaw();
 initProcess();
 initResults();
 initUncertainty();
+$("busy-stop").addEventListener("click", restartPython);
 initProvenance();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderRaw(); renderResults(); });

@@ -137,3 +137,7 @@ details.section > summary h3 { margin:.7rem 0; }
 .results-toolbar { display:flex; gap:.5rem; margin:.5rem 0 0; }
 [data-for][hidden] { display:none !important; }
 .analysis-line { color:var(--fg); }
+.t2d-hint { flex-basis:100%; margin:.25rem 0; }
+.t2d-maps { grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr)); }
+.t2d-maps .plot-card > div { height:16rem; }
+.busy button { margin-left:auto; padding:.2rem .8rem; }

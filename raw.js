@@ -13,10 +13,29 @@ function renderRawT1(raw) {
   }, CFG);
 }
 
+function renderRawT2D(raw) {
+  // T2-D: echo trains at several diffusion delays. Map of everything, signal vs b at one echo (slider), and echo decays at three b-values.
+  for (const id of ["plot-heat", "plot-echo"]) $(id).closest(".plot-card").hidden = false;
+  const b = raw.b_vec.map((x) => x * 1e9), t = raw.echo_time_s, e = +$("echo-idx").value;
+  const bAxis = { ...baseLayout("", "", "").xaxis, title: "b (s/m²)" };
+  Plotly.react("plot-heat", [{ type: "heatmap", x: t, y: b, z: raw.data, colorscale: "Viridis", colorbar: { title: "signal" }, zsmooth: false }],
+    (() => { const l = baseLayout("Data: echo × diffusion delay", "Echo time (s)", "b (s/m²)"); return { ...l, yaxis: { ...l.yaxis, type: "log", tickformat: ".0e" } }; })(), CFG);
+  $("echo-idx-out").textContent = `${e + 1} of ${raw.n_echoes} (t = ${+t[e].toPrecision(4)} s)`;
+  const l2 = baseLayout(`Signal vs b at echo ${e + 1}`, "b (s/m²)", "Signal (arb.)");
+  Plotly.react("plot-echo", [{ x: b, y: raw.data.map((row) => row[e]), mode: "lines+markers", line: { color: COLORS.blue }, marker: { size: 5 } }],
+    { ...l2, showlegend: false, xaxis: { ...l2.xaxis, type: $("decay-logx").checked ? "log" : "linear" } }, CFG);
+  const pick = [0, Math.floor((b.length - 1) / 2), b.length - 1];
+  const palette = [COLORS.blue, COLORS.orange, COLORS.green];
+  const l3 = baseLayout("Echo decays at three b-values", "Echo time (s)", "Signal (arb.)");
+  Plotly.react("plot-decay", pick.map((i, k) => ({ x: t, y: raw.data[i], mode: "lines", name: `b = ${b[i].toExponential(1)} s/m²`, line: { color: palette[k], width: 1.5 } })),
+    { ...l3, yaxis: { ...l3.yaxis, type: $("decay-log").checked ? "log" : "linear" } }, CFG);
+}
+
 export function renderRaw() {
   const raw = state.result && state.result.raw;
   if (!raw) return;
   if (state.result.kind === "t1") return renderRawT1(raw);
+  if (state.result.kind === "t2d") return renderRawT2D(raw);
   for (const id of ["plot-heat", "plot-echo"]) $(id).closest(".plot-card").hidden = false;
   const t = raw.echo_time_s;
   const mag = raw.real.map((row, p) => row.map((re, e) => Math.hypot(re, raw.imag[p][e])));
