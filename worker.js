@@ -42,8 +42,9 @@ function loadDataset({ files, timestampMs }) {
 
 function processDataset({ settings }) {
   pyodide.globals.set("_settings_json", JSON.stringify(settings));
+  pyodide.globals.set("_progress", (done, total) => postMessage({ type: "progress", done, total }));
   const json = pyodide.runPython(
-    "import json\nfrom nmrdash.pipeline import process\njson.dumps(process(json.loads(_settings_json)))"
+    "import json\nfrom nmrdash.pipeline import process\njson.dumps(process(json.loads(_settings_json), _progress))"
   );
   postMessage({ type: "processed", result: JSON.parse(json) });
 }

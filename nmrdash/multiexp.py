@@ -30,12 +30,12 @@ def _bounds(t, n, offset):
     return (lo, hi), (lo_T, hi_T)
 
 
-def _starts(t, y, n, offset, lo_T, hi_T, rng):
+def _starts(t, y, n, offset, lo_T, hi_T, rng, n_starts):
     base = float(np.mean(y[-max(3, len(y) // 20):])) if offset else 0.0
     amp = max(float(y[0] - base), 1e-12 * max(1.0, float(np.max(np.abs(y)))))
     T = np.geomspace(max(t[0] * 2, lo_T * 5), max(t[-1] / 2, lo_T * 10), n) if n > 1 else np.array([t[-1] / 3])
     yield np.ravel(np.column_stack([np.full(n, amp / n), T])).tolist() + ([base] if offset else [])
-    for _ in range(N_STARTS - 1):
+    for _ in range(n_starts - 1):
         T = np.sort(np.exp(rng.uniform(np.log(lo_T * 3), np.log(hi_T / 3), n)))
         A = amp * rng.dirichlet(np.ones(n))
         yield np.ravel(np.column_stack([A, T])).tolist() + ([base] if offset else [])
@@ -52,8 +52,11 @@ def _numeric_jacobian(f, p):
     return f0, J
 
 
-def fit(t, y, n, offset=True, ci_level=0.95, seed=0):
-    """Fit one model; returns a JSON-friendly dict (NaN where not estimable)."""
+def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS):
+    """Fit one model; returns a JSON-friendly dict (NaN where not estimable).
+
+    n_starts : number of starting guesses (the best of them is kept); fewer is faster.
+    """
     t = np.asarray(t, float)
     y = np.asarray(y, float)
     N = len(t)
@@ -64,7 +67,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0):
     rng = np.random.default_rng(seed)
 
     best = None
-    for p0 in _starts(t, y, n, offset, lo_T, hi_T, rng):
+    for p0 in _starts(t, y, n, offset, lo_T, hi_T, rng, n_starts):
         try:
             popt, pcov = curve_fit(lambda tt, *p: model(tt, np.array(p), n, offset), t, y,
                                    p0=p0, bounds=bounds, maxfev=4000)

@@ -1,5 +1,6 @@
 // Processing tab: form defaults, validation, and starting a run.
 import { $, state } from "./state.js";
+import { ILT_EQUATION, meEquation } from "./equations.js";
 
 const DEFAULT_MAX_STEPS = 100;   // user-editable; Python also caps at the echo count
 const STEPS_LIMIT = 1000;        // keep in step with nmrdash/ilt_tools.py
@@ -22,7 +23,7 @@ export function initProcessDefaults(raw) {
     $("ft-zf").value = d.zero_fill;
     $("ft-nucleus-note").textContent = "Nucleus preset from acqu.par: " + d.nucleus_reason + ".";
   }
-  $("ft-zmin").value = $("ft-zmax").value = "";
+  $("ft-zmin").value = $("ft-zmax").value = $("ft-spacing").value = "";
   showMsg("");
   $("run-status").textContent = "";
 }
@@ -42,8 +43,11 @@ export function readSettings() {
     const zmin = $("ft-zmin").value.trim(), zmax = $("ft-zmax").value.trim();
     if ((zmin === "") !== (zmax === "")) throw new Error("Give both ends of the z-window, or leave both blank for automatic.");
     if (zmin !== "" && +zmin >= +zmax) throw new Error("The z-window minimum must be below its maximum.");
+    const sp = $("ft-spacing").value.trim();
+    if (sp !== "" && !(+sp > 0)) throw new Error("The z spacing must be positive (or blank for automatic).");
     settings.ft = { nucleus: $("ft-nucleus").value, G, zero_fill: zf,
-                    z_min: zmin === "" ? null : +zmin, z_max: zmax === "" ? null : +zmax };
+                    z_min: zmin === "" ? null : +zmin, z_max: zmax === "" ? null : +zmax,
+                    spacing_um: sp === "" ? null : +sp };
   }
   const me = $("me-enabled").checked, il = $("ilt-enabled").checked;
   if (!me && !il) throw new Error("Choose at least one decay analysis.");
@@ -77,6 +81,13 @@ export function setRunning(on, text = "") {
   state.running = on;
   $("run-btn").disabled = on;
   $("run-status").textContent = text;
+  $("run-progress").hidden = true;
+}
+
+export function setProgress(done, total) {
+  const bar = $("run-progress");
+  bar.hidden = false; bar.max = total; bar.value = done;
+  $("run-status").textContent = `Fitting z position ${done} of ${total}…`;
 }
 
 export function processFailed(text) {
@@ -84,7 +95,13 @@ export function processFailed(text) {
   showMsg("Processing failed: " + text);
 }
 
+const updateEquation = () => { $("me-eq-form").innerHTML = meEquation(+$("me-n").value, $("me-offset").checked); };
+
 export function initProcess() {
+  $("ilt-eq-form").innerHTML = ILT_EQUATION;
+  $("me-n").addEventListener("change", updateEquation);
+  $("me-offset").addEventListener("change", updateEquation);
+  updateEquation();
   for (const [box, fields] of [["me-enabled", "me-fields"], ["ilt-enabled", "ilt-fields"]]) {
     const sync = () => $(fields).querySelectorAll("input,select").forEach((el) => { el.disabled = !$(box).checked; });
     $(box).addEventListener("change", sync);
