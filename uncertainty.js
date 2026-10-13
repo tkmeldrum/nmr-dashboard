@@ -160,7 +160,11 @@ function table(el, headers, rows) {
   headers.forEach((h) => head.appendChild(mk("th", h)));
   el.replaceChildren(head, ...rows.map((r) => {
     const tr = document.createElement("tr");
-    r.forEach((c) => tr.appendChild(mk("td", c)));
+    r.forEach((c) => {
+      const td = mk("td", typeof c === "object" ? c.text : c);
+      if (typeof c === "object") { if (c.cls) td.className = c.cls; if (c.title) td.title = c.title; }
+      tr.appendChild(td);
+    });
     return tr;
   }));
 }
@@ -199,6 +203,18 @@ export function renderUncertainty() {
   renderCompare(u);
 }
 
+const METHODS = ["least squares", "the bootstrap", "MCMC"];
+// A method's value is marked when it lies outside the interval of every other method that has one. Marking only that case
+// singles out the odd one out: if one method disagrees with two that agree, only that one is marked (with just two methods
+// that disagree, both are, since there is no telling which is wrong).
+export function flagged(text, i, est) {
+  const me = est[i];
+  if (!me) return text;
+  const others = est.map((e, j) => (j !== i && e ? METHODS[j] + "|" + (me.v < e.lo || me.v > e.hi ? 1 : 0) : null)).filter(Boolean);
+  if (!others.length || others.some((o) => o.endsWith("|0"))) return text;
+  return { text: "⚠ " + text, cls: "outlier", title: `This value lies outside the interval from ${others.map((o) => o.split("|")[0]).join(" and ")}.` };
+}
+
 function renderCompare(u) {
   const names = [], ls = lsRows();
   const add = (n) => { if (!names.includes(n)) names.push(n); };
@@ -215,8 +231,10 @@ function renderCompare(u) {
     const z = ls.__z || Z_FOR[u.level] || 1.96;
     const lsCell = !l ? (ref.ls !== undefined && ref.ls !== null ? f(ref.ls) : "—")
       : okUnc(l.v, l.se) ? interval(f, l.v, l.v - z * l.se, l.v + z * l.se) : `${f(l.v)} (uncertainty undetermined)`;
-    return [n, lsCell, b ? interval(f, b.median, b.lo, b.hi) : "—", m ? interval(f, m.median, m.lo, m.hi) : "—"];
-  });
+    return { n, cells: [lsCell, b ? interval(f, b.median, b.lo, b.hi) : "—", m ? interval(f, m.median, m.lo, m.hi) : "—"],
+             est: [l && okUnc(l.v, l.se) ? { v: l.v, lo: l.v - z * l.se, hi: l.v + z * l.se } : null,
+                   b ? { v: b.median, lo: b.lo, hi: b.hi } : null, m ? { v: m.median, lo: m.lo, hi: m.hi } : null] };
+  }).map(({ n, cells, est }) => [n, ...cells.map((text, i) => flagged(text, i, est))]);
   table($("unc-compare-table"), ["Parameter", `Least squares (±${(Z_FOR[u.level] || 1.96).toFixed(2)} SE)`, `Bootstrap (${Math.round(u.level * 100)}%)`, `MCMC (${Math.round(u.level * 100)}% credible)`], rows);
 }
 
