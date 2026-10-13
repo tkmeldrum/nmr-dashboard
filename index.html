@@ -249,6 +249,14 @@
     <progress id="run-progress" max="1" value="0" hidden></progress>
     <span id="run-status" class="status" role="status"></span>
     <p id="process-msg" class="message" hidden></p>
+    <details class="export-help">
+      <summary>What does “Export params + script” give me?</summary>
+      <p>Two files that repeat this analysis on your own computer, with the settings you have chosen here: <b>params.toml</b> (every setting) and <b>process_nmr.py</b> (a small script). The script can run one dataset or a whole folder of them as a time series, and it writes the same tables and figures as this page. Nothing is uploaded.</p>
+      <p>To run it: install Python 3 and the package once (<code>pip install git+https://github.com/tkmeldrum/nmr-dashboard</code>), put both files in one folder, then in a terminal:</p>
+      <pre>python process_nmr.py DATA_FOLDER            # one dataset
+python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre>
+      <p class="note">Results go into a processed_… folder inside each data folder. Run <code>python process_nmr.py --help</code> for the other options.</p>
+    </details>
   </div>
 
   <!-- 5 · Results -->
@@ -409,6 +417,16 @@
     </form>
   </dialog>
 </main>
+<footer class="feedback">
+  <details id="feedback">
+    <summary>Feedback or a problem?</summary>
+    <p class="note">Tell me what went wrong or what would help. Nothing is sent from this page: the buttons below open your email program, or a GitHub issue, with the text filled in for you to read, edit and send. Your data files are never included.</p>
+    <textarea id="fb-text" rows="5" placeholder="What were you doing, what did you expect, what happened?" aria-label="Feedback"></textarea>
+    <label class="check"><input type="checkbox" id="fb-diag" checked> Add these details (no data, no folder names):</label>
+    <pre id="fb-preview" class="note"></pre>
+    <p><button type="button" id="fb-mail">Email it</button> <button type="button" id="fb-issue" class="secondary">Open a GitHub issue</button></p>
+  </details>
+</footer>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
