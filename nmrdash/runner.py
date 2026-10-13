@@ -67,6 +67,9 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         if info["kind"] == "t1":
             row.update(n_points=raw["n_points"], mode="t1")
             settings, options = P.to_settings_t1(p)
+        elif info["kind"] == "t2d":
+            row.update(n_echoes=raw["n_echoes"], n_points=raw["n_tau"], mode="t2d")
+            settings, options = P.to_settings_t2d(p)
         else:
             row.update(n_echoes=raw["n_echoes"], n_points=raw["n_points"], echo_time_us=info["params_all"].get("echoTime"))
             settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"])
@@ -75,7 +78,9 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         warnings = []
         mcmc = boot = None
         samples_n = 5000 if p["output"]["samples"] else 0
-        mc, bs = options["mcmc"], options["bootstrap"]
+        mc, bs = options.get("mcmc", {"enabled": False}), options.get("bootstrap", {"enabled": False})
+        if info["kind"] == "t2d" and (p["mcmc"]["enabled"] or p["bootstrap"]["enabled"]):
+            warnings.append("MCMC and the bootstrap are not available for T2-D data yet; they were skipped.")
         if info["kind"] == "t1":
             mc = {**mc, "target": "bulk"}
         if mc["enabled"]:
@@ -143,7 +148,10 @@ def _key_results(res, mcmc, boot):
     """The numbers a batch table needs, from one dataset's results."""
     me = (res.get("multiexp") or {}).get("selected")
     il = res.get("ilt")
-    out = {"multiexp": None, "ilt": None, "noise_sigma": res["decay"].get("noise_sigma")}
+    out = {"multiexp": None, "ilt": None, "t2d": None, "noise_sigma": res["decay"].get("noise_sigma")}
+    if res.get("t2d"):
+        r = res["t2d"]
+        out["t2d"] = {"peaks": r["peaks"][:3], "rmse_over_amp": r["rmse_over_amp"], "chi2_per_point": r["chi2_per_point"]}
     if me:
         out["multiexp"] = {"n": me["n"], "components": [{"T2": c["T2"], "T2_se": c["T2_se"], "A": c["A"], "A_se": c["A_se"], "fraction": c["fraction"]} for c in me["components"]],
                            "offset": me["offset_value"], "mean_T2": me["mean_T2"], "mean_T2_se": me["mean_T2_se"], "total_amplitude": me["total_amplitude"],
@@ -245,7 +253,11 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
             head += [f"{lab}_{k}_s", f"{lab}_{k}_se", f"amplitude_{k}" if lab == "T2" else f"T1_amplitude_{k}", f"fraction_{k}" if lab == "T2" else f"T1_fraction_{k}"]
     head += ["offset", "mean_T2_s", "mean_T2_se"] + (["mean_T1_s", "mean_T1_se"] if has["T1"] else [])
     head += ["total_amplitude", "reduced_chi2", "residual_sd_over_signal_range", "noise_sigma", "ilt_alpha"]
-    head += [f"ilt_peak{k}_{q}" for k in (1, 2, 3) for q in ("T2_s", "fraction")] + ["warnings"]
+    head += [f"ilt_peak{k}_{q}" for k in (1, 2, 3) for q in ("T2_s", "fraction")]
+    has_t2d = any(r.get("kind") == "t2d" for r in rows)
+    if has_t2d:
+        head += [f"t2d_peak{k}_{q}" for k in (1, 2, 3) for q in ("T2_s", "D_m2s", "fraction")] + ["t2d_rmse_over_signal_range", "t2d_chi2_per_point"]
+    head += ["warnings"]
     table = []
     for r in rows:
         res = r.get("result") or {}
@@ -265,6 +277,12 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
         for k in range(3):
             pk = il["peaks"][k] if il and k < len(il["peaks"]) else None
             line += [pk["T2_peak"], pk["fraction"]] if pk else [None, None]
+        if has_t2d:
+            td = res.get("t2d")
+            for k in range(3):
+                pk = td["peaks"][k] if td and k < len(td["peaks"]) else None
+                line += [pk["T2_mean"], pk["D_mean"], pk["fraction"]] if pk else [None] * 3
+            line += [td["rmse_over_amp"], td["chi2_per_point"]] if td else [None, None]
         line.append("; ".join(r.get("warnings", [])))
         table.append(line)
     outputs.write_csv(bdir / "batch_summary.csv", head, table)

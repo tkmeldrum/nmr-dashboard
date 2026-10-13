@@ -9,7 +9,7 @@ ANALYSIS = {
     "t1": "saturation recovery (T₁)",
     "t2d": "T₂–D correlation",
 }
-SUPPORTED = {"cpmg", "t1"}                       # t2d is recognised but not implemented yet
+SUPPORTED = {"cpmg", "t1", "t2d"}
 
 
 def normalise(name):

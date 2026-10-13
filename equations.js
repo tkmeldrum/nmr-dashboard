@@ -20,3 +20,7 @@ export const ILT_EQUATION =
   "<i>S</i>(<i>t</i><sub><i>k</i></sub>) = Σ<sub><i>j</i></sub> <i>f</i>(<i>T</i><sub>2,<i>j</i></sub>)&thinsp;" +
   "e<sup>−<i>t</i><sub><i>k</i></sub>/<i>T</i><sub>2,<i>j</i></sub></sup>,&emsp;<i>f</i> ≥ 0,&emsp;" +
   "minimising ‖<b>K</b><i>f</i> − <i>S</i>‖² + <i>λ</i>²‖<b>D</b><sub>2</sub><i>f</i>‖² &nbsp;(<i>λ</i> set by α)";
+
+export const T2D_EQUATION =
+  "<i>S</i>(<i>t</i><sub><i>i</i></sub>, <i>b</i><sub><i>j</i></sub>) = Σ<sub><i>k,l</i></sub> <i>f</i>(<i>T</i><sub>2,<i>k</i></sub>, <i>D</i><sub><i>l</i></sub>)&thinsp;" +
+  "e<sup>−<i>t</i><sub><i>i</i></sub>/<i>T</i><sub>2,<i>k</i></sub></sup>&thinsp;e<sup>−<i>b</i><sub><i>j</i></sub><i>D</i><sub><i>l</i></sub></sup>,&emsp;<i>f</i> ≥ 0,&emsp;with curvature regularisation set by α";

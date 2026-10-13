@@ -7,6 +7,8 @@ import csv
 import math
 from pathlib import Path
 
+import numpy as np
+
 from . import figures, formatting as F, provenance
 
 
@@ -30,6 +32,23 @@ def _col(a):
 
 # ── tables ───────────────────────────────────────────────────────────────────
 
+def _t2d_tables(res, out):
+    r = res["t2d"]
+    T2, D = r["T2"], r["D"]
+    out("t2d_spectrum.csv", ["D_m2s \\ T2_s"] + [repr(x) for x in T2], [[d] + list(row) for d, row in zip(D, r["spectrum"])])
+    out("t2d_projection_T2.csv", ["T2_s", "amplitude"], zip(T2, r["projection_T2"]))
+    out("t2d_projection_D.csv", ["D_m2s", "amplitude"], zip(D, r["projection_D"]))
+    out("t2d_peaks.csv", ["fraction", "T2_mean_s", "D_mean_m2s", "T2_peak_s", "D_peak_m2s", "height", "constrained_by_data"],
+        [[p["fraction"], p["T2_mean"], p["D_mean"], p["T2_peak"], p["D_peak"], p["height"], int(p["constrained"])] for p in r["peaks"]])
+    out("t2d_statistics.csv", ["quantity", "value"], [("alpha", r["alpha"]), ("T2_points", r["n_T2"]), ("D_points", r["n_D"]), ("T2_min_s", r["t2_min"]), ("T2_max_s", r["t2_max"]),
+        ("D_min_m2s", r["d_min"]), ("D_max_m2s", r["d_max"]), ("excluded_first_echoes", res["decay"].get("skip", 0)), ("D_sensitive_min_m2s", r["d_sensitive"][0]), ("D_sensitive_max_m2s", r["d_sensitive"][1]), ("fraction_of_spectrum_in_sensitive_window", r["fraction_in_sensitive_window"]),
+        ("rss", r["rss"]), ("mse", r["mse"]), ("rmse", r["rmse"]),
+        ("signal_range", r["signal_range"]), ("rmse_over_signal_range", r["rmse_over_amp"]), ("noise_sigma", r["noise_sigma"]), ("chi2_per_point", r["chi2_per_point"])])
+    pred, resid = np.asarray(r["pred"]), np.asarray(r["resid"])                         # (n_b, n_echo)
+    rows = [[e, b, pred[i, j] + resid[i, j], pred[i, j], resid[i, j]] for i, b in enumerate(r["b_vec"]) for j, e in enumerate(r["echo_s"])]
+    out("t2d_data_fit_residual.csv", ["echo_time_s", "b_value_1e-9_s_per_m2", "data", "fit", "residual"], rows)
+
+
 def write_tables(d, res, mcmc=None, boot=None, samples=True):
     """CSV files into directory d; returns the list of file names written."""
     d = Path(d)
@@ -38,6 +57,10 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
     def out(name, header, rows):
         write_csv(d / name, header, rows)
         written.append(name)
+
+    if res.get("mode") == "t2d":
+        _t2d_tables(res, out)
+        return written
 
     t, y = res["decay"]["t"], res["decay"]["y"]
     me = (res.get("multiexp") or {}).get("selected")
@@ -137,6 +160,10 @@ def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True,
         figures.save_figure(fig, d / f"{name}.{fmt}", fmt, dpi)
         written.append(f"{name}.{fmt}")
 
+    if res.get("mode") == "t2d":
+        save("t2d_spectrum", figures.t2d_spectrum_figure(res, titles))
+        save("t2d_fit", figures.t2d_fit_figure(res, titles))
+        return written
     save("decay_fit", figures.decay_figure(res, band, titles))
     if res.get("ilt"):
         save("ilt_spectrum", figures.ilt_figure(res, titles))
@@ -158,7 +185,41 @@ def _md_table(header, rows):
     return ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"] + ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
 
 
+def _t2d_summary(res, prov, files, warnings):
+    r, acq = res["t2d"], prov.get("acquisition", {})
+    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data2D_Cp.2d", "data2D.dat")), None)
+    skip = res["decay"].get("skip", 0)
+    L = [f"# nmrdash results: {prov['dataset']}", "",
+         f"- Sequence: {acq.get('experiment', '?')} (T₂–D correlation), {acq.get('nrEchoes', '?')} echoes × {acq.get('nrPntsTau', '?')} diffusion delays, echo time {acq.get('echoTime', '?')} µs, Δ = {acq.get('DELTA', '?')} ms",
+         f"- 2D data written: {when or 'unknown'}"]
+    if skip:
+        L.append(f"- The first {skip} echoes are excluded from the inversion.")
+    L += [f"- Grid: {r['n_T2']} T₂ points {F.fmt_sci(r['t2_min'])} – {F.fmt_sci(r['t2_max'])} s × {r['n_D']} D points {F.fmt_sci(r['d_min'])} – {F.fmt_sci(r['d_max'])} m²/s; α = {F.fmt_sci(r['alpha'])}",
+          f"- Fit: RMSE / signal range {F.pct(r['rmse_over_amp'], 2)}; noise σ (imaginary channel) {F.fmt(r['noise_sigma'])}; χ² per point {F.fmt(r['chi2_per_point'])}", ""]
+    for w in warnings:
+        L.append(f"> **Warning:** {w}")
+    lo, hi = r["d_sensitive"]
+    if r["fraction_in_sensitive_window"] is not None and r["fraction_in_sensitive_window"] < 0.9:
+        L += ["", f"> **Only {F.pct(r['fraction_in_sensitive_window'], 0)} of the spectrum lies where the data can constrain it.** The b-values "
+                  f"({F.fmt_sci(float(min(r['b_vec'])) * 1e9)} – {F.fmt_sci(float(max(r['b_vec'])) * 1e9)} s/m²) resolve diffusion coefficients from about {F.fmt_sci(lo)} to {F.fmt_sci(hi)} m²/s. "
+                  "Signal the regularised solution places outside that window is extrapolation, not measurement; the regions flagged *no* below are in it."]
+    edge = [p for p in r["peaks"] if p["D_peak"] <= r["D"][0] * 1.0001 or p["D_peak"] >= r["D"][-1] * 0.9999 or p["T2_peak"] <= r["T2"][0] * 1.0001 or p["T2_peak"] >= r["T2"][-1] * 0.9999]
+    if edge:
+        L += ["", f"> {len(edge)} region(s) peak at the edge of the grid; signal may extend beyond the range you chose, so widen it to check."]
+    L += ["", "## T₂–D regions", "", "Connected regions of the spectrum above "
+          f"{F.fmt(float(res['settings'].get('t2d', {}).get('peak_threshold_pct', 10)))}% of its maximum (overlapping peaks can appear as one region).", ""]
+    L += _md_table(["#", "fraction", "T₂ (s), mean", "D (m²/s), mean", "T₂ at max (s)", "D at max (m²/s)", "constrained by the data"],
+                   [[i + 1, F.pct(p["fraction"]), F.fmt_sci(p["T2_mean"]), F.fmt_sci(p["D_mean"]), F.fmt_sci(p["T2_peak"]), F.fmt_sci(p["D_peak"]), "yes" if p["constrained"] else "**no**"]
+                    for i, p in enumerate(r["peaks"])] or [["–", "no regions", "", "", "", "", ""]]) + [""]
+    L += ["## Provenance", "", *[f"- {line}" for line in provenance.describe(prov)], "- full detail: `provenance.json`; the settings used: `params_used.toml`", ""]
+    if files:
+        L += ["## Files", "", *[f"- `{f}`" for f in sorted(files)], ""]
+    return "\n".join(L)
+
+
 def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
+    if res.get("mode") == "t2d":
+        return _t2d_summary(res, prov, files, warnings)
     L = [f"# nmrdash results: {prov['dataset']}", ""]
     acq = prov.get("acquisition", {})
     t1 = res.get("mode") == "t1"

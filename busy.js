@@ -6,7 +6,7 @@ const messages = [];
 
 function show() {
   const el = $("busy");
-  if (!messages.length) { el.hidden = true; return; }
+  if (!messages.length) { el.hidden = true; $("busy-stop").hidden = true; return; }
   $("busy-text").textContent = messages[messages.length - 1];
   el.hidden = false;
 }
@@ -28,4 +28,9 @@ export async function withBusy(text, fn) {
     messages.splice(messages.lastIndexOf(text), 1);
     show();
   }
+}
+
+// A long job that cannot report progress (the 2D inversion) offers a Stop button; app.js restarts Python when it is pressed.
+export function setStoppable(on) {
+  $("busy-stop").hidden = !on;
 }
