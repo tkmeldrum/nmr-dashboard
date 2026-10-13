@@ -147,3 +147,11 @@ details.section > summary h3 { margin:.7rem 0; }
 .feedback textarea { width:100%; box-sizing:border-box; margin:.5rem 0; font:inherit; }
 .feedback pre, .export-help pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:.25rem 0; }
 .export-help { flex-basis:100%; }
+
+.save-card { margin:1rem 0; padding:.75rem 1rem; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+.save-card h3 { margin:.2rem 0; }
+.save-bar, .save-opts { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; margin:.5rem 0; }
+.plot-settings summary { cursor:pointer; margin:.5rem 0; }
+.ps-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(15rem, 1fr)); gap:.5rem 1rem; }
+.ps-grid input[type=number] { width:5rem; }
+.error-text { color:#c0392b; }

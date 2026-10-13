@@ -271,6 +271,43 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       <p><button type="button" id="prov-download">Download provenance.json</button></p>
     </details>
 
+    <div class="save-card">
+      <h3>Save</h3>
+      <p class="note" id="save-hint"></p>
+      <div class="save-bar">
+        <button type="button" id="save-folder" title="Writes a new processed_… folder inside the folder you opened">Save to the data folder</button>
+        <button type="button" id="save-other" class="secondary">Save to another folder…</button>
+        <button type="button" id="save-zip" class="secondary">Download .zip</button>
+        <span id="save-status" class="status" role="status"></span>
+      </div>
+      <div class="save-opts">
+        <label><input type="checkbox" id="save-csv" checked> Tables (CSV)</label>
+        <label><input type="checkbox" id="save-samples" checked> MCMC and bootstrap samples</label>
+        <label><input type="checkbox" id="save-figs" checked> Figures</label>
+        <label>as <select id="save-format"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label>
+        <label id="save-dpi-row">resolution <input type="number" id="save-dpi" value="200" min="30" max="1200" step="50"> dpi</label>
+      </div>
+      <p class="note">Every save also writes params_used.toml, provenance.json (inputs, settings, versions) and a summary.md.</p>
+      <details class="plot-settings">
+        <summary>Plot settings</summary>
+        <p class="note">Applied to the plots on this page and to the saved figures, except where noted. Kept in this browser for next time.</p>
+        <div class="ps-grid">
+          <label>Font size <input type="number" id="ps-font" min="4" max="40" step="1"></label>
+          <label>Line width × <input type="number" id="ps-line" min="0.1" max="10" step="0.25"></label>
+          <label>Marker size × <input type="number" id="ps-marker" min="0.1" max="10" step="0.25"></label>
+          <label>Colour map <select id="ps-cmap"><option>viridis</option><option>plasma</option><option>magma</option><option>inferno</option><option>cividis</option><option>turbo</option><option>gray</option></select></label>
+          <label>Saved figure width (in) <input type="number" id="ps-width" min="1" max="40" step="0.5" placeholder="auto"></label>
+          <label>Saved figure height (in) <input type="number" id="ps-height" min="1" max="40" step="0.5" placeholder="auto"></label>
+          <label>Time units <select id="ps-time"><option value="s">s</option><option value="ms">ms</option></select> <span class="note">saved figures only</span></label>
+          <label>Titles <select id="ps-title"><option value="auto">automatic</option><option value="none">none</option><option value="custom">custom…</option></select></label>
+          <label>Custom title <input type="text" id="ps-title-text" disabled></label>
+          <label><input type="checkbox" id="ps-legend" checked> Legends</label>
+        </div>
+        <p class="note">The decay figure is saved on a log y-axis when “log y-axis” is ticked on the plot. Tables always stay in seconds. The MCMC corner plot is saved as drawn.</p>
+        <p><button type="button" id="ps-reset" class="secondary">Reset plot settings</button></p>
+      </details>
+    </div>
+
     <div class="results-toolbar">
       <button type="button" id="expand-all" class="secondary">Expand all sections</button>
       <button type="button" id="collapse-all" class="secondary">Collapse all</button>
