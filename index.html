@@ -13,7 +13,7 @@
     <h1>NMR Dashboard</h1>
     <p class="note">All data is processed locally in your browser. Nothing is uploaded.</p>
     <p id="status" class="status" role="status">Starting Python…</p>
-    <p id="busy" class="busy" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span id="busy-text"></span></p>
+    <p id="busy" class="busy" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span id="busy-text"></span><button type="button" id="busy-stop" class="secondary" hidden>Stop</button></p>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Workflow">
@@ -57,7 +57,7 @@
       <div class="plot-card">
         <div id="plot-decay"></div>
         <label><input type="checkbox" id="decay-log"> log y-axis</label>
-        <label data-for="t1"><input type="checkbox" id="decay-logx"> log delay axis</label>
+        <label data-for="t1 t2d"><input type="checkbox" id="decay-logx"> <span data-for="t1">log delay axis</span><span data-for="t2d">log b axis</span></label>
         <div class="plot-card">
         <div id="plot-echo"></div>
         <label class="slider">Echo <input type="range" id="echo-idx" min="0" value="0"> <output id="echo-idx-out">1</output></label>
@@ -98,16 +98,44 @@
       </fieldset>
 
       <fieldset>
-        <legend><span data-for="cpmg">2 · Decay analysis <small>(choose any)</small></span><span data-for="t1">Saturation-recovery analysis</span></legend>
+        <legend><span data-for="cpmg">2 · Decay analysis <small>(choose any)</small></span><span data-for="t1">Saturation-recovery analysis</span><span data-for="t2d">T₂–D analysis</span></legend>
 
         <div class="analysis exclude-row">
           <label>Exclude the first <input type="number" id="exclude-first" min="0" step="1" value="0" style="width:5rem">
-            <span data-for="cpmg">echoes</span><span data-for="t1">delays</span> from every fit</label>
+            <span data-for="cpmg t2d">echoes</span><span data-for="t1">delays</span> from every fit</label>
           <details class="more"><summary>Show more</summary><div class="more-body"><p>The first echo (and sometimes the next few) can be distorted, for example by pulse ringdown or imperfect refocusing, and then pulls every fit.
             Excluded points are still plotted, as open markers, but take no part in any fit, ILT, MCMC or bootstrap. The default is 0 (use everything).</p></div></details>
         </div>
 
-        <div class="analysis">
+        <div class="analysis" data-for="t2d">
+          <label class="opt"><strong>T₂–D inversion</strong> <small>(2D inverse Laplace transform of the echo × diffusion-delay data)</small></label>
+          <div class="fields" id="t2d-fields">
+            <label>T₂ min (s) <input type="number" id="t2d-t2min" step="any" min="0"></label>
+            <label>T₂ max (s) <input type="number" id="t2d-t2max" step="any" min="0"></label>
+            <label>T₂ points <input type="number" id="t2d-t2steps" step="1" min="10" max="400"></label>
+            <label>D min (m²/s) <input type="number" id="t2d-dmin" step="any" min="0"></label>
+            <label>D max (m²/s) <input type="number" id="t2d-dmax" step="any" min="0"></label>
+            <label>D points <input type="number" id="t2d-dsteps" step="1" min="5" max="200"></label>
+            <label>α <input type="number" id="t2d-alpha" step="any" min="0"></label>
+            <label>Region threshold (% of max) <input type="number" id="t2d-peakthr" step="any" min="0" max="100"></label>
+            <p id="t2d-window-hint" class="note t2d-hint"></p>
+            <button type="button" id="t2d-use-window" class="secondary">Use the range the b-values can resolve</button>
+            <details class="more"><summary>Show more</summary><div class="more-body">
+              <p><strong>What this does.</strong> The data are echo trains measured at several diffusion-encoding delays. The 2D inverse Laplace transform finds the distribution of
+                T<sub>2</sub> and diffusion coefficient <i>D</i> that reproduces them, without assuming how many components there are:</p>
+              <p class="equation" id="t2d-equation"></p>
+              <p><strong>Units.</strong> You enter and read <i>D</i> in m²/s. Internally the solver works on <i>D</i> × 10⁹ (and b-values × 10⁻⁹) to keep the numbers near 1, and converts every result back.</p>
+              <p><strong>What the data can resolve.</strong> A diffusion coefficient is only measurable if the signal decays over the b-values you used: roughly from 1/b<sub>max</sub> to 5/b<sub>min</sub> (shown above for this dataset).
+                Outside that range the regularised solution is extrapolation, not measurement, and it can carry a lot of "signal" (the penalty does not discourage large amplitudes where the kernel is ~0). The results flag regions outside it,
+                and "Use the range the b-values can resolve" restricts the grid to it.</p>
+              <p><strong>Cost.</strong> The solve is one dense problem of (T<sub>2</sub> points × <i>D</i> points) unknowns. 50 × 25 takes seconds; 100 × 25 about a minute natively and several times longer in the browser (about 1 GB of memory).
+                You get a time estimate, based on a short timed trial on this computer, and a confirmation before long runs, and you can stop a run (this restarts Python, keeping your data and settings).</p>
+              <p>Larger α = less smoothing. The method is ill-conditioned (exponentials in b overlap): positions and shares are reliable to within a factor, not exactly, and shares can shift with α. Regions are connected areas above the threshold (overlapping peaks can appear as one).</p>
+            </div></details>
+          </div>
+        </div>
+
+        <div class="analysis" data-for="cpmg t1">
           <label class="opt"><input type="checkbox" id="me-enabled" checked> <span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Recovery fit (T₁)</span></label>
           <div class="fields" id="me-fields">
             <label>Components <select id="me-n"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
@@ -150,20 +178,22 @@
   <!-- 4 · Uncertainty -->
   <section role="tabpanel" id="panel-uncertainty" aria-labelledby="tab-uncertainty" hidden>
     <h2>Uncertainty</h2>
-    <fieldset>
+    <p class="message warn" data-for="t2d">MCMC and the bootstrap are not available for T₂–D data yet (each bootstrap replicate is a full 2D inversion, and MCMC needs a parametric
+      few-component model). The inversion itself reports a measured noise level and fit statistics.</p>
+    <fieldset data-for="cpmg t1">
       <legend>Fit confidence intervals</legend>
       <label>Confidence level
         <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
       <details class="more"><summary>Show more</summary><div class="more-body"><p>Intervals from the least-squares covariance of the multi-exponential fit (Student-<i>t</i> intervals), at every position in FT mode. They assume the likelihood is a symmetric Gaussian around the best fit, which is fine for well-determined parameters; MCMC and the bootstrap below test that assumption.</p></div></details>
     </fieldset>
-    <fieldset>
+    <fieldset data-for="cpmg t1">
       <legend>Decay to analyse <small>(for MCMC and bootstrap)</small></legend>
       <label class="opt"><input type="radio" name="unc-target" value="bulk" checked> The whole decay <small>(integrated, or the FT window sum)</small></label>
       <label class="opt" data-for="cpmg"><input type="radio" name="unc-target" value="position"> One z position <small>(FT mode)</small>
         nearest to <input type="number" id="unc-z" step="any" placeholder="strongest" style="width:8rem"> µm</label>
     </fieldset>
 
-    <fieldset>
+    <fieldset data-for="cpmg t1">
       <legend>MCMC <small>(Bayesian posterior of the multi-exponential fit)</small></legend>
       <label class="opt"><input type="checkbox" id="mcmc-enabled"> Run MCMC</label>
       <div class="fields" id="mcmc-fields">
@@ -186,7 +216,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset data-for="cpmg t1">
       <legend>Bootstrap <small>(refit surrogate decays)</small></legend>
       <label class="opt"><input type="checkbox" id="boot-enabled"> Run bootstrap</label>
       <div class="fields" id="boot-fields">
@@ -208,7 +238,7 @@
               <p>Intervals are percentile intervals at the confidence level above. More replicates smooth the intervals but take longer; a few hundred is usual.</p></div></details>
       </div>
     </fieldset>
-    <p class="note">Both run after the processing, once you have confirmed a time estimate.</p>
+    <p class="note" data-for="cpmg t1">Both run after the processing, once you have confirmed a time estimate.</p>
     <p class="next"><button type="button" data-next="results" id="next-results" disabled>Results appear after you run the processing ↓</button></p>
   </section>
 
@@ -270,6 +300,30 @@
         <p><strong>ILT viewer.</strong> Centre: the ILT map (T₂ vs position) with the peak tracks. Right: the spectrum at the selected position. Top: the signal at the selected T₂ along z. Drag the sliders, press ← → on a focused slider, or click the map to move the cut.</p>
         <p><strong>Peak tracks.</strong> Peaks are found on the spectrum summed over all positions and then followed at every position: each coloured line is the geometric-mean T₂ inside that peak's T₂ band (a band with under 1% of a position's signal is left blank there).</p>
         <p>Open markers: that position's fit was flagged (a poorly determined component or no uncertainty estimate). Error bars are ± one standard error.</p></div></details>
+    </details>
+
+    <details id="t2d-results" class="section" open hidden>
+      <summary><h3>T₂–D spectrum</h3></summary>
+      <div id="t2d-warnings"></div>
+      <p id="t2d-stats" class="note"></p>
+      <div class="plot-card wide span-all">
+        <div id="plot-t2d" class="viewer"></div>
+        <div class="viewer-controls">
+          <label>D <input type="range" id="t2d-view-d" min="0" max="0" value="0"> <output id="t2d-view-d-out"></output></label>
+          <label>T₂ <input type="range" id="t2d-view-t2" min="0" max="0" value="0"> <output id="t2d-view-t2-out"></output></label>
+          <label><input type="checkbox" id="t2d-proj"> show projections (sums) instead of slices</label>
+          <label><input type="checkbox" id="t2d-fixed" checked> fixed amplitude scale</label>
+        </div>
+      </div>
+      <h4>Regions</h4>
+      <div class="table-wrap"><table id="t2d-regions" class="grid"></table></div>
+      <h4>Data, fit and residual</h4>
+      <div class="plots t2d-maps">
+        <div class="plot-card"><div id="plot-t2d-data"></div></div>
+        <div class="plot-card"><div id="plot-t2d-fit"></div></div>
+        <div class="plot-card"><div id="plot-t2d-resid"></div></div>
+      </div>
+      <details class="more"><summary>Show more</summary><div class="more-body"><p>Top and right: the spectrum along the selected D and the selected T₂ (or, with the box ticked, the sums over D and over T₂). The grey hatched band marks diffusion coefficients the b-values cannot resolve; region markers are open circles where the data constrain the region and × where they do not. Click the map to move the cut.</p><p>Bottom: the measured echo × b-value data, the fit, and the residual (which should look like noise, with no structure).</p></div></details>
     </details>
 
     <details id="fit-section" class="section" open>

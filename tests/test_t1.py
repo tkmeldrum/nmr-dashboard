@@ -32,7 +32,7 @@ def test_sequence_names_map_to_analyses_tolerating_spelling(name, kind):
 def test_supported_and_unsupported_sequences_explain_themselves():
     assert sequences.describe({"experiment": "T1Sat"})["supported"] and sequences.describe({"experiment": "CPMG"})["supported"]
     d = sequences.describe({"experiment": "SSE-T2"})
-    assert not d["supported"] and "SSE-T2" in d["reason"] and "T₂–D" in d["analysis"]
+    assert d["supported"] and d["kind"] == "t2d" and "T₂–D" in d["analysis"]
     assert "not one nmrdash can analyse" in sequences.describe({"experiment": "Diffusion"})["reason"]
     assert "no `experiment`" in sequences.describe({})["reason"]
 

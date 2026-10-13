@@ -107,6 +107,16 @@ SPEC = {
         ("offset", True, "Include a constant offset c: M(t) = c + sum_i A_i (1 - exp(-t/T1_i)). Kea recovery curves usually do not start at zero.", _boolean),
         ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
     ],
+    "t2d": [
+        ("t2_min", 1e-5, "T2-D (sequence SSE-T2): T2 grid, seconds.", _number(0, lo_open=True)),
+        ("t2_max", 1.0, "", _number(0, lo_open=True)),
+        ("t2_steps", 50, "T2 grid points (never more than echoes). The solve is a dense problem of T2 x D unknowns: 50 x 25 takes seconds, 100 x 25 about a minute, in the browser several times longer.", _integer(10, 400)),
+        ("d_min", 1e-12, "Diffusion coefficient grid, m^2/s (processed internally as D x 1e9, reported in m^2/s). The b-values can only tell apart D from about\n# 1/b_max to 5/b_min; outside that the solution is regularisation, not data. \"auto\" for both = exactly that range for this dataset.", _auto_or(_number(0, lo_open=True))),
+        ("d_max", 1e-8, "", _auto_or(_number(0, lo_open=True))),
+        ("d_steps", 25, "D grid points (never more than the number of diffusion delays).", _integer(5, 200)),
+        ("alpha", 1e9, "Regularisation strength: larger = less smoothing.", _number(0, lo_open=True)),
+        ("peak_threshold_pct", 10.0, "Regions of the spectrum above this % of its maximum are reported as peaks.", _number(0, 100)),
+    ],
     "mcmc": [
         ("enabled", False, "MCMC (emcee) on the multi-exponential model: needs the emcee package.", _boolean),
         ("walkers", 32, "", _integer(8)),
@@ -177,6 +187,11 @@ def validate(params):
             raise ValueError("ft.z_min must be below ft.z_max")
     if out["ilt"]["sweep_lo"] >= out["ilt"]["sweep_hi"]:
         raise ValueError("ilt.sweep_lo must be below ilt.sweep_hi")
+    td = out["t2d"]
+    if (td["d_min"] == AUTO) != (td["d_max"] == AUTO):
+        raise ValueError("t2d.d_min and t2d.d_max must both be numbers or both \"auto\"")
+    if td["t2_min"] >= td["t2_max"] or (td["d_min"] != AUTO and td["d_min"] >= td["d_max"]):
+        raise ValueError("t2d: the minimum of each range must be below its maximum")
     t2lo, t2hi = out["ilt"]["t2_min"], out["ilt"]["t2_max"]
     if t2lo != AUTO and t2hi != AUTO and t2lo >= t2hi:
         raise ValueError("ilt.t2_min must be below ilt.t2_max")
@@ -251,10 +266,19 @@ def to_settings_t1(params):
     return settings, options
 
 
+def to_settings_t2d(params):
+    """Settings for a T2-D (SSE-T2) dataset. Options are empty: MCMC / bootstrap are not available for the 2D inversion."""
+    p = validate(params)
+    return {"kind": "t2d", "exclude_first": p["processing"]["exclude_first"], "t2d": dict(p["t2d"])}, {}
+
+
 def from_settings(settings, options=None, base=None):
     """The inverse: the params that reproduce a page run (the page's settings + uncertainty options)."""
     p = validate(base) if base else defaults()
     p["processing"]["exclude_first"] = int(settings.get("exclude_first", 0) or 0)
+    if settings.get("kind") == "t2d":
+        p["t2d"].update(settings.get("t2d") or {})
+        return validate(p)
     if settings.get("kind") == "t1":
         me = settings.get("multiexp") or {}
         p["t1"].update({"components": me.get("n", 1), "offset": bool(me.get("offset", True)), "compare": bool(me.get("compare", True))})

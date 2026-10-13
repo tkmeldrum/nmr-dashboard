@@ -11,6 +11,8 @@ DISPLAY_ROWS = [
     ("Number of echoes", "nrEchoes", ""),
     ("Points per echo", "nrPnts", ""),
     ("Number of T1 delays", "nrPntsT1", ""),
+    ("Number of diffusion delays", "nrPntsTau", ""),
+    ("Diffusion time Δ", "DELTA", "ms"),
     ("Dwell time", "dwellTime", "µs"),
     ("Repetition time", "repTime", "ms"),
     ("Number of scans", "nrScans", ""),

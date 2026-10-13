@@ -44,6 +44,30 @@ bootstrap**, params file, batch, provenance and exports apply. These data have *
 measured noise σ: reduced χ² is not available, MCMC samples σ, and the bootstrap resamples residuals. Params file section: `[t1]`.
 Batch tables keep `T2_*` (CPMG) and `T1_*` (T1Sat) columns apart, with a `kind` column and `timeseries_T1.png`.
 
+## T₂–D correlation (SSE-T2)
+
+The sequence name `SSE-T2` selects a 2D inverse Laplace transform of the echo × diffusion-delay data. The solver is the one in
+`MeldrumLabCode/pythonic/run_2dilt.py` **as it is** (a MATLAB-matched, SVD-compressed Kronecker solve with curvature regularisation); only
+unit handling, the summaries and the interface are new. Files read: `acqu.par`, `data2D_Cp.2d` (or `data2D.dat`), `data.dat`, and
+`DiffAxis.dat` / `T2Axis.dat` when present; the imaginary channel after phasing gives a measured noise σ and a χ² per point.
+
+- **Defaults (as you specified):** T₂ 1e-5 to 1 s, D 1e-12 to 1e-8 m²/s, α = 1e9, 50 T₂ × 25 D points. D is entered and reported in m²/s; the
+  solver works on D × 10⁹ (and b × 10⁻⁹) and every result is converted back. Params file section `[t2d]`; `exclude_first` applies.
+- **Cost:** one dense problem of (T₂ points × D points) unknowns: native times of 1.9 s (30 × 25), 8 s (50 × 25), 54 s (100 × 25) and ~0.9 GB for the
+  last. In the browser 50 × 25 takes about 20 s and 100 × 25 about 3 minutes. Before a long solve the page times a small trial, shows an estimate and asks;
+  there is no progress to report during a solve, so a **Stop** button restarts Python (data and settings are kept).
+- **What the data can resolve (important).** A diffusion coefficient is only measurable if the signal decays over the b-values used: roughly from
+  1/b_max to 5/b_min (for the M1115 sample, b = 6.4e9 – 2.9e12 s/m², i.e. **3.5e-13 to 7.8e-10 m²/s**). The regularisation (a curvature penalty) does
+  not discourage large amplitudes where the kernel is ~0, so outside that window the solution can hold a lot of "signal" that the data say nothing
+  about: on both sample datasets 64–69% of the spectrum's weight sits above 7e-10 m²/s, and a synthetic test with known populations shows the same
+  drift. The page therefore shades the unresolvable band, flags each region as constrained or not, reports each region's share of the *resolvable*
+  part, and offers **"Use the range the b-values can resolve"** (params: `d_min = d_max = "auto"`). Within that window the slow population of the
+  synthetic test is recovered to ~10% in T₂ and D; the fast one's T₂ is good but its D can be off by ~2× and its share by ~20% (and shifts with α).
+- **Not available yet:** MCMC and bootstrap (each bootstrap replicate is a full 2D inversion; MCMC needs a parametric few-component T₂–D model, which is the
+  planned route).
+- **Outputs:** `t2d_spectrum.csv` (D rows × T₂ columns), `t2d_peaks.csv`, projections, `t2d_statistics.csv`, `t2d_data_fit_residual.csv`, the spectrum
+  and data/fit/residual figures, `summary.md`, provenance. Batch tables gain `t2d_peak{1-3}_*` columns.
+
 ## What it computes
 
 | Step | Details |
@@ -110,7 +134,7 @@ Deploys: every push to `main` runs the tests, builds the site and publishes it t
 
 ## Status and roadmap
 
-**Done:** load and raw display; saturation recovery (T1Sat); MCMC and bootstrap (branch `uncertainty`, not yet merged); command-line tool, params file, batch/time-series and provenance (branch `script-export`, built on top of it); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
+**Done:** load and raw display; T₂–D 2D ILT (branch `t2d`); saturation recovery (T1Sat); MCMC and bootstrap (branch `uncertainty`, not yet merged); command-line tool, params file, batch/time-series and provenance (branch `script-export`, built on top of it); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
 tables and α sweep; spatially resolved fits with a linked cross-section viewer; fit-quality statistics; tabbed workflow;
 sample-data explorer; CI and Pages deploy.
 
@@ -133,7 +157,7 @@ sample-data explorer; CI and Pages deploy.
    every setting plus the `nmrdash` version for reproducibility. *Needs testing in a real Chrome.*
 5. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
    import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.
-6. **T₂–D (SSE-T2)**: next. The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
+6. ~~T₂–D (SSE-T2)~~ **done on branch `t2d`**. Still to do: a parametric few-component T₂–D model with MCMC, and a bootstrap of the 2D map (opt-in; each replicate is a full solve). Original notes: The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
 7. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
 8. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
    others) and the NN-decays / T2-D formats from `pythonic/`; make `pythonic/` import from `nmrdash`; slim CI time.

@@ -293,3 +293,64 @@ def timeseries_figure(rows, titles=True, symbol="T2"):
         a1.set_title("Multi-exponential fit vs time")
     fig.tight_layout()
     return fig
+
+
+def t2d_spectrum_figure(res, titles=True):
+    """The T2-D map (T2 across, D up, both log) with its two projections."""
+    plt = _plt()
+    from matplotlib.gridspec import GridSpec
+    r = res["t2d"]
+    T2, D, S = np.asarray(r["T2"], float), np.asarray(r["D"], float), np.asarray(r["spectrum"], float)
+    fig = plt.figure(figsize=(7.6, 6.4))
+    gs = GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 4], hspace=0.05, wspace=0.05)
+    ax, top, right = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 1])
+    m = ax.pcolormesh(T2, D, S, shading="auto", cmap="viridis")
+    for p in r["peaks"][:6]:
+        ax.plot(p["T2_mean"], p["D_mean"], "o", mfc="none", mec="white", ms=6)
+        ax.annotate(f"{100 * p['fraction']:.0f}%", (p["T2_mean"], p["D_mean"]), textcoords="offset points", xytext=(6, 4), color="white", fontsize=8)
+    _log_t2_axis(ax, "x")
+    _log_t2_axis(ax, "y")
+    lo, hi = r["d_sensitive"]                                  # where the b-values can place a diffusion coefficient
+    for a, b in ((D[0] / 10, lo), (hi, D[-1] * 10)):
+        if b > a:
+            ax.axhspan(a, b, color="white", alpha=0.45, lw=0, hatch="///", zorder=3)
+    ax.set_ylim(D[0], D[-1])
+    ax.set_xlabel("T$_2$ (s)")
+    ax.set_ylabel("D (m$^2$/s)")
+    top.plot(T2, r["projection_T2"], color=_BLUE)
+    top.set_xscale("log")
+    top.set_xlim(ax.get_xlim())
+    top.set_xticklabels([])
+    top.set_ylabel("Σ over D")
+    right.plot(r["projection_D"], D, color=_BLUE)
+    right.set_yscale("log")
+    right.set_ylim(ax.get_ylim())
+    right.set_yticklabels([])
+    right.set_xlabel("Σ over T$_2$")
+    from matplotlib.ticker import MaxNLocator
+    right.xaxis.set_major_locator(MaxNLocator(2, prune="lower"))
+    fig.colorbar(m, ax=[top, right], location="right", fraction=0.04, pad=0.02).set_label("amplitude")
+    if titles:
+        fig.suptitle(f"T$_2$–D spectrum (α = {r['alpha']:.0e})".replace("e+0", "e"))
+    return fig
+
+
+def t2d_fit_figure(res, titles=True):
+    """Data, fit and residual as maps over echo time and b-value (the residual should look like noise)."""
+    plt = _plt()
+    r = res["t2d"]
+    e, b = np.asarray(r["echo_s"], float), np.asarray(r["b_vec"], float)
+    pred, resid = np.asarray(r["pred"], float), np.asarray(r["resid"], float)
+    data = pred + resid
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.8), sharey=True)
+    vmax = np.nanmax(np.abs(data))
+    for ax, Z, name, cmap, lim in ((axes[0], data, "data", "viridis", (data.min(), vmax)), (axes[1], pred, "fit", "viridis", (data.min(), vmax)),
+                                   (axes[2], resid, "residual", "RdBu_r", (-np.nanmax(np.abs(resid)), np.nanmax(np.abs(resid))))):
+        m = ax.pcolormesh(e, b, Z, shading="auto", cmap=cmap, vmin=lim[0], vmax=lim[1])
+        ax.set_xlabel("Echo time (s)")
+        fig.colorbar(m, ax=ax)
+        if titles:
+            ax.set_title(name)
+    axes[0].set_ylabel("b-value (×10$^{-9}$ s/m$^2$)")
+    fig.tight_layout()
+    return fig
