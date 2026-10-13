@@ -26,12 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Assemble site
-        run: |
-          mkdir site
-          cp index.html style.css app.js worker.js site/
-          cp -r nmrdash site/nmrdash
-          find site/nmrdash -name __pycache__ -prune -exec rm -rf {} +
-          (cd site/nmrdash && ls *.py | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().split()))") > site/nmrdash-files.json
+        run: python3 tools/build_site.py site "$GITHUB_SHA"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
