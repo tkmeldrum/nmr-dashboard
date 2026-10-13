@@ -21,3 +21,7 @@ def guess_nucleus(b1freq_mhz):
     if abs(expect[nuc] - b1freq_mhz) > B1FREQ_TOLERANCE_MHZ:
         return "1H", f"b1Freq {b1freq_mhz:g} MHz matches neither ¹H nor ¹⁹F on this magnet; defaulting to ¹H"
     return nuc, f"b1Freq {b1freq_mhz:g} MHz → {label}"
+
+# Saturation recovery: Kea's recovery curves do not start at zero (an offset of a few % of the plateau is typical),
+# and a fit without it is much worse on the sample data (RMSE 305 vs 38), so the offset is on by default.
+T1_DEFAULT_OFFSET = True

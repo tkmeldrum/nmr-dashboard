@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLE_FILES = ("acqu.par", "data.2d", "data.1d")
+SAMPLE_FILES = ("acqu.par", "data.2d", "data.1d", "data.dat")
 
 
 def sample_manifest(root=ROOT):

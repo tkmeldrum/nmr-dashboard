@@ -101,6 +101,11 @@ SPEC = {
         ("target", "bulk", "What MCMC and the bootstrap analyse: \"bulk\" (the whole decay, or the FT window sum) or \"position\" (one z, FT only).", _one_of("bulk", "position")),
         ("z_um", "strongest", "For target = \"position\": the z (um) to use, or \"strongest\" for the position with the most signal.", lambda v: None if v == "strongest" else _number()(v)),
     ],
+    "t1": [
+        ("components", 1, "Saturation recovery (sequence T1Sat): number of exponential components, 1 or 2 (two is rare and needs good data).", _integer(1, 2)),
+        ("offset", True, "Include a constant offset c: M(t) = c + sum_i A_i (1 - exp(-t/T1_i)). Kea recovery curves usually do not start at zero.", _boolean),
+        ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
+    ],
     "mcmc": [
         ("enabled", False, "MCMC (emcee) on the multi-exponential model: needs the emcee package.", _boolean),
         ("walkers", 32, "", _integer(8)),
@@ -230,9 +235,37 @@ def to_settings(params, echo_times_s, default_nucleus="1H"):
     return settings, options
 
 
+def to_settings_t1(params):
+    """Settings for a saturation-recovery dataset (no echo processing, no ILT, no FT)."""
+    p = validate(params)
+    t1, un, mc, bs = p["t1"], p["uncertainty"], p["mcmc"], p["bootstrap"]
+    settings = {"kind": "t1", "multiexp": {"enabled": True, "n": t1["components"], "offset": t1["offset"], "ci_level": un["ci_level"], "compare": t1["compare"]}}
+    target = {"target": "bulk", "z_um": None, "ci_level": un["ci_level"]}
+    options = {
+        "mcmc": {"enabled": mc["enabled"], **target, "nwalkers": mc["walkers"], "steps": mc["steps"], "burn": mc["burn"], "sample_sigma": mc["sample_sigma"], "seed": mc["seed"]},
+        "bootstrap": {"enabled": bs["enabled"], **target, "replicates": bs["replicates"], "method": None if bs["method"] == AUTO else bs["method"],
+                      "do_multiexp": True, "do_ilt": False, "seed": bs["seed"]},
+    }
+    return settings, options
+
+
 def from_settings(settings, options=None, base=None):
     """The inverse: the params that reproduce a page run (the page's settings + uncertainty options)."""
     p = validate(base) if base else defaults()
+    if settings.get("kind") == "t1":
+        me = settings.get("multiexp") or {}
+        p["t1"].update({"components": me.get("n", 1), "offset": bool(me.get("offset", True)), "compare": bool(me.get("compare", True))})
+        p["uncertainty"]["ci_level"] = me.get("ci_level", 0.95)
+        for name in ("mcmc", "bootstrap"):
+            o = (options or {}).get(name) or {}
+            if o:
+                p[name]["enabled"] = bool(o.get("enabled", False))
+                if name == "mcmc":
+                    p["mcmc"].update({"walkers": o.get("nwalkers", 32), "steps": o.get("steps", 6000), "burn": o.get("burn", 2000),
+                                      "sample_sigma": bool(o.get("sample_sigma", False)), "seed": o.get("seed", 0)})
+                else:
+                    p["bootstrap"].update({"replicates": o.get("replicates", 200), "method": o.get("method") or AUTO, "seed": o.get("seed", 0)})
+        return validate(p)
     p["processing"]["echo"] = settings.get("echo", "integrate")
     ft = settings.get("ft") or {}
     if ft:

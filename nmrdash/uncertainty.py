@@ -40,13 +40,14 @@ def params_from_fit(f):
     return np.array(p, float)
 
 
-def param_labels(n, offset):
-    """(plain names, TeX names) for [A1, T2_1, A2, T2_2, ..., (c)]."""
+def param_labels(n, offset, symbol="T2"):
+    """(plain names, TeX names) for [A1, T2_1, A2, T2_2, ..., (c)] (symbol "T1" for recovery data)."""
     one = n == 1
+    d = symbol[1:]                                      # "2" or "1"
     plain, tex = [], []
     for i in range(1, n + 1):
-        plain += ["A" if one else f"A{i}", "T2" if one else f"T2,{i}"]
-        tex += [r"$A$" if one else rf"$A_{i}$", r"$T_2$ (s)" if one else rf"$T_{{2,{i}}}$ (s)"]
+        plain += ["A" if one else f"A{i}", symbol if one else f"{symbol},{i}"]
+        tex += [r"$A$" if one else rf"$A_{i}$", rf"$T_{d}$ (s)" if one else rf"$T_{{{d},{i}}}$ (s)"]
     if offset:
         plain.append("offset")
         tex.append(r"$c$")
@@ -64,9 +65,9 @@ def derived(p, n):
     return np.column_stack([tot, mean, frac])
 
 
-def derived_labels(n):
+def derived_labels(n, symbol="T2"):
     """Derived quantities worth reporting; for one component they would only repeat A and T2."""
-    return [] if n == 1 else ["total amplitude", "mean T2"] + [f"fraction {i}" for i in range(1, n + 1)]
+    return [] if n == 1 else ["total amplitude", f"mean {symbol}"] + [f"fraction {i}" for i in range(1, n + 1)]
 
 
 def _interval(x, level):
@@ -95,12 +96,14 @@ class Mcmc:
         self.sigma = None if sigma is None else float(sigma)
         self.steps, self.burn, self.seed, self.done = int(steps), int(burn), int(seed), 0
         self.ls = ls_fit
+        self.kind = ls_fit.get("kind", "decay")
+        self.symbol = multiexp.SYMBOL[self.kind]
         self.p_ls = params_from_fit(ls_fit)
         self.ndim = 2 * self.n + int(self.offset) + int(self.sample_sigma)
         self.nwalkers = max(int(nwalkers), 2 * self.ndim, 8)
         self.nwalkers += self.nwalkers % 2
         self.lnlo, self.lnhi = np.log(self.t[0] / 10.0), np.log(self.t[-1] * 10.0)
-        rss0 = float(np.sum((self.y - multiexp.model(self.t, self.p_ls, self.n, self.offset)) ** 2))
+        rss0 = float(np.sum((self.y - multiexp.model(self.t, self.p_ls, self.n, self.offset, self.kind)) ** 2))
         self.sd0 = np.sqrt(rss0 / max(len(self.t) - len(self.p_ls), 1))
         self.lns_lo, self.lns_hi = np.log(self.sd0 / 20.0), np.log(self.sd0 * 20.0)
         self.rng = np.random.default_rng(self.seed)
@@ -137,7 +140,7 @@ class Mcmc:
         else:
             sigma = self.sigma
         with np.errstate(over="ignore", invalid="ignore"):
-            decay = np.exp(-self.t[None, None, :] / np.exp(lnT)[:, :, None])
+            decay = multiexp.KERNELS[self.kind](self.t[None, None, :] / np.exp(lnT)[:, :, None])
             model = np.einsum("wi,wit->wt", A, decay) + c
             rss = np.sum((self.y[None, :] - model) ** 2, axis=1)
             lp = -0.5 * rss / sigma ** 2 - (len(self.t) * np.log(sigma) if self.sample_sigma else 0.0)
@@ -196,12 +199,12 @@ class Mcmc:
         post = chain[burn:]
         nat_post = self._natural(post)
         flat = nat_post.reshape(-1, self.ndim)
-        plain, tex = param_labels(n, self.offset)
+        plain, tex = param_labels(n, self.offset, self.symbol)
         core = len(plain)
         names = plain + (["sigma"] if self.sample_sigma else [])
         tex_names = tex + ([r"$\sigma$"] if self.sample_sigma else [])
         dflat = derived(flat[:, :2 * n], n)
-        dn = derived_labels(n)
+        dn = derived_labels(n, self.symbol)
 
         params = [dict(_summ(names[j], flat[:, j], level), ls=float(self.p_ls[j]) if j < core else None,
                        ls_se=self._ls_se(j) if j < core else None) for j in range(self.ndim)]
@@ -231,14 +234,14 @@ class Mcmc:
         rng = np.random.default_rng(self.seed + 1)
         draws = flat[rng.choice(len(flat), size=min(PREDICTIVE_DRAWS, len(flat)), replace=False)]
         t_dense = np.linspace(0, self.t[-1], 200)
-        curves = np.array([multiexp.model(t_dense, d[:2 * n + int(self.offset)], n, self.offset) for d in draws])
+        curves = np.array([multiexp.model(t_dense, d[:2 * n + int(self.offset)], n, self.offset, self.kind) for d in draws])
         plo, pmed, phi = _interval(curves, level)
 
         sub = flat[rng.choice(len(flat), size=min(MAX_CORNER_SAMPLES, len(flat)), replace=False)]
         truths = np.concatenate([self.p_ls, [self.sd0] if self.sample_sigma else []])
         png = figures.corner_png(sub, tex_names, truths, fg=theme.get("fg", "#1a1a1a"), grid=theme.get("grid", "#999999"))
         return {
-            "kind": "mcmc", "level": level, "n": n, "offset": self.offset, "sample_sigma": self.sample_sigma,
+            "kind": "mcmc", "symbol": self.symbol, "level": level, "n": n, "offset": self.offset, "sample_sigma": self.sample_sigma,
             "sigma": self.sigma, "nwalkers": self.nwalkers, "steps_run": self.done, "steps_planned": self.steps, "burn": burn,
             "params": params, "derived": derived_rows,
             "diagnostics": {"acceptance": acc, "tau": [float(x) for x in tau], "tau_max": tau_max,
@@ -282,6 +285,8 @@ class Bootstrap:
         self.ls = ls_fit
         if me:
             self.n, self.offset = int(me["n"]), bool(me.get("offset", True))
+            self.fit_kind = ls_fit.get("kind", "decay")
+            self.symbol = multiexp.SYMBOL[self.fit_kind]
             self.p_ls = params_from_fit(ls_fit)
             self.me_base = np.asarray(ls_fit["fit"], float)
             self.me_rows, self.me_derived = [], []
@@ -312,7 +317,7 @@ class Bootstrap:
             if self.me:
                 ys = self.me_base + self._noise(self.me_base, len(self.p_ls))
                 try:
-                    f = multiexp.fit(self.t, ys, self.n, self.offset, n_starts=3, p0=self.p_ls)
+                    f = multiexp.fit(self.t, ys, self.n, self.offset, n_starts=3, p0=self.p_ls, kind=self.fit_kind)
                     p = params_from_fit(f)
                     self.me_rows.append(p)
                     self.me_derived.append(derived(p[:2 * self.n], self.n)[0])
@@ -351,8 +356,8 @@ class Bootstrap:
         if self.me and len(self.me_rows) >= 5:
             P = np.array(self.me_rows)
             D = np.array(self.me_derived)
-            plain, _ = param_labels(self.n, self.offset)
-            dn = derived_labels(self.n)
+            plain, _ = param_labels(self.n, self.offset, self.symbol)
+            dn = derived_labels(self.n, self.symbol)
             out["multiexp"] = {
                 "n": self.n, "offset": self.offset, "n_ok": len(P),
                 "params": [dict(_summ(plain[j], P[:, j], level), ls=float(self.p_ls[j])) for j in range(P.shape[1])],

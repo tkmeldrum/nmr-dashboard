@@ -43,6 +43,7 @@
 
     <div id="params-section" hidden>
       <h2>Parameters <small id="folder-name"></small></h2>
+      <p id="analysis-line" class="note analysis-line"></p>
       <table id="params"></table>
       <details><summary>Show all parameters</summary><table id="params-all"></table></details>
       <p class="next"><button type="button" data-next="raw">Next: Raw data →</button></p>
@@ -56,6 +57,7 @@
       <div class="plot-card">
         <div id="plot-decay"></div>
         <label><input type="checkbox" id="decay-log"> log y-axis</label>
+        <label data-for="t1"><input type="checkbox" id="decay-logx"> log delay axis</label>
         <div class="plot-card">
         <div id="plot-echo"></div>
         <label class="slider">Echo <input type="range" id="echo-idx" min="0" value="0"> <output id="echo-idx-out">1</output></label>
@@ -70,7 +72,7 @@
   <section role="tabpanel" id="panel-process" aria-labelledby="tab-process" hidden>
     <h2>Processing</h2>
     <form id="process-form" autocomplete="off">
-      <fieldset>
+      <fieldset data-for="cpmg">
         <legend>1 · Echo processing</legend>
         <label class="opt"><input type="radio" name="echo" value="integrate" checked> Integrate each echo
           <small>autophase, then sum all points of every echo into one decay</small></label>
@@ -96,14 +98,14 @@
       </fieldset>
 
       <fieldset>
-        <legend>2 · Decay analysis <small>(choose any)</small></legend>
+        <legend><span data-for="cpmg">2 · Decay analysis <small>(choose any)</small></span><span data-for="t1">Saturation-recovery analysis</span></legend>
 
         <div class="analysis">
-          <label class="opt"><input type="checkbox" id="me-enabled" checked> Multi-exponential fit</label>
+          <label class="opt"><input type="checkbox" id="me-enabled" checked> <span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Recovery fit (T₁)</span></label>
           <div class="fields" id="me-fields">
             <label>Components <select id="me-n"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
             <label><input type="checkbox" id="me-offset" checked> constant offset</label>
-            <label><input type="checkbox" id="me-compare" checked> compare 1–4 components (BIC)</label>
+            <label><input type="checkbox" id="me-compare" checked> <span data-for="cpmg">compare 1–4 components (BIC)</span><span data-for="t1">compare 1 and 2 components (BIC)</span></label>
             <details class="more"><summary>Show more</summary><div class="more-body"><p>Fits the decay with a sum of exponentials; each component has an amplitude <i>A</i> and a relaxation time <i>T</i><sub>2</sub>. The constant offset <i>c</i> absorbs a flat baseline.
               Components are listed from fastest to slowest relaxing.</p>
               <p class="equation" id="me-eq-form"></p>
@@ -112,7 +114,7 @@
           </div>
         </div>
 
-        <div class="analysis">
+        <div class="analysis" data-for="cpmg">
           <label class="opt"><input type="checkbox" id="ilt-enabled" checked> Inverse Laplace transform (ILT)</label>
           <div class="fields" id="ilt-fields">
             <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
@@ -129,7 +131,7 @@
           </div>
         </div>
 
-        <div class="analysis">
+        <div class="analysis" data-for="cpmg">
           <label class="opt disabled"><input type="checkbox" disabled> PED analysis <small>coming in a later phase</small></label>
         </div>
       </fieldset>
@@ -150,7 +152,7 @@
     <fieldset>
       <legend>Decay to analyse <small>(for MCMC and bootstrap)</small></legend>
       <label class="opt"><input type="radio" name="unc-target" value="bulk" checked> The whole decay <small>(integrated, or the FT window sum)</small></label>
-      <label class="opt"><input type="radio" name="unc-target" value="position"> One z position <small>(FT mode)</small>
+      <label class="opt" data-for="cpmg"><input type="radio" name="unc-target" value="position"> One z position <small>(FT mode)</small>
         nearest to <input type="number" id="unc-z" step="any" placeholder="strongest" style="width:8rem"> µm</label>
     </fieldset>
 
@@ -161,7 +163,7 @@
         <label>Walkers <input type="number" id="mcmc-walkers" value="32" min="8" step="2"></label>
         <label>Steps <input type="number" id="mcmc-steps" value="6000" min="100" step="500"></label>
         <label>Burn-in <input type="number" id="mcmc-burn" value="2000" min="0" step="100"></label>
-        <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small>(otherwise fixed from the imaginary channel)</small></label>
+        <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small data-for="cpmg">(otherwise fixed from the imaginary channel)</small><small data-for="t1">(always sampled here: recovery data have no imaginary channel)</small></label>
         <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What MCMC does.</strong> A least-squares fit gives one best answer and a symmetric error bar. MCMC
               (<a href="https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo" target="_blank" rel="noopener noreferrer">Markov chain Monte Carlo</a>) instead explores <em>every</em> set of
               parameter values that is consistent with your data and its noise, and records how plausible each one is. The spread of the visited values is the uncertainty, and unlike an error bar it can be
@@ -189,7 +191,7 @@
             <option value="parametric">Gaussian, σ from the imaginary channel</option>
           </select></label>
         <label><input type="checkbox" id="boot-me" checked> multi-exponential fit</label>
-        <label><input type="checkbox" id="boot-ilt" checked> ILT spectrum</label>
+        <label data-for="cpmg"><input type="checkbox" id="boot-ilt" checked> ILT spectrum</label>
         <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What the bootstrap does.</strong> The
               <a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener noreferrer">bootstrap</a> asks "if I repeated the measurement, how much would the answer move?" by doing exactly that on the computer:
               it builds many surrogate decays (the fitted curve plus noise like yours), refits each one, and reports the spread of the results. Unlike MCMC it needs no probability model of the parameters, and it works for the
@@ -272,7 +274,7 @@
     </details>
 
     <details id="me-results" class="section" open hidden>
-      <summary><h3>Multi-exponential fit</h3></summary>
+      <summary><h3><span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Saturation-recovery fit (T₁)</span></h3></summary>
       <details class="more"><summary>Show the model</summary><div class="more-body"><p class="equation" id="me-equation"></p><p class="equation small" id="me-defs"></p></div></details>
       <div id="me-warnings"></div>
       <div class="table-wrap"><table id="me-table" class="grid"></table></div>
@@ -283,7 +285,7 @@
       <h4>Model comparison</h4>
       <div class="table-wrap"><table id="me-compare-table" class="grid"></table></div>
       <details class="more"><summary>Show more</summary><div class="more-body"><p>AIC and BIC are only meaningful as <em>differences</em> between models fitted to the same data, so the table shows ΔAIC and ΔBIC relative to the best model (0 = best; a ΔBIC above ~10 is strong evidence against that model).
-        RSS and MSE scale with the signal amplitude (and RSS with the number of echoes); residual SD / amplitude and reduced χ² do not.</p></div></details>
+        RSS and MSE scale with the signal amplitude (and RSS with the number of data points); residual SD / amplitude and reduced χ² do not.</p></div></details>
     </details>
 
     <details id="ilt-results" class="section" open hidden>

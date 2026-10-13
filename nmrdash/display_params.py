@@ -10,6 +10,7 @@ DISPLAY_ROWS = [
     ("Echo time", "echoTime", "µs"),
     ("Number of echoes", "nrEchoes", ""),
     ("Points per echo", "nrPnts", ""),
+    ("Number of T1 delays", "nrPntsT1", ""),
     ("Dwell time", "dwellTime", "µs"),
     ("Repetition time", "repTime", "ms"),
     ("Number of scans", "nrScans", ""),

@@ -102,9 +102,10 @@ def decay_figure(res, mcmc=None, titles=True):
     y = np.asarray(res["decay"]["y"], float)
     fig, (ax, rax) = plt.subplots(2, 1, figsize=(7.2, 6), sharex=True, gridspec_kw={"height_ratios": [3, 1]})
     ax.plot(t, y, ".", color=_GREY, ms=3, label="data")
+    t1 = res.get("mode") == "t1"
     me = (res.get("multiexp") or {}).get("selected")
     if me:
-        ax.plot(me["t_dense"], me["fit_dense"], color=_ORANGE, lw=1.8, label=f"{me['n']}-exponential fit")
+        ax.plot(me["t_dense"], me["fit_dense"], color=_ORANGE, lw=1.8, label=f"{me['n']}-exponential " + ("recovery fit" if t1 else "fit"))
         rax.plot(t, me["resid"], color=_ORANGE, lw=0.8)
     if mcmc and mcmc.get("predictive"):
         pr = mcmc["predictive"]
@@ -114,14 +115,14 @@ def decay_figure(res, mcmc=None, titles=True):
         ax.plot(t, il["pred"], "--", color=_GREEN, lw=1.6, label="ILT fit")
         rax.plot(t, il["resid"], color=_GREEN, lw=0.8)
     rax.axhline(0, color=_GREY, lw=0.6)
-    rax.set_xlabel("Echo time (s)")
+    rax.set_xlabel("Delay (s)" if t1 else "Echo time (s)")
     ax.set_ylabel("Signal (arb.)")
     rax.set_ylabel("Residual")
     for a in (ax, rax):
         _sci_axis(a)
     ax.legend(frameon=False)
     if titles:
-        ax.set_title("Echo decay" + (" (FT, summed over the z-window)" if res.get("mode") == "ft" else " (phased, integrated)"))
+        ax.set_title("Saturation recovery" if t1 else "Echo decay" + (" (FT, summed over the z-window)" if res.get("mode") == "ft" else " (phased, integrated)"))
     fig.tight_layout()
     return fig
 
@@ -265,8 +266,8 @@ def save_figure(fig, path, fmt="png", dpi=150):
     plt.close(fig)
 
 
-def timeseries_figure(rows, titles=True):
-    """Batch: each multi-exponential T2 and the total amplitude against elapsed time (or dataset number)."""
+def timeseries_figure(rows, titles=True, symbol="T2"):
+    """Batch: each multi-exponential time constant (T2 or T1) and the total amplitude against elapsed time (or dataset number)."""
     plt = _plt()
     use_t = all(r.get("elapsed_min") is not None for r in rows)
     x = np.array([r["elapsed_min"] if use_t else i for i, r in enumerate(rows)], float)
@@ -276,9 +277,10 @@ def timeseries_figure(rows, titles=True):
         T = np.array([r["result"]["multiexp"]["components"][k]["T2"] if k < len(r["result"]["multiexp"]["components"]) else np.nan for r in rows], float)
         se = np.array([(r["result"]["multiexp"]["components"][k]["T2_se"] or np.nan) if k < len(r["result"]["multiexp"]["components"]) else np.nan for r in rows], float)
         good = np.isfinite(se) & (se <= 10 * np.abs(T))
-        a1.errorbar(x, T, yerr=np.where(good, se, 0), fmt="o-", ms=4, lw=1, color=(_BLUE, _ORANGE, _GREEN, _PURPLE)[k % 4], label=f"T$_2$,{k + 1}" if n > 1 else "T$_2$")
+        d = symbol[1:]
+        a1.errorbar(x, T, yerr=np.where(good, se, 0), fmt="o-", ms=4, lw=1, color=(_BLUE, _ORANGE, _GREEN, _PURPLE)[k % 4], label=f"T$_{d}$,{k + 1}" if n > 1 else f"T$_{d}$")
     _log_t2_axis(a1, "y")
-    a1.set_ylabel("T$_2$ (s)")
+    a1.set_ylabel(f"T$_{symbol[1:]}$ (s)")
     a1.legend(frameon=False)
     a2.plot(x, [r["result"]["multiexp"]["total_amplitude"] for r in rows], "o-", ms=4, lw=1, color=_BLUE)
     a2.set_ylabel("Total amplitude (arb.)")

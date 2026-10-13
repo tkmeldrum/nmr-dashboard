@@ -76,7 +76,7 @@ def file_record(path, label=None):
 
 
 def build(data_dir, settings, options=None, *, params_text=None, params_path=None, command=None, dataset=None,
-          acquisition=None, notes=None, extra=None, outputs=None, input_names=("acqu.par", "data.2d"), modified_ms=None):
+          acquisition=None, notes=None, extra=None, outputs=None, input_names=("acqu.par", "data.2d", "data.dat"), modified_ms=None):
     """Assemble the record.
 
     data_dir : folder holding the input files (the script's data folder, or the browser's in-memory copy)
@@ -89,7 +89,7 @@ def build(data_dir, settings, options=None, *, params_text=None, params_path=Non
     for name in input_names:
         if (data_dir / name).is_file():
             rec = file_record(data_dir / name)
-            if name == "data.2d" and modified_ms:
+            if name in ("data.2d", "data.dat") and modified_ms and not any(i["name"] == "data.2d" for i in inputs if name == "data.dat"):
                 rec["modified_utc"] = datetime.datetime.fromtimestamp(modified_ms / 1000, datetime.timezone.utc).isoformat(timespec="seconds")
             inputs.append(rec)
     acq = {k: acquisition[k] for k in ACQUISITION_KEYS if acquisition and k in acquisition}
