@@ -22,7 +22,11 @@ def test_build_bundles_site(tmp_path):
     out = build(tmp_path / "site", "abc123")
     html = (out / "index.html").read_text()
     assert 'style.css?v=abc123' in html and 'app.js?v=abc123' in html
-    assert 'worker.js?v=abc123' in (out / "app.js").read_text()
+    app = (out / "app.js").read_text()
+    assert 'worker.js?v=abc123' in app and 'from "./state.js?v=abc123"' in app
+    assert not any('.js"' in line and line.startswith("import") for line in app.splitlines())
+    for js in ("state.js", "tabs.js", "raw.js", "process.js", "results.js", "plotutil.js"):
+        assert (out / js).is_file()
     assert json.loads((out / "nmrdash-files.json").read_text()) == sorted(p.name for p in (ROOT / "nmrdash").glob("*.py"))
     manifest = json.loads((out / "test_data" / "manifest.json").read_text())
     assert manifest
