@@ -58,17 +58,25 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
             row["timestamp_utc"] = _utc(mtime).isoformat(timespec="seconds")
             row["timestamp_local"] = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
         info = pipeline.load(folder, mtime * 1000 if mtime else None, fallback_to_mtime=True)
-        if not info["is_cpmg"]:
-            row.update(status="skipped", reason=f"not CPMG data: {info['reason']}")
+        row["kind"] = info["kind"]
+        if not info["supported"]:
+            row.update(status="skipped", reason=info["reason"])
             return row
         raw = info["raw"]
-        row.update(n_echoes=raw["n_echoes"], n_points=raw["n_points"], echo_time_us=info["params_all"].get("echoTime"))
-        settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"])
+        row["kind"] = info["kind"]
+        if info["kind"] == "t1":
+            row.update(n_points=raw["n_points"], mode="t1")
+            settings, options = P.to_settings_t1(p)
+        else:
+            row.update(n_echoes=raw["n_echoes"], n_points=raw["n_points"], echo_time_us=info["params_all"].get("echoTime"))
+            settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"])
         res = pipeline.process(settings)
         warnings = []
         mcmc = boot = None
         samples_n = 5000 if p["output"]["samples"] else 0
         mc, bs = options["mcmc"], options["bootstrap"]
+        if info["kind"] == "t1":
+            mc = {**mc, "target": "bulk"}
         if mc["enabled"]:
             try:
                 mcmc = _run_mcmc(mc, samples_n)
@@ -227,21 +235,31 @@ def run_batch(root, params=None, *, params_text=None, params_path=None, jobs=Non
 
 
 def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
-    maxn = max((r["result"]["multiexp"]["n"] for r in rows if r.get("result") and r["result"]["multiexp"]), default=0)
-    head = ["dataset", "timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "echo_time_us", "seconds", "output_dir"]
-    for k in range(1, maxn + 1):
-        head += [f"T2_{k}_s", f"T2_{k}_se", f"amplitude_{k}", f"fraction_{k}"]
-    head += ["offset", "mean_T2_s", "mean_T2_se", "total_amplitude", "reduced_chi2", "residual_sd_over_signal_range", "noise_sigma", "ilt_alpha"]
+    fams = [("T2", "cpmg"), ("T1", "t1")]                                   # a folder may mix sequences: separate column families
+    has = {lab: any(r.get("kind") == kind for r in rows) for lab, kind in fams}
+    maxn = {lab: max((r["result"]["multiexp"]["n"] for r in rows if r.get("kind") == kind and r.get("result") and r["result"]["multiexp"]), default=0) for lab, kind in fams}
+    head = ["dataset", "kind", "timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "echo_time_us", "seconds", "output_dir"]
+    for lab, _ in fams:
+        for k in range(1, maxn[lab] + 1):
+            head += [f"{lab}_{k}_s", f"{lab}_{k}_se", f"amplitude_{k}" if lab == "T2" else f"T1_amplitude_{k}", f"fraction_{k}" if lab == "T2" else f"T1_fraction_{k}"]
+    head += ["offset", "mean_T2_s", "mean_T2_se"] + (["mean_T1_s", "mean_T1_se"] if has["T1"] else [])
+    head += ["total_amplitude", "reduced_chi2", "residual_sd_over_signal_range", "noise_sigma", "ilt_alpha"]
     head += [f"ilt_peak{k}_{q}" for k in (1, 2, 3) for q in ("T2_s", "fraction")] + ["warnings"]
     table = []
     for r in rows:
         res = r.get("result") or {}
         me, il = res.get("multiexp"), res.get("ilt")
-        line = [r["dataset"], r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
-        for k in range(maxn):
-            c = me["components"][k] if me and k < len(me["components"]) else None
-            line += [c["T2"], c["T2_se"], c["A"], c["fraction"]] if c else [None] * 4
-        line += [me["offset"], me["mean_T2"], me["mean_T2_se"], me["total_amplitude"], me["chi2_red"], me["resid_sd_over_amp"]] if me else [None] * 6
+        line = [r["dataset"], r.get("kind"), r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
+        for lab, kind in fams:
+            for k in range(maxn[lab]):
+                c = me["components"][k] if (me and r.get("kind") == kind and k < len(me["components"])) else None
+                line += [c["T2"], c["T2_se"], c["A"], c["fraction"]] if c else [None] * 4
+        t1row = r.get("kind") == "t1"
+        line += [me["offset"] if me else None]
+        line += [me["mean_T2"], me["mean_T2_se"]] if (me and not t1row) else [None, None]
+        if has["T1"]:
+            line += [me["mean_T2"], me["mean_T2_se"]] if (me and t1row) else [None, None]
+        line += [me["total_amplitude"], me["chi2_red"], me["resid_sd_over_amp"]] if me else [None] * 3
         line += [res.get("noise_sigma"), il["alpha"] if il else None]
         for k in range(3):
             pk = il["peaks"][k] if il and k < len(il["peaks"]) else None
@@ -258,8 +276,10 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
             "datasets": [{"dataset": r["dataset"], "status": r["status"], "reason": r["reason"], "timestamp_utc": r["timestamp_utc"], "elapsed_min": r.get("elapsed_min"),
                           "output_dir": r["output_dir"]} for r in rows]}
     (bdir / "provenance.json").write_text(json.dumps(prov, indent=2, default=str))
-    ok = [r for r in rows if r["status"] == "ok" and r.get("result") and r["result"]["multiexp"]]
-    if p["output"]["figures"] and len(ok) >= 2:
+    if p["output"]["figures"]:
         from . import figures
-        fig = figures.timeseries_figure(ok, p["output"]["titles"])
-        figures.save_figure(fig, bdir / f"timeseries.{p['output']['figure_format']}", p["output"]["figure_format"], p["output"]["figure_dpi"])
+        for sym, kind, name in (("T2", "cpmg", "timeseries"), ("T1", "t1", "timeseries_T1")):
+            ok = [r for r in rows if r["status"] == "ok" and r.get("kind") == kind and r.get("result") and r["result"]["multiexp"]]
+            if len(ok) >= 2:
+                fig = figures.timeseries_figure(ok, p["output"]["titles"], sym)
+                figures.save_figure(fig, bdir / f"{name}.{p['output']['figure_format']}", p["output"]["figure_format"], p["output"]["figure_dpi"])
