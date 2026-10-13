@@ -1,16 +1,19 @@
 // The model forms shown next to the fit settings and results (HTML strings; inputs are integers only).
 
-export function meEquation(n, offset) {
+export function meEquation(n, offset, kind = "decay") {
+  const d = kind === "saturation" ? "1" : "2";                // T₁ for recovery data, T₂ for decays
   const A = (i) => (n === 1 ? "<i>A</i>" : `<i>A</i><sub>${i}</sub>`);
-  const T = (i) => (n === 1 ? "<i>T</i><sub>2</sub>" : `<i>T</i><sub>2,${i}</sub>`);
-  const terms = Array.from({ length: n }, (_, k) => `${A(k + 1)}&thinsp;e<sup>−<i>t</i>/${T(k + 1)}</sup>`).join(" + ");
+  const T = (i) => (n === 1 ? `<i>T</i><sub>${d}</sub>` : `<i>T</i><sub>${d},${i}</sub>`);
+  const term = (k) => (kind === "saturation" ? `${A(k)}&thinsp;(1 − e<sup>−<i>t</i>/${T(k)}</sup>)` : `${A(k)}&thinsp;e<sup>−<i>t</i>/${T(k)}</sup>`);
+  const terms = Array.from({ length: n }, (_, k) => term(k + 1)).join(" + ");
   return `<i>S</i>(<i>t</i>) = ${terms}${offset ? " + <i>c</i>" : ""}`;
 }
 
-export function meDefinitions(n) {
+export function meDefinitions(n, kind = "decay") {
   if (n < 2) return "";
+  const d = kind === "saturation" ? "1" : "2";
   return "Fraction <i>f</i><sub><i>i</i></sub> = <i>A</i><sub><i>i</i></sub> / Σ<i>A</i><sub><i>j</i></sub>;&emsp;" +
-    "mean <i>T</i><sub>2</sub> = Σ<i>A</i><sub><i>i</i></sub><i>T</i><sub>2,<i>i</i></sub> / Σ<i>A</i><sub><i>i</i></sub>";
+    `mean <i>T</i><sub>${d}</sub> = Σ<i>A</i><sub><i>i</i></sub><i>T</i><sub>${d},<i>i</i></sub> / Σ<i>A</i><sub><i>i</i></sub>`;
 }
 
 export const ILT_EQUATION =

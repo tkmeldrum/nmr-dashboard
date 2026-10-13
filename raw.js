@@ -2,9 +2,22 @@
 import { $, state } from "./state.js";
 import { baseLayout, CFG, COLORS } from "./plotutil.js";
 
+function renderRawT1(raw) {
+  // saturation recovery: one curve, delay vs amplitude (the heat map and the single-echo views do not apply)
+  for (const id of ["plot-heat", "plot-echo"]) $(id).closest(".plot-card").hidden = true;
+  const base = baseLayout("Saturation recovery (as measured)", "Delay (s)", "Amplitude (arb.)");
+  Plotly.react("plot-decay", [{ x: raw.t, y: raw.y, mode: "lines+markers", name: "Data", line: { color: COLORS.blue }, marker: { size: 6 } }], {
+    ...base, showlegend: false,
+    xaxis: { ...base.xaxis, type: $("decay-logx").checked ? "log" : "linear" },
+    yaxis: { ...base.yaxis, type: $("decay-log").checked ? "log" : "linear" },
+  }, CFG);
+}
+
 export function renderRaw() {
   const raw = state.result && state.result.raw;
   if (!raw) return;
+  if (state.result.kind === "t1") return renderRawT1(raw);
+  for (const id of ["plot-heat", "plot-echo"]) $(id).closest(".plot-card").hidden = false;
   const t = raw.echo_time_s;
   const mag = raw.real.map((row, p) => row.map((re, e) => Math.hypot(re, raw.imag[p][e])));
 
@@ -38,4 +51,5 @@ export function renderRaw() {
 export function initRaw() {
   $("echo-idx").addEventListener("input", renderRaw);
   $("decay-log").addEventListener("change", renderRaw);
+  $("decay-logx").addEventListener("change", renderRaw);
 }

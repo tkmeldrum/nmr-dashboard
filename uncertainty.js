@@ -32,7 +32,7 @@ function readOptions() {
     mcmc: { enabled: $("mcmc-enabled").checked, nwalkers: Math.round(+$("mcmc-walkers").value), steps: Math.round(+$("mcmc-steps").value),
             burn: Math.round(+$("mcmc-burn").value), sample_sigma: $("mcmc-sigma").checked },
     boot: { enabled: $("boot-enabled").checked, replicates: Math.round(+$("boot-n").value), method: $("boot-method").value,
-            do_multiexp: $("boot-me").checked, do_ilt: $("boot-ilt").checked },
+            do_multiexp: $("boot-me").checked, do_ilt: $("boot-ilt").checked && state.result.kind !== "t1" },
   };
 }
 
@@ -178,15 +178,15 @@ function lsRows() {
   // least-squares reference values by name, from the fit shown on this page (only valid for the whole-decay target)
   const fit = state.results.multiexp && state.results.multiexp.selected;
   if (!fit || state.unc.targetKind !== "bulk") return {};
-  const out = {}, n = fit.n, one = n === 1, z = fit.t_crit;
+  const out = {}, n = fit.n, one = n === 1, z = fit.t_crit, sym = fit.symbol || "T2";
   fit.components.forEach((c, i) => {
     out[one ? "A" : `A${i + 1}`] = { v: c.A, se: c.A_se };
-    out[one ? "T2" : `T2,${i + 1}`] = { v: c.T2, se: c.T2_se };
+    out[one ? sym : `${sym},${i + 1}`] = { v: c.T2, se: c.T2_se };
     out[one ? "fraction" : `fraction ${i + 1}`] = { v: c.fraction, se: c.fraction_se };
   });
   if (fit.offset) out.offset = { v: fit.offset_value, se: fit.offset_se };
   out["total amplitude"] = { v: fit.total_amplitude, se: fit.total_amplitude_se };
-  out["mean T2"] = { v: fit.mean_T2, se: fit.mean_T2_se };
+  out[`mean ${sym}`] = { v: fit.mean_T2, se: fit.mean_T2_se };
   out.__z = z;
   return out;
 }
@@ -211,7 +211,7 @@ function renderCompare(u) {
   const rows = names.map((n) => {
     const m = find(u.mcmc, n), b = find(bootMe, n), l = ls[n];
     const ref = m || b;
-    const f = rowFormat(ref.median, m ? m.sd : b.sd, /T2/.test(n));
+    const f = rowFormat(ref.median, m ? m.sd : b.sd, /T[12]/.test(n));
     const z = ls.__z || Z_FOR[u.level] || 1.96;
     const lsCell = !l ? (ref.ls !== undefined && ref.ls !== null ? f(ref.ls) : "—")
       : okUnc(l.v, l.se) ? interval(f, l.v, l.v - z * l.se, l.v + z * l.se) : `${f(l.v)} (uncertainty undetermined)`;
@@ -229,7 +229,7 @@ function renderMcmc(r) {
     (r.sample_sigma ? "The noise σ was sampled." : `The noise σ was fixed at ${fmt(r.sigma)} (imaginary channel).`);
   warnings($("mcmc-warnings"), r.warnings);
   const rows = [...r.params, ...r.derived].map((p) => {
-    const f = rowFormat(p.median, p.sd, /T2/.test(p.name));
+    const f = rowFormat(p.median, p.sd, /T[12]/.test(p.name));
     return [p.name, p.ls !== undefined && p.ls !== null ? `${f(p.ls)}${p.ls_se !== null && okUnc(p.ls, p.ls_se) ? " ± " + f(p.ls_se) : ""}` : "—",
             f(p.median), `[${f(p.lo)}, ${f(p.hi)}]`, p.sd === null ? "—" : f(p.sd)];
   });
@@ -268,7 +268,7 @@ function renderBoot(r) {
   $("boot-hists").hidden = !me;
   if (me) {
     const rows = [...me.params, ...me.derived].map((p) => {
-      const f = rowFormat(p.median, p.sd, /T2/.test(p.name));
+      const f = rowFormat(p.median, p.sd, /T[12]/.test(p.name));
       return [p.name, p.ls !== undefined && p.ls !== null ? f(p.ls) : "—", f(p.median), `[${f(p.lo)}, ${f(p.hi)}]`, p.sd === null ? "—" : f(p.sd)];
     });
     table($("boot-table"), ["Parameter", "Least squares", "Bootstrap median", `${lvl(r)}% interval`, "Bootstrap SD"], rows);

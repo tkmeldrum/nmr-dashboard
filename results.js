@@ -240,7 +240,7 @@ function renderFit(r) {
   const traces = [{ x: t, y, name: "Data", mode: "markers", marker: { size: 4, color: COLORS.grey }, xaxis: "x", yaxis: "y" }];
   const me = r.multiexp && r.multiexp.selected;
   if (me) {
-    traces.push({ x: me.t_dense, y: me.fit_dense, name: `${me.n}-exp fit`, mode: "lines", line: { color: COLORS.orange, width: 2 } });
+    traces.push({ x: me.t_dense, y: me.fit_dense, name: `${me.n}-exp ${r.mode === "t1" ? "recovery " : ""}fit`, mode: "lines", line: { color: COLORS.orange, width: 2 } });
     traces.push({ x: t, y: me.resid, name: `${me.n}-exp residual`, mode: "lines", line: { color: COLORS.orange, width: 1 }, yaxis: "y2", showlegend: false });
   }
   if (r.ilt) {
@@ -253,9 +253,9 @@ function renderFit(r) {
     traces.push({ x: band.t, y: band.hi, mode: "lines", line: { width: 0 }, showlegend: false, hoverinfo: "skip" });
     traces.push({ x: band.t, y: band.lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(213,94,0,0.28)", name: `MCMC ${lv}% band` });
   }
-  const ft = r.mode === "ft";
-  $("fit-heading").textContent = ft ? "Window-summed decay and fits" : "Decay and fits";
-  const base = baseLayout(ft ? "Echo decay (FT, summed over z-window)" : "Echo decay (phased, integrated)", "Echo time (s)", "Signal (arb.)");
+  const ft = r.mode === "ft", t1 = r.mode === "t1";
+  $("fit-heading").textContent = t1 ? "Recovery and fit" : ft ? "Window-summed decay and fits" : "Decay and fits";
+  const base = baseLayout(t1 ? "Saturation recovery" : ft ? "Echo decay (FT, summed over z-window)" : "Echo decay (phased, integrated)", t1 ? "Delay (s)" : "Echo time (s)", "Signal (arb.)");
   Plotly.react("plot-fit", traces, {
     ...base,
     margin: { ...base.margin, b: 70 },
@@ -272,8 +272,9 @@ function renderMultiexp(r) {
   if (!r.multiexp) return;
   const me = r.multiexp.selected;
   const lvl = Math.round(me.ci_level * 100);
-  $("me-equation").innerHTML = meEquation(me.n, me.offset);
-  $("me-defs").innerHTML = meDefinitions(me.n);
+  const S = me.symbol === "T1" ? "T₁" : "T₂";                         // the time constant's name on this page
+  $("me-equation").innerHTML = meEquation(me.n, me.offset, me.kind);
+  $("me-defs").innerHTML = meDefinitions(me.n, me.kind);
   $("me-defs").hidden = me.n < 2;
 
   // Each value, its SE and its interval share one base exponent (e.g. 1.99e-2 ± 0.35e-2, [1.31e-2, 2.67e-2]).
@@ -287,7 +288,7 @@ function renderMultiexp(r) {
       okUnc(c.fraction, c.fraction_se) ? `${pct(c.fraction)} ± ${pct(c.fraction_se)}` : pct(c.fraction),
     ];
   });
-  table($("me-table"), ["#", "T₂ (s)", "SE", `${lvl}% CI`, "Amplitude", `${lvl}% CI`, "Fraction"], rows);
+  table($("me-table"), ["#", `${S} (s)`, "SE", `${lvl}% CI`, "Amplitude", `${lvl}% CI`, "Fraction"], rows);
 
   const notes = [...me.warnings];
   if (r.multiexp.recommended_n !== me.n) {
@@ -300,19 +301,19 @@ function renderMultiexp(r) {
   extra.push(`total amplitude ${fmtPair(me.total_amplitude, me.total_amplitude_se)}`);
   if (okUnc(me.mean_T2, me.mean_T2_se)) {
     const gm = sciGroup(me.mean_T2, me.mean_T2_se);
-    extra.push(`amplitude-weighted mean T₂ ${gm.fmt(me.mean_T2)} ± ${gm.fmt(me.mean_T2_se)} s`);
+    extra.push(`amplitude-weighted mean ${S} ${gm.fmt(me.mean_T2)} ± ${gm.fmt(me.mean_T2_se)} s`);
   } else {
-    extra.push(`amplitude-weighted mean T₂ ${fmtSci(me.mean_T2)} s (uncertainty undetermined)`);
+    extra.push(`amplitude-weighted mean ${S} ${fmtSci(me.mean_T2)} s (uncertainty undetermined)`);
   }
   $("me-stats").textContent = extra.join(" · ");
 
   const sig = me.noise_sigma;
   statTable($("me-quality"), [
-    ["RSS", fmtSci(me.rss), "Σ residual²; grows with amplitude² and with the number of echoes", LINKS.RSS],
-    ["MSE", fmtSci(me.mse), "RSS / N; removes the echo count but still scales with amplitude²", LINKS.MSE],
+    ["RSS", fmtSci(me.rss), "Σ residual²; grows with amplitude² and with the number of data points", LINKS.RSS],
+    ["MSE", fmtSci(me.mse), "RSS / N; removes the point count but still scales with amplitude²", LINKS.MSE],
     ["Residual SD", fmt(me.resid_sd), "√(RSS / (N − k)), in signal units"],
     ["Residual SD / amplitude", me.resid_sd_over_amp === null ? "—" : pct(me.resid_sd_over_amp, 2),
-      "residual SD ÷ the fitted signal range (max − min over the echoes); independent of amplitude and echo count", LINKS.NRMSD],
+      "residual SD ÷ the fitted signal range (max − min over the data); independent of amplitude and number of points", LINKS.NRMSD],
     ["Noise σ", sig ? fmt(sig) : "—", sig ? "from the imaginary channel after phasing (model-free)" : "unavailable: the data has no imaginary channel"],
     ["Reduced χ²", me.chi2_red === null ? "—" : fmt(me.chi2_red), "RSS / (σ²(N − k)); ≈ 1 when the model explains everything the noise allows", LINKS.CHI2],
     ["R²", fmt(me.r2, 5), "fraction of variance explained (depends on how much of the decay was sampled)"],
@@ -404,8 +405,9 @@ function renderIlt(r) {
 export function renderResults() {
   const r = state.results;
   if (!r) return;
+  const phase = r.decay.phase_deg === null ? "" : ` (autophase rotation ${fmt(r.decay.phase_deg, 4)}°)`;
   $("results-summary").textContent =
-    `${r.mode === "ft" ? "FT of each echo" : "Integrated each echo"} (autophase rotation ${fmt(r.decay.phase_deg, 4)}°) · ${r.decay.t.length} echoes`;
+    `${r.mode === "ft" ? "FT of each echo" : r.mode === "t1" ? "Saturation-recovery data" : "Integrated each echo"}${phase} · ${r.decay.t.length} ${r.mode === "t1" ? "delays" : "echoes"}`;
   renderFt(r);
   renderSpatial(r);
   renderFit(r);

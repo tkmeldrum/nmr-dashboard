@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, export, ilt_tools, multiexp, provenance, spatial, uncertainty
+from . import constants, echoes, export, ilt_tools, multiexp, provenance, sequences, spatial, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -37,13 +37,29 @@ def check_cpmg(params, header):
         return False, "no data.2d found (only data.1d or none)"
     if "echoTime" not in params:
         return False, "acqu.par has no echoTime"
-    exp = str(params.get("experiment", ""))
-    if exp and exp.upper() != "CPMG":
-        return False, f'experiment is "{exp}", not CPMG'
     n_echo = int(params.get("nrEchoes", header["yDim"]))
     if header["yDim"] != n_echo:
         return False, f"data.2d has {header['yDim']} echoes but acqu.par says {n_echo}"
     return True, ""
+
+
+def _load_t1(d, params, out, timestamp_ms):
+    """Saturation-recovery data: Kea writes data.dat with two columns, the delay (s) and the amplitude."""
+    path = d / "data.dat"
+    if not path.is_file():
+        raise ValueError("data.dat (delay, amplitude) was not found next to acqu.par")
+    try:
+        arr = np.loadtxt(path, ndmin=2)
+    except ValueError as exc:
+        raise ValueError(f"data.dat could not be read as two numeric columns: {exc}") from None
+    if arr.shape[1] < 2 or arr.shape[0] < 4:
+        raise ValueError("data.dat needs at least 4 rows of (delay, amplitude)")
+    t, y = arr[:, 0].astype(float), arr[:, 1].astype(float)
+    if np.any(t <= 0) or np.any(np.diff(t) <= 0):
+        raise ValueError("the delays in data.dat must be positive and increasing")
+    _STATE.update(t1={"t": t, "y": y}, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
+    out["raw"] = {"n_points": len(t), "t": _clean(t), "y": _clean(y)}
+    out["defaults"] = {"t1_components": 1, "t1_offset": constants.T1_DEFAULT_OFFSET}
 
 
 def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
@@ -69,19 +85,33 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         ts = datetime.fromtimestamp(timestamp_ms / 1000)
     elif fallback_to_mtime and data_path.is_file():
         ts = datetime.fromtimestamp(data_path.stat().st_mtime)
+    elif fallback_to_mtime and (d / "data.dat").is_file():
+        ts = datetime.fromtimestamp((d / "data.dat").stat().st_mtime)
     else:
         ts = None
 
-    is_cpmg, reason = check_cpmg(params, header)
+    seq = sequences.describe(params)
+    if seq["kind"] == "cpmg":
+        is_cpmg, reason = check_cpmg(params, header)
+        seq["supported"] = is_cpmg
+        seq["reason"] = reason
+    else:
+        is_cpmg, reason = False, seq["reason"]
     _STATE.clear()
     out = {
         "version": __version__,
         "display": build_display(params, ts),
         "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
         "is_cpmg": is_cpmg,
+        "kind": seq["kind"], "supported": seq["supported"], "analysis": seq["analysis"],
         "reason": reason,
         "raw": None,
     }
+    if seq["kind"] == "t1" and seq["supported"]:
+        try:
+            _load_t1(d, params, out, timestamp_ms)
+        except ValueError as exc:                       # a malformed data.dat: say so instead of crashing
+            out.update(supported=False, reason=str(exc))
     if is_cpmg:
         n_pts, n_echo = header["xDim"], header["yDim"]
         td = spec[: n_pts * n_echo].reshape((n_pts, n_echo), order="F")
@@ -171,6 +201,21 @@ def _run_ft(cfg):
     return y, r["phase_deg"], ft_out, positions, echoes.window_noise_series(S, z, float(z0), float(z1))
 
 
+def _process_t1(settings):
+    """Saturation recovery: fit 1 (or 2) components; the sparse data have no ILT and no noise channel."""
+    t, y = _STATE["t1"]["t"], _STATE["t1"]["y"]
+    me = settings.get("multiexp") or {}
+    n = int(me.get("n", 1))
+    if n not in (1, 2):
+        raise ValueError("T1 recovery supports one or two components")
+    res = multiexp.fit_with_comparison(t, y, n, bool(me.get("offset", constants.T1_DEFAULT_OFFSET)), float(me.get("ci_level", 0.95)),
+                                       compare_up_to=2 if me.get("compare", True) else n, sigma=None, kind="saturation")
+    out = {"settings": settings, "version": __version__, "mode": "t1", "ft": None, "spatial": None,
+           "decay": {"t": t, "y": y, "phase_deg": None, "noise_sigma": None}, "multiexp": res, "ilt": None}
+    _STATE["processed"] = {"settings": settings, "t": t, "y": y, "sigma": None, "noise": None, "positions": None, "me_fit": res["selected"]}
+    return _jsonable(out)
+
+
 def process(settings, progress=None):
     """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
 
@@ -184,8 +229,10 @@ def process(settings, progress=None):
               "peak_threshold_pct", "sweep_lo", "sweep_hi"},
     }
     """
+    if "t1" in _STATE:
+        return _process_t1(settings)
     if "td" not in _STATE:
-        raise RuntimeError("No CPMG dataset is loaded.")
+        raise RuntimeError("No supported dataset is loaded.")
     t = _STATE["echo_s"]
     mode = settings.get("echo", "integrate")
     ft_out, positions, series = None, None, None
@@ -234,7 +281,7 @@ def _target(cfg):
     t, settings = pr["t"], pr["settings"]
     if cfg.get("target", "bulk") == "bulk":
         return {"t": t, "y": pr["y"], "sigma": pr["sigma"], "noise": pr["noise"], "me_fit": pr["me_fit"],
-                "label": "window-summed decay" if settings.get("echo") == "ft" else "integrated decay", "z_um": None}
+                "label": "recovery curve" if settings.get("kind") == "t1" else "window-summed decay" if settings.get("echo") == "ft" else "integrated decay", "z_um": None}
     if pr["positions"] is None:
         raise ValueError("A position can only be chosen after an FT run.")
     z, Y, keep, sig, noise = pr["positions"]["me"]

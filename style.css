@@ -135,3 +135,5 @@ details.section > summary::before { content:"▸"; color:var(--muted); display:i
 details.section[open] > summary::before { transform:rotate(90deg); }
 details.section > summary h3 { margin:.7rem 0; }
 .results-toolbar { display:flex; gap:.5rem; margin:.5rem 0 0; }
+[data-for][hidden] { display:none !important; }
+.analysis-line { color:var(--fg); }
