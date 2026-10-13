@@ -141,3 +141,9 @@ details.section > summary h3 { margin:.7rem 0; }
 .t2d-maps { grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr)); }
 .t2d-maps .plot-card > div { height:16rem; }
 .busy button { margin-left:auto; padding:.2rem .8rem; }
+
+.feedback { max-width:72rem; margin:2rem auto 1.5rem; padding:0 1rem; }
+.feedback summary, .export-help summary { cursor:pointer; color:var(--muted, inherit); }
+.feedback textarea { width:100%; box-sizing:border-box; margin:.5rem 0; font:inherit; }
+.feedback pre, .export-help pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:.25rem 0; }
+.export-help { flex-basis:100%; }
