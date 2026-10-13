@@ -1,0 +1,6 @@
+:root { --bg:#fff; --fg:#1a1a1a; --muted:#666; }
+@media (prefers-color-scheme: dark) { :root { --bg:#16181d; --fg:#e8e8e8; --muted:#9aa; } }
+body { background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,sans-serif; margin:0; }
+main { max-width:60rem; margin:0 auto; padding:2rem 1rem; }
+.note { color:var(--muted); }
+pre { overflow-x:auto; }
