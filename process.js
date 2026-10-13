@@ -1,6 +1,9 @@
 // Processing tab: form defaults, validation, and starting a run.
 import { $, state } from "./state.js";
 import { ILT_EQUATION, meEquation } from "./equations.js";
+import { rpc } from "./rpc.js";
+import { download } from "./provenance.js";
+import { exportOptions } from "./uncertainty.js";
 
 const DEFAULT_MAX_STEPS = 100;   // user-editable; Python also caps at the echo count
 const STEPS_LIMIT = 1000;        // keep in step with nmrdash/ilt_tools.py
@@ -121,12 +124,25 @@ export function initProcess() {
   });
   document.querySelectorAll('input[name="echo"]').forEach((r) => r.addEventListener("change", syncFt));
   syncFt();
+  $("export-btn").addEventListener("click", async () => {
+    try {
+      showMsg("");
+      const settings = readSettings();
+      const toml = await rpc("export_params", settings, exportOptions(), $("folder-name").textContent);
+      download("params.toml", toml);
+      download("process_nmr.py", await rpc("export_script"));
+      $("run-status").textContent = "Downloaded params.toml and process_nmr.py (your browser may ask to allow two downloads).";
+    } catch (err) {
+      showMsg("Could not export: " + err.message);
+    }
+  });
   $("process-form").addEventListener("submit", (e) => e.preventDefault());   // Enter in a field must not reload the page
   $("run-btn").addEventListener("click", () => {
     if (state.running || !state.result || !state.result.is_cpmg) return;
     let settings;
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
     showMsg("");
+    state.runOptions = exportOptions();            // what this run used, for the provenance record
     setRunning(true, "Running… the 4-component comparison can take several seconds.");
     state.worker.postMessage({ type: "process", settings });
   });
