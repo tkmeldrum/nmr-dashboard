@@ -6,8 +6,12 @@ import numpy as np
 import scipy
 
 from . import __version__
+from . import echoes, ilt_tools, multiexp
 from .display_params import build_display
-from .kea_io import _autophase, read_kea_binary, read_kea_params
+from .kea_io import read_kea_binary, read_kea_params
+
+# The dataset currently loaded in this interpreter (one per browser tab / notebook session).
+_STATE = {}
 
 
 def hello():
@@ -65,6 +69,7 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         ts = None
 
     is_cpmg, reason = check_cpmg(params, header)
+    _STATE.clear()
     out = {
         "version": __version__,
         "display": build_display(params, ts),
@@ -77,11 +82,10 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         n_pts, n_echo = header["xDim"], header["yDim"]
         td = spec[: n_pts * n_echo].reshape((n_pts, n_echo), order="F")
         echo_s = 1e-6 * float(params["echoTime"]) * np.arange(1, n_echo + 1)
-        if np.iscomplexobj(td):
-            summed = _autophase(td).real.sum(axis=0)
-            re, im = td.real, td.imag
-        else:
-            summed, re, im = td.sum(axis=0), td, np.zeros_like(td)
+        summed, _phase = echoes.integrate(td)
+        re, im = (td.real, td.imag) if np.iscomplexobj(td) else (td, np.zeros_like(td))
+        _STATE.clear()
+        _STATE.update(td=td, echo_s=echo_s, params=params)
         out["raw"] = {
             "n_points": n_pts,
             "n_echoes": n_echo,
@@ -91,3 +95,55 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
             "summed": _clean(summed),
         }
     return out
+
+
+def _jsonable(o):
+    """numpy -> plain Python, NaN/inf -> None (strict JSON)."""
+    if isinstance(o, dict):
+        return {k: _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if isinstance(o, np.ndarray):
+        return _jsonable(o.tolist())
+    if isinstance(o, (np.floating, float)):
+        return float(o) if np.isfinite(o) else None
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.bool_):
+        return bool(o)
+    return o
+
+
+def process(settings):
+    """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
+
+    settings = {
+      "echo": "integrate",
+      "multiexp": {"enabled", "n", "offset", "ci_level", "compare"},
+      "ilt": {"enabled", "t2_min", "t2_max", "n_steps" (max grid points), "alpha", "sweep",
+              "peak_threshold_pct", "sweep_lo", "sweep_hi"},
+    }
+    """
+    if "td" not in _STATE:
+        raise RuntimeError("No CPMG dataset is loaded.")
+    t = _STATE["echo_s"]
+    if settings.get("echo", "integrate") != "integrate":
+        raise ValueError(f"Unsupported echo processing: {settings.get('echo')!r}")
+    y, phase = echoes.integrate(_STATE["td"])
+
+    out = {"settings": settings, "version": __version__,
+           "decay": {"t": t, "y": y, "phase_deg": phase}, "multiexp": None, "ilt": None}
+
+    me = settings.get("multiexp") or {}
+    if me.get("enabled"):
+        compare = 4 if me.get("compare") else int(me["n"])
+        out["multiexp"] = multiexp.fit_with_comparison(
+            t, y, int(me["n"]), bool(me.get("offset", True)), float(me.get("ci_level", 0.95)), compare)
+
+    il = settings.get("ilt") or {}
+    if il.get("enabled"):
+        out["ilt"] = ilt_tools.run(t, y, float(il["t2_min"]), float(il["t2_max"]),
+                                   int(il["n_steps"]), float(il["alpha"]), bool(il.get("sweep")),
+                                   peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
+                                   sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))))
+    return _jsonable(out)

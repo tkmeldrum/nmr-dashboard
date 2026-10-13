@@ -6,6 +6,7 @@ and writes the two manifests the page reads. `version` is appended to asset
 URLs so browsers never serve a stale app.js/style.css after a deploy.
 """
 import json
+import re
 import shutil
 import sys
 import time
@@ -45,8 +46,14 @@ def build(out, version):
     (out / "index.html").write_text(html)
     shutil.copy(ROOT / "style.css", out / "style.css")
     shutil.copy(ROOT / "worker.js", out / "worker.js")
-    app = _sub((ROOT / "app.js").read_text(), 'new Worker("worker.js")', f'new Worker("worker.js?v={version}")')
-    (out / "app.js").write_text(app)
+    # ES modules: version every relative import so a deploy never mixes old and new modules
+    for js in sorted(ROOT.glob("*.js")):
+        if js.name == "worker.js":
+            continue
+        text = re.sub(r'(from "\./[^"]+\.js)"', rf'\1?v={version}"', js.read_text())
+        if js.name == "app.js":
+            text = _sub(text, 'new Worker("worker.js")', f'new Worker("worker.js?v={version}")')
+        (out / js.name).write_text(text)
 
     pkg = out / "nmrdash"
     pkg.mkdir()

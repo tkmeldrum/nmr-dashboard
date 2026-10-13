@@ -1,9 +1,13 @@
-// Main thread: folder loading, parameter display, raw-data plots.
-const $ = (id) => document.getElementById(id);
-const state = { ready: false, pending: null, result: null, dirHandle: null };
+// Main thread: worker plumbing, folder loading, tab flow.
+import { $, state } from "./state.js";
+import { initTabs, setTabEnabled, showTab } from "./tabs.js";
+import { initRaw, renderRaw } from "./raw.js";
+import { initProcess, initProcessDefaults, processFailed, setRunning } from "./process.js";
+import { initResults, renderResults } from "./results.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
 const worker = new Worker("worker.js");
+state.worker = worker;
 worker.onmessage = (e) => {
   const m = e.data;
   if (m.type === "status") $("status").textContent = m.text;
@@ -15,9 +19,15 @@ worker.onmessage = (e) => {
     state.result = m.result;
     $("status").textContent = "Python ready.";
     showResult(m.result);
+  } else if (m.type === "processed") {
+    state.results = m.result;
+    setRunning(false, "Done.");
+    setTabEnabled("results", true);
+    showTab("results");
   } else if (m.type === "error") {
     $("status").textContent = "Python ready.";
-    showMessage("Error: " + m.text, "error");
+    if (state.running) processFailed(m.text);
+    else showMessage("Error: " + m.text, "error");
   }
 };
 worker.postMessage({ type: "init" });
@@ -100,7 +110,10 @@ let datasets = [];
 
 function resetSections() {
   hideMessage();
-  $("params-section").hidden = $("raw-section").hidden = $("process-section").hidden = true;
+  $("params-section").hidden = true;
+  state.result = state.results = null;
+  for (const t of ["raw", "process", "results"]) setTabEnabled(t, false);
+  showTab("load");
 }
 
 async function openFolder(dir) {
@@ -232,7 +245,7 @@ function showMessage(text, kind = "") {
 }
 function hideMessage() { $("message").hidden = true; }
 
-// ── results ───────────────────────────────────────────────────────────────
+// ── a dataset has been read ───────────────────────────────────────────────
 function fillTable(table, rows) {
   table.replaceChildren(...rows.map(([k, v]) => {
     const tr = document.createElement("tr");
@@ -247,70 +260,22 @@ function showResult(r) {
   $("params-section").hidden = false;
 
   if (!r.is_cpmg) {
-    $("raw-section").hidden = true;
-    $("process-section").hidden = true;
     return showMessage("Non-CPMG data: not yet supported (" + r.reason + "). Parameters are shown above.", "warn");
   }
-  $("raw-section").hidden = false;
-  $("process-section").hidden = false;
   const idx = $("echo-idx");
   idx.max = r.raw.n_echoes - 1;
   idx.value = 0;
-  renderRaw();
+  initProcessDefaults(r.raw);
+  setTabEnabled("raw", true);
+  setTabEnabled("process", true);
 }
 
-// ── plots ─────────────────────────────────────────────────────────────────
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const COLORS = { re: "#0072B2", im: "#D55E00", mag: "#009E73" };   // colour-blind safe
-
-function baseLayout(title, xt, yt, extra = {}) {
-  const fg = css("--plot-fg"), grid = css("--plot-grid");
-  return {
-    title: { text: title, font: { size: 14 } },
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: fg },
-    margin: { l: 60, r: 15, t: 40, b: 50 },
-    xaxis: { title: xt, gridcolor: grid, zerolinecolor: grid, automargin: true },
-    yaxis: { title: yt, gridcolor: grid, zerolinecolor: grid, automargin: true },
-    legend: { orientation: "h", y: -0.25 },
-    ...extra,
-  };
-}
-const CFG = { responsive: true, displaylogo: false };
-
-function renderRaw() {
-  const raw = state.result && state.result.raw;
-  if (!raw) return;
-  const t = raw.echo_time_s;
-  const mag = raw.real.map((row, p) => row.map((re, e) => Math.hypot(re, raw.imag[p][e])));
-
-  Plotly.react("plot-heat", [{
-    type: "heatmap", z: mag, x: t, y: mag.map((_, i) => i + 1), colorscale: "Viridis",
-    colorbar: { title: "|S|" },
-  }], baseLayout("Echo magnitude", "Echo time (s)", "Point within echo"), CFG);
-
-  const e = +$("echo-idx").value;
-  $("echo-idx-out").textContent = `${e + 1} of ${raw.n_echoes} (t = ${+t[e].toPrecision(4)} s)`;
-  const pts = raw.real.map((_, i) => i + 1);
-  // y-range fixed from the second echo (the first can be distorted) plus 10% headroom, so the
-  // echo shape is comparable across the slider.
-  const ref = Math.min(1, raw.n_echoes - 1);
-  const refVals = raw.real.flatMap((r, p) => [r[ref], raw.imag[p][ref], mag[p][ref]]);
-  const pad = 0.1 * Math.max(...refVals.map(Math.abs));
-  const echoRange = [Math.min(...refVals) - pad, Math.max(...refVals) + pad];
-  Plotly.react("plot-echo", [
-    { x: pts, y: raw.real.map((r) => r[e]), name: "Real", mode: "lines+markers", line: { color: COLORS.re } },
-    { x: pts, y: raw.imag.map((r) => r[e]), name: "Imaginary", mode: "lines+markers", line: { color: COLORS.im } },
-    { x: pts, y: mag.map((r) => r[e]), name: "Magnitude", mode: "lines+markers", line: { color: COLORS.mag } },
-  ], baseLayout("Single echo", "Point within echo", "Signal (arb.)",
-     { yaxis: { ...baseLayout("", "", "").yaxis, title: "Signal (arb.)", range: echoRange } }), CFG);
-
-  Plotly.react("plot-decay", [
-    { x: t, y: raw.summed, mode: "lines+markers", name: "Summed", line: { color: COLORS.re }, marker: { size: 4 } },
-  ], baseLayout("Summed echo decay (phased real part)", "Echo time (s)", "Signal (arb.)",
-     { yaxis: { ...baseLayout("", "", "").yaxis, title: "Signal (arb.)", type: $("decay-log").checked ? "log" : "linear" } }), CFG);
-}
-
-$("echo-idx").addEventListener("input", renderRaw);
-$("decay-log").addEventListener("change", renderRaw);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderRaw);
+// ── tabs ──────────────────────────────────────────────────────────────────
+initTabs((name) => {
+  if (name === "raw") renderRaw();       // plots drawn while hidden have no width, so draw on show
+  if (name === "results") renderResults();
+});
+initRaw();
+initProcess();
+initResults();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderRaw(); renderResults(); });

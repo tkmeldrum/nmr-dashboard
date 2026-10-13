@@ -15,7 +15,15 @@
     <p id="status" class="status" role="status">Starting Python…</p>
   </header>
 
-  <section id="load">
+  <nav class="tabs" role="tablist" aria-label="Workflow">
+    <button type="button" role="tab" id="tab-load" aria-controls="panel-load" aria-selected="true"><span>1</span> Load</button>
+    <button type="button" role="tab" id="tab-raw" aria-controls="panel-raw" aria-selected="false" disabled><span>2</span> Raw data</button>
+    <button type="button" role="tab" id="tab-process" aria-controls="panel-process" aria-selected="false" disabled><span>3</span> Process</button>
+    <button type="button" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled><span>4</span> Results</button>
+  </nav>
+
+  <!-- 1 · Load -->
+  <section role="tabpanel" id="panel-load" aria-labelledby="tab-load">
     <div id="drop" tabindex="0" role="button" aria-label="Drop a data folder here, or click to browse">
       <strong>Drop a data folder here</strong>
       <span>or click to browse (folder containing <code>acqu.par</code> and <code>data.2d</code>)</span>
@@ -30,15 +38,17 @@
       <select id="dataset-select"></select>
     </label>
     <p id="message" class="message" hidden></p>
+
+    <div id="params-section" hidden>
+      <h2>Parameters <small id="folder-name"></small></h2>
+      <table id="params"></table>
+      <details><summary>Show all parameters</summary><table id="params-all"></table></details>
+      <p class="next"><button type="button" data-next="raw">Next: Raw data →</button></p>
+    </div>
   </section>
 
-  <section id="params-section" hidden>
-    <h2>Parameters <small id="folder-name"></small></h2>
-    <table id="params"></table>
-    <details><summary>Show all parameters</summary><table id="params-all"></table></details>
-  </section>
-
-  <section id="raw-section" hidden>
+  <!-- 2 · Raw data -->
+  <section role="tabpanel" id="panel-raw" aria-labelledby="tab-raw" hidden>
     <h2>Raw data</h2>
     <div class="plots">
       <div class="plot-card"><div id="plot-heat"></div></div>
@@ -51,11 +61,93 @@
         <label><input type="checkbox" id="decay-log"> log y-axis</label>
       </div>
     </div>
+    <p class="next"><button type="button" data-next="process">Next: Process →</button></p>
   </section>
 
-  <section id="process-section" hidden>
+  <!-- 3 · Process -->
+  <section role="tabpanel" id="panel-process" aria-labelledby="tab-process" hidden>
     <h2>Processing</h2>
-    <p class="note">Processing options arrive in the next phase.</p>
+    <form id="process-form" autocomplete="off">
+      <fieldset>
+        <legend>1 · Echo processing</legend>
+        <label class="opt"><input type="radio" name="echo" value="integrate" checked> Integrate each echo
+          <small>autophase, then sum all points of every echo into one decay</small></label>
+        <label class="opt disabled"><input type="radio" name="echo" value="ft" disabled> FT each echo
+          <small>spatially resolved decays — coming in the next phase</small></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>2 · Decay analysis <small>(choose any)</small></legend>
+
+        <div class="analysis">
+          <label class="opt"><input type="checkbox" id="me-enabled" checked> Multi-exponential fit</label>
+          <div class="fields" id="me-fields">
+            <label>Components <select id="me-n"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+            <label><input type="checkbox" id="me-offset" checked> constant offset</label>
+            <label>Confidence level <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option></select></label>
+            <label><input type="checkbox" id="me-compare" checked> compare 1–4 components (BIC)</label>
+          </div>
+        </div>
+
+        <div class="analysis">
+          <label class="opt"><input type="checkbox" id="ilt-enabled" checked> Inverse Laplace transform (ILT)</label>
+          <div class="fields" id="ilt-fields">
+            <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
+            <label>T₂ max (s) <input type="number" id="ilt-t2max" step="any" min="0"></label>
+            <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
+            <label>α <input type="number" id="ilt-alpha" step="any" min="0" value="1e8"></label>
+            <label>Peak threshold (% of tallest) <input type="number" id="ilt-peakthr" step="any" min="0" max="100" value="5"></label>
+            <label><input type="checkbox" id="ilt-sweep"> α sweep (L-curve) from 10^<input type="number" id="ilt-sweep-lo" step="1" value="4"> to 10^<input type="number" id="ilt-sweep-hi" step="1" value="12"></label>
+            <small class="hint">Larger α = less smoothing (noisier spectrum); typical range 1e6–1e10. The grid never has more points than echoes. Peaks below the threshold are ignored in the peak table.</small>
+          </div>
+        </div>
+
+        <div class="analysis">
+          <label class="opt disabled"><input type="checkbox" disabled> PED analysis <small>coming in a later phase</small></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3 · Uncertainty</legend>
+        <p class="note">Fit confidence intervals (from the least-squares covariance) are included with the multi-exponential fit.
+          MCMC and bootstrap options arrive in a later phase.</p>
+      </fieldset>
+
+      <p class="run-row">
+        <button type="submit" id="run-btn">Run processing</button>
+        <span id="run-status" class="status" role="status"></span>
+      </p>
+      <p id="process-msg" class="message" hidden></p>
+    </form>
+  </section>
+
+  <!-- 4 · Results -->
+  <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" hidden>
+    <h2>Results</h2>
+    <p id="results-summary" class="note"></p>
+
+    <h3>Decay and fits</h3>
+    <div class="plot-card wide">
+      <div id="plot-fit" class="tall"></div>
+      <label><input type="checkbox" id="fit-log"> log y-axis</label>
+    </div>
+
+    <div id="me-results" hidden>
+      <h3>Multi-exponential fit</h3>
+      <div id="me-warnings"></div>
+      <div class="table-wrap"><table id="me-table" class="grid"></table></div>
+      <p id="me-stats" class="note"></p>
+      <h4>Model comparison</h4>
+      <div class="table-wrap"><table id="me-compare-table" class="grid"></table></div>
+    </div>
+
+    <div id="ilt-results" hidden>
+      <h3>T₂ spectrum (ILT)</h3>
+      <div class="plot-card wide"><div id="plot-spectrum"></div></div>
+      <p id="ilt-stats" class="note"></p>
+      <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>
+      <div id="lcurve-card" class="plot-card wide" hidden><div id="plot-lcurve"></div></div>
+    </div>
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>

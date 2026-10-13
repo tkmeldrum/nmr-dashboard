@@ -40,10 +40,19 @@ function loadDataset({ files, timestampMs }) {
   postMessage({ type: "loaded", result: JSON.parse(json) });
 }
 
+function processDataset({ settings }) {
+  pyodide.globals.set("_settings_json", JSON.stringify(settings));
+  const json = pyodide.runPython(
+    "import json\nfrom nmrdash.pipeline import process\njson.dumps(process(json.loads(_settings_json)))"
+  );
+  postMessage({ type: "processed", result: JSON.parse(json) });
+}
+
 onmessage = async (e) => {
   try {
     if (e.data.type === "init") await init();
     else if (e.data.type === "load") loadDataset(e.data);
+    else if (e.data.type === "process") processDataset(e.data);
   } catch (err) {
     postMessage({ type: "error", text: String(err.message || err) });
   }
