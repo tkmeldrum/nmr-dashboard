@@ -114,7 +114,7 @@ def decay_figure(res, mcmc=None, titles=True):
     if il:
         ax.plot(t, il["pred"], "--", color=_GREEN, lw=1.6, label="ILT fit")
         rax.plot(t, il["resid"], color=_GREEN, lw=0.8)
-    rax.axhline(0, color=_GREY, lw=0.6)
+    rax.axhline(0, color="#222222", lw=1.6, zorder=1)             # bold zero line: where the residuals fall relative to 0
     rax.set_xlabel("Delay (s)" if t1 else "Echo time (s)")
     ax.set_ylabel("Signal (arb.)")
     rax.set_ylabel("Residual")

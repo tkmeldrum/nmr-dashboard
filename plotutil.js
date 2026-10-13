@@ -1,6 +1,8 @@
 // Plot styling shared by the raw-data and results views.
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
+export const ink = () => css("--plot-fg");     // the page's text colour (follows light / dark mode)
+
 export const COLORS = {           // Okabe–Ito: colour-blind safe
   blue: "#0072B2", orange: "#D55E00", green: "#009E73", purple: "#CC79A7", grey: "#7a828c",
 };
