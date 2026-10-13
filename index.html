@@ -13,6 +13,7 @@
     <h1>NMR Dashboard</h1>
     <p class="note">All data is processed locally in your browser. Nothing is uploaded.</p>
     <p id="status" class="status" role="status">Starting Python…</p>
+    <p id="busy" class="busy" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span id="busy-text"></span></p>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Workflow">
@@ -52,15 +53,15 @@
   <section role="tabpanel" id="panel-raw" aria-labelledby="tab-raw" hidden>
     <h2>Raw data</h2>
     <div class="plots">
-      <div class="plot-card"><div id="plot-heat"></div></div>
-      <div class="plot-card">
-        <div id="plot-echo"></div>
-        <label class="slider">Echo <input type="range" id="echo-idx" min="0" value="0"> <output id="echo-idx-out">1</output></label>
-      </div>
       <div class="plot-card">
         <div id="plot-decay"></div>
         <label><input type="checkbox" id="decay-log"> log y-axis</label>
+        <div class="plot-card">
+        <div id="plot-echo"></div>
+        <label class="slider">Echo <input type="range" id="echo-idx" min="0" value="0"> <output id="echo-idx-out">1</output></label>
       </div>
+      <div class="plot-card"><div id="plot-heat"></div></div>
+    </div>
     </div>
     <p class="next"><button type="button" data-next="process">Next: Process →</button></p>
   </section>
@@ -83,12 +84,14 @@
           <label>max (µm) <input type="number" id="ft-zmax" step="any" placeholder="auto"></label>
           <label>Exp-fit spacing (µm) <input type="number" id="ft-spacing" step="any" min="0" placeholder="auto"></label>
           <label>Min signal (% of profile max) <input type="number" id="ft-minsig" step="any" min="0" max="100" value="5"></label>
-          <label>ILT map spacing (µm) <input type="number" id="ft-ilt-spacing" step="any" min="0" placeholder="every FT point"></label>
-          <small class="hint" id="ft-nucleus-note"></small>
-          <small class="hint">The window defaults to −200 to +200 µm (+ z = + frequency = closer to the magnet). Clear both ends to use the
-            region where the profile exceeds 10% of its maximum. Exponential fits are done every <em>Exp-fit spacing</em> µm
-            (blank = the natural resolution 1/(points × dwell × γG); zero-filling interpolates but adds no resolution).
-            The ILT is cheap, so by default it is run at every zero-filled point to match the heat maps. Positions whose signal is below <em>Min signal</em> are not fitted (they would only fit noise) and show as gaps. The window-summed decay is also fitted, as a reference.</small>
+          <label>ILT map spacing (µm) <input type="number" id="ft-ilt-spacing" step="any" min="0" placeholder="every point"></label>
+          <details class="more"><summary>Show more</summary><div class="more-body"><p id="ft-nucleus-note" class="note"></p>
+            <p><strong>What "FT each echo" does.</strong> Each echo is Fourier transformed along its points. In a constant magnetic-field gradient, frequency maps to position,
+              so the decay can be analysed at every depth z instead of as one number. The analyses you choose below are then repeated at each position.</p>
+            <p>The window defaults to −200 to +200 µm (+ z = + frequency = closer to the magnet). Clear both ends to use the region where the profile exceeds 10% of its maximum.
+              Exponential fits are done every <em>Exp-fit spacing</em> µm (blank = the natural resolution 1/(points × dwell × γG); zero-filling interpolates but adds no resolution).
+              The ILT is cheap, so by default it runs at every zero-filled point to match the heat maps. Positions whose signal is below <em>Min signal</em> are not fitted (they would only
+              fit noise) and show as gaps. The window-summed decay is also fitted, as a reference.</p></div></details>
         </div>
       </fieldset>
 
@@ -101,21 +104,28 @@
             <label>Components <select id="me-n"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
             <label><input type="checkbox" id="me-offset" checked> constant offset</label>
             <label><input type="checkbox" id="me-compare" checked> compare 1–4 components (BIC)</label>
-            <p class="equation" id="me-eq-form"></p>
+            <details class="more"><summary>Show more</summary><div class="more-body"><p>Fits the decay with a sum of exponentials; each component has an amplitude <i>A</i> and a relaxation time <i>T</i><sub>2</sub>. The constant offset <i>c</i> absorbs a flat baseline.
+              Components are listed from fastest to slowest relaxing.</p>
+              <p class="equation" id="me-eq-form"></p>
+              <p><em>Compare 1–4 components</em> also fits one to four components and ranks them by ΔBIC, which rewards a good fit but penalises extra parameters (more components are not always justified by the data).
+              Intervals come from the least-squares covariance at the confidence level on the Uncertainty tab.</p></div></details>
           </div>
         </div>
 
         <div class="analysis">
           <label class="opt"><input type="checkbox" id="ilt-enabled" checked> Inverse Laplace transform (ILT)</label>
           <div class="fields" id="ilt-fields">
-            <p class="equation" id="ilt-eq-form"></p>
             <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
             <label>T₂ max (s) <input type="number" id="ilt-t2max" step="any" min="0"></label>
             <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
             <label>α <input type="number" id="ilt-alpha" step="any" min="0" value="1e8"></label>
             <label>Peak threshold (% of tallest) <input type="number" id="ilt-peakthr" step="any" min="0" max="100" value="5"></label>
             <label><input type="checkbox" id="ilt-sweep"> α sweep (L-curve) from 10^<input type="number" id="ilt-sweep-lo" step="1" value="4"> to 10^<input type="number" id="ilt-sweep-hi" step="1" value="12"></label>
-            <small class="hint">Larger α = less smoothing (noisier spectrum); typical range 1e6–1e10. The grid never has more points than echoes. Peaks below the threshold are ignored in the peak table.</small>
+            <details class="more"><summary>Show more</summary><div class="more-body"><p>The inverse Laplace transform finds the <em>distribution</em> of T<sub>2</sub> values that reproduces the decay, without assuming how many components there are.
+              The solution is regularised (smoothed) so it is stable against noise.</p>
+              <p class="equation" id="ilt-eq-form"></p>
+              <p>Larger α = less smoothing (noisier spectrum); the typical range is 1e6–1e10. The grid never has more points than echoes. Peaks below the threshold are ignored in the peak table.
+              Peak areas (the sum over a peak) are the signal amounts, which is how they compare with the exponential components.</p></div></details>
           </div>
         </div>
 
@@ -133,9 +143,9 @@
     <h2>Uncertainty</h2>
     <fieldset>
       <legend>Fit confidence intervals</legend>
-      <p class="note">From the least-squares covariance of the multi-exponential fit (Student-t intervals), at every position in FT mode.</p>
       <label>Confidence level
         <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+      <details class="more"><summary>Show more</summary><div class="more-body"><p>Intervals from the least-squares covariance of the multi-exponential fit (Student-<i>t</i> intervals), at every position in FT mode. They assume the likelihood is a symmetric Gaussian around the best fit, which is fine for well-determined parameters; MCMC and the bootstrap below test that assumption.</p></div></details>
     </fieldset>
     <fieldset>
       <legend>Decay to analyse <small>(for MCMC and bootstrap)</small></legend>
@@ -152,9 +162,18 @@
         <label>Steps <input type="number" id="mcmc-steps" value="6000" min="100" step="500"></label>
         <label>Burn-in <input type="number" id="mcmc-burn" value="2000" min="0" step="100"></label>
         <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small>(otherwise fixed from the imaginary channel)</small></label>
-        <small class="hint">Uses the model chosen on the Process tab. Priors: amplitudes flat and ≥ 0; T₂ log-uniform between a tenth of the first and ten times the last echo time,
-          ordered fast → slow so components cannot swap; offset flat; σ log-uniform if sampled. Intervals are central credible intervals at the level above.
-          The default 6000 steps is about 100 autocorrelation times for a typical decay; strongly correlated parameters (a window shorter than T₂) need more, and the page warns when the chain is too short.</small>
+        <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What MCMC does.</strong> A least-squares fit gives one best answer and a symmetric error bar. MCMC
+              (<a href="https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo" target="_blank" rel="noopener noreferrer">Markov chain Monte Carlo</a>) instead explores <em>every</em> set of
+              parameter values that is consistent with your data and its noise, and records how plausible each one is. The spread of the visited values is the uncertainty, and unlike an error bar it can be
+              lopsided or show that two parameters trade off against each other. It matters most when the answer is poorly determined: a window shorter than T<sub>2</sub>, or components with similar T<sub>2</sub>.</p>
+              <p><strong>How it is done here.</strong> An ensemble of "walkers" moves through parameter space (the
+              <a href="https://emcee.readthedocs.io/en/stable/" target="_blank" rel="noopener noreferrer">emcee</a> sampler; <a href="https://arxiv.org/abs/1202.3665" target="_blank" rel="noopener noreferrer">Foreman-Mackey et al. 2013</a>).
+              The first <em>burn-in</em> steps are discarded while the walkers settle. Priors: amplitudes flat and ≥ 0; T<sub>2</sub> log-uniform between a tenth of the first and ten times the last echo time, ordered
+              fast → slow so components cannot swap; offset flat; σ log-uniform if sampled. It uses the model chosen on the Process tab.</p>
+              <p><strong>Reading the results.</strong> The trace plot should look like stationary noise; the corner plot shows each parameter's distribution and the correlations between pairs; the
+              <a href="https://emcee.readthedocs.io/en/stable/tutorials/autocorr/" target="_blank" rel="noopener noreferrer">autocorrelation time</a> says how many steps give one independent sample. The page warns when the chain is
+              shorter than ~50 autocorrelation times. The default 6000 steps is about 100 for a typical decay; strongly correlated parameters need more. Intervals are central
+              <a href="https://en.wikipedia.org/wiki/Credible_interval" target="_blank" rel="noopener noreferrer">credible intervals</a> at the level above.</p></div></details>
       </div>
     </fieldset>
 
@@ -171,11 +190,16 @@
           </select></label>
         <label><input type="checkbox" id="boot-me" checked> multi-exponential fit</label>
         <label><input type="checkbox" id="boot-ilt" checked> ILT spectrum</label>
-        <small class="hint">Each replicate is the fitted curve plus resampled noise, refitted. The preferred noise source resamples the values actually measured in the
-          imaginary channel (it contains only noise after phasing), so no Gaussian assumption is needed. Real-valued data falls back to residual resampling.</small>
+        <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What the bootstrap does.</strong> The
+              <a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener noreferrer">bootstrap</a> asks "if I repeated the measurement, how much would the answer move?" by doing exactly that on the computer:
+              it builds many surrogate decays (the fitted curve plus noise like yours), refits each one, and reports the spread of the results. Unlike MCMC it needs no probability model of the parameters, and it works for the
+              ILT spectrum too, where it gives an uncertainty band and intervals on each peak's T<sub>2</sub> and share of the signal.</p>
+              <p><strong>Where the noise comes from.</strong> The preferred source resamples the values actually measured in the imaginary channel (which contains only noise after phasing), so no Gaussian assumption is needed.
+              The alternatives are to resample the fit's own residuals (which inherits any model misfit) or to draw Gaussian noise with the measured σ. Real-valued data falls back to residual resampling.</p>
+              <p>Intervals are percentile intervals at the confidence level above. More replicates smooth the intervals but take longer; a few hundred is usual.</p></div></details>
       </div>
     </fieldset>
-    <p class="note">MCMC and the bootstrap run after the processing, on the Results tab, once you have seen a time estimate and confirmed.</p>
+    <p class="note">Both run after the processing, once you have confirmed a time estimate.</p>
     <p class="next"><button type="button" data-next="results" id="next-results" disabled>Results appear after you run the processing ↓</button></p>
   </section>
 
@@ -200,18 +224,23 @@
       <p><button type="button" id="prov-download">Download provenance.json</button></p>
     </details>
 
-    <div id="ft-results" hidden>
-      <h3>Spatial profile (FT of each echo)</h3>
+    <div class="results-toolbar">
+      <button type="button" id="expand-all" class="secondary">Expand all sections</button>
+      <button type="button" id="collapse-all" class="secondary">Collapse all</button>
+    </div>
+
+    <details id="ft-results" class="section" open hidden>
+      <summary><h3>Spatial profile (FT of each echo)</h3></summary>
       <p id="ft-stats" class="note"></p>
       <div class="plots">
         <div class="plot-card"><div id="plot-profile"></div></div>
         <div class="plot-card"><div id="plot-ftmap"></div><p id="ftmap-note" class="note card-note"></p></div>
       </div>
-    </div>
+      <details class="more"><summary>Show more</summary><div class="more-body"><p>Left: the signal summed over echoes against position z (the shaded band is the analysed window). Right: the magnitude of every echo after the transform. The map is drawn on the full zero-filled grid; zero-filling interpolates and adds no resolution, so the natural resolution (above) is what limits how finely features can be separated. + z is down, toward the magnet.</p></div></details>
+    </details>
 
-    <div id="spatial-results" hidden>
-      <h3>Spatially resolved fits</h3>
-      <p id="spatial-stats" class="note"></p>
+    <details id="spatial-results" class="section" open hidden>
+      <summary><h3>Spatially resolved fits</h3></summary>
       <label><input type="checkbox" id="sp-linear"> linear T₂ axis</label>
       <div class="plots">
         <div class="plot-card" id="card-sp-t2"><div id="plot-sp-t2"></div></div>
@@ -224,28 +253,27 @@
             <label>T₂ <input type="range" id="view-t2" min="0" max="0" value="0"> <output id="view-t2-out"></output></label>
             <label><input type="checkbox" id="view-fixed" checked> fixed amplitude scale (same range for both side panels)</label>
           </div>
-          <p class="note card-note">Centre: ILT map (T₂ vs position) with the peak tracks. Right: the spectrum at the selected position.
-            Top: the signal at the selected T₂ along z. Drag the sliders, press ← → on a focused slider, or click the map to move the cut.</p>
         </div>
         <div class="plot-card" id="card-sp-iltsum"><div id="plot-sp-iltsum"></div></div>
         <div class="plot-card" id="card-sp-iltfrac"><div id="plot-sp-iltfrac"></div></div>
       </div>
-      <p class="note">ILT peaks are found on the spectrum summed over all positions and then followed at every position: each coloured line is
-        the geometric-mean T₂ inside that peak's T₂ band (a band with under 1% of a position's signal is left blank there).</p>
-      <p class="note">Open markers: that position's fit was flagged (a poorly determined component or no uncertainty estimate).
-        Error bars are ± one standard error.</p>
-    </div>
+      <details class="more"><summary>Show more</summary><div class="more-body"><p id="spatial-stats" class="note"></p><p>The exponential fits and the ILT are repeated at each position (the ILT on every zero-filled point, the exponential fits at the natural resolution unless you set a spacing). Positions closer than the natural resolution are not independent measurements; positions with too little signal are not fitted and show as gaps.</p>
+        <p><strong>ILT viewer.</strong> Centre: the ILT map (T₂ vs position) with the peak tracks. Right: the spectrum at the selected position. Top: the signal at the selected T₂ along z. Drag the sliders, press ← → on a focused slider, or click the map to move the cut.</p>
+        <p><strong>Peak tracks.</strong> Peaks are found on the spectrum summed over all positions and then followed at every position: each coloured line is the geometric-mean T₂ inside that peak's T₂ band (a band with under 1% of a position's signal is left blank there).</p>
+        <p>Open markers: that position's fit was flagged (a poorly determined component or no uncertainty estimate). Error bars are ± one standard error.</p></div></details>
+    </details>
 
-    <h3 id="fit-heading">Decay and fits</h3>
-    <div class="plot-card wide">
-      <div id="plot-fit" class="tall"></div>
-      <label><input type="checkbox" id="fit-log"> log y-axis</label>
-    </div>
+    <details id="fit-section" class="section" open>
+      <summary><h3 id="fit-heading">Decay and fits</h3></summary>
+      <div class="plot-card wide">
+        <div id="plot-fit" class="tall"></div>
+        <label><input type="checkbox" id="fit-log"> log y-axis</label>
+      </div>
+    </details>
 
-    <div id="me-results" hidden>
-      <h3>Multi-exponential fit</h3>
-      <p class="equation" id="me-equation"></p>
-      <p class="equation small" id="me-defs"></p>
+    <details id="me-results" class="section" open hidden>
+      <summary><h3>Multi-exponential fit</h3></summary>
+      <details class="more"><summary>Show the model</summary><div class="more-body"><p class="equation" id="me-equation"></p><p class="equation small" id="me-defs"></p></div></details>
       <div id="me-warnings"></div>
       <div class="table-wrap"><table id="me-table" class="grid"></table></div>
       <p id="me-stats" class="note"></p>
@@ -253,24 +281,23 @@
       <div class="table-wrap"><table id="me-quality" class="grid"></table></div>
       <p id="quality-note" class="note"></p>
       <h4>Model comparison</h4>
-      <p class="note">AIC and BIC are only meaningful as <em>differences</em> between models fitted to the same data, so the table
-        shows ΔAIC and ΔBIC relative to the best model (0 = best; a ΔBIC above ~10 is strong evidence against that model).
-        RSS and MSE scale with the signal amplitude (and RSS with the number of echoes); residual SD / amplitude and reduced χ² do not.</p>
       <div class="table-wrap"><table id="me-compare-table" class="grid"></table></div>
-    </div>
+      <details class="more"><summary>Show more</summary><div class="more-body"><p>AIC and BIC are only meaningful as <em>differences</em> between models fitted to the same data, so the table shows ΔAIC and ΔBIC relative to the best model (0 = best; a ΔBIC above ~10 is strong evidence against that model).
+        RSS and MSE scale with the signal amplitude (and RSS with the number of echoes); residual SD / amplitude and reduced χ² do not.</p></div></details>
+    </details>
 
-    <div id="ilt-results" hidden>
-      <h3>T₂ spectrum (ILT)</h3>
-      <p class="equation" id="ilt-equation"></p>
+    <details id="ilt-results" class="section" open hidden>
+      <summary><h3>T₂ spectrum (ILT)</h3></summary>
       <div class="plot-card wide"><div id="plot-spectrum"></div></div>
       <p id="ilt-stats" class="note"></p>
       <div class="table-wrap"><table id="ilt-quality" class="grid"></table></div>
       <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>
       <div id="lcurve-card" class="plot-card wide" hidden><div id="plot-lcurve"></div></div>
-    </div>
+      <details class="more"><summary>Show the model and how to read this plot</summary><div class="more-body"><p class="equation" id="ilt-equation"></p><p>Orange diamonds are the exponential components. Each is drawn at the height an ILT peak holding the same <em>amount</em> of signal would have (using the width of the nearest ILT peak), so when the two analyses agree a diamond sits on top of its peak; labels give the fractions. A diamond well above or below a peak means the analyses disagree about how much signal is there.</p></div></details>
+    </details>
 
-    <div id="unc-results" hidden>
-      <h3>Uncertainty: MCMC and bootstrap</h3>
+    <details id="unc-results" class="section" open hidden>
+      <summary><h3>Uncertainty: MCMC and bootstrap</h3></summary>
       <div id="unc-bar" class="unc-bar" hidden>
         <progress id="unc-progress" max="1" value="0"></progress>
         <span id="unc-status" class="status" role="status"></span>
@@ -281,8 +308,7 @@
       <div id="unc-compare" hidden>
         <h4>Methods compared</h4>
         <div class="table-wrap"><table id="unc-compare-table" class="grid"></table></div>
-        <p class="note">Each cell is value [interval at the chosen level]; a row shares one notation. Where the methods disagree, trust the sampling methods over
-          the covariance: the least-squares interval assumes a Gaussian, symmetric likelihood.</p>
+        <details class="more"><summary>Show more</summary><div class="more-body"><p>Each cell is value [interval at the chosen level]; a row shares one notation. Where the methods disagree, trust the sampling methods (MCMC, bootstrap) over the covariance: the least-squares interval assumes a Gaussian, symmetric likelihood.</p></div></details>
       </div>
       <div id="mcmc-results" hidden>
         <h4>MCMC</h4>
@@ -293,7 +319,7 @@
           <div class="plot-card"><div id="plot-mcmc-trace" class="tall"></div></div>
           <div class="plot-card"><img id="mcmc-corner" class="corner" alt="Corner plot of the MCMC posterior samples"></div>
         </div>
-        <p class="note">Trace: a few walkers (burn-in shaded); a healthy chain looks like stationary noise. Corner plot: marginal and pairwise posteriors, orange marks the least-squares fit.</p>
+        <details class="more"><summary>Show more</summary><div class="more-body"><p>Trace: a few walkers (burn-in shaded); a healthy chain looks like stationary noise. Corner plot: marginal and pairwise posteriors; orange marks the least-squares fit. Strongly tilted or curved pair plots mean those parameters trade off against each other.</p></div></details>
       </div>
       <div id="boot-results" hidden>
         <h4>Bootstrap</h4>
@@ -306,7 +332,7 @@
           <div class="table-wrap"><table id="boot-peaks" class="grid"></table></div>
         </div>
       </div>
-    </div>
+    </details>
   </section>
 
   <dialog id="unc-dialog" aria-labelledby="unc-dialog-title">

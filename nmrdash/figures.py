@@ -133,11 +133,16 @@ def ilt_figure(res, titles=True):
     fig, ax = plt.subplots(figsize=(7.2, 4))
     ax.plot(tau, il["spectrum"], color=_GREEN, lw=1.8)
     for p in il["peaks"]:
-        ax.annotate(f"{p['T2_peak']:.2e}".replace("e-0", "e-"), (p["T2_peak"], np.interp(p["T2_peak"], tau, il["spectrum"])),
+        ax.annotate(f"{p['T2_peak']:.2e}".replace("e-0", "e-") + f"\n{100 * p['fraction']:.0f}%", (p["T2_peak"], np.interp(p["T2_peak"], tau, il["spectrum"])),
                     textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8)
     me = (res.get("multiexp") or {}).get("selected")
-    if me:
-        ax.plot([c["T2"] for c in me["components"]], [0] * len(me["components"]), "D", color=_ORANGE, ms=7, clip_on=False, label=f"{me['n']}-exp fit T$_2$")
+    marks = [m for m in (il.get("exp_markers") or []) if m["height"] is not None]
+    if me and il.get("exp_markers"):
+        for m in marks:                                     # drawn at the height an ILT peak holding that amplitude would have
+            ax.vlines(m["T2"], 0, m["height"], color=_ORANGE, lw=1.3, ls=":")
+        ax.plot([m["T2"] for m in marks], [m["height"] for m in marks], "D", color=_ORANGE, ms=7, label=f"{me['n']}-exp components (height = amount)")
+        for m in marks:
+            ax.annotate(f"{100 * m['fraction']:.0f}%", (m["T2"], m["height"]), textcoords="offset points", xytext=(8, -3), fontsize=8, color=_ORANGE)
         ax.legend(frameon=False)
     _log_t2_axis(ax)
     ax.set_xlim(il["t2_min"], il["t2_max"])
@@ -160,6 +165,7 @@ def spatial_figure(res, titles=True):
     ax.set_xlabel("z (µm)")
     ax.set_ylabel("|Σ echoes| (arb.)")
     _sci_axis(ax)
+    ax.set_xlim(*ft["window"])
     if titles:
         ax.set_title("Spatial profile")
     me = sp.get("multiexp")
@@ -179,6 +185,8 @@ def spatial_figure(res, titles=True):
         ax2.set_xlabel("z (µm)")
         ax2.set_ylabel("T$_2$ (s)")
         ax2.legend(frameon=False)
+        ax2.set_xlim(*ft["window"])
+        ax3.set_xlim(*ft["window"])
         ax3.set_xlabel("z (µm)")
         ax3.set_ylabel("Amplitude (arb.)")
         _sci_axis(ax3)
@@ -196,6 +204,7 @@ def spatial_figure(res, titles=True):
             ax4.plot(z, [np.nan if v is None else v for v in il["band_mean_T2"][k]], lw=2, color=("white", _ORANGE, _PURPLE, "#56B4E9")[k % 4],
                      label=f"peak {b['t2_peak']:.1e}".replace("e-0", "e-"))
         _log_t2_axis(ax4, "y")
+        ax4.set_xlim(*ft["window"])
         ax4.set_xlabel("z (µm)")
         ax4.set_ylabel("T$_2$ (s)")
         ax4.legend(frameon=False, fontsize=7, loc="upper right")

@@ -213,6 +213,8 @@ def process(settings, progress=None):
                                    int(il["n_steps"]), float(il["alpha"]), bool(il.get("sweep")),
                                    peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
                                    sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))), sigma=sigma)
+    if out["multiexp"] and out["ilt"]:
+        out["ilt"]["exp_markers"] = ilt_tools.exp_markers(out["multiexp"]["selected"], out["ilt"])
     _STATE["processed"] = {"settings": settings, "t": t, "y": y, "sigma": sigma, "noise": series, "positions": positions,
                            "me_fit": out["multiexp"]["selected"] if out["multiexp"] else None}
     if positions is not None and (me.get("enabled") or il.get("enabled")):

@@ -117,3 +117,31 @@ def test_normalised_residual_is_comparable_between_model_orders():
     t, y = decay(comps=((1000, 0.02),))
     vals = [multiexp.fit(t, y, n, offset=False)["resid_sd_over_amp"] for n in (1, 2, 3)]
     assert max(vals) / min(vals) < 1.05
+
+
+def test_exp_markers_land_on_the_ilt_peaks_when_the_amounts_agree():
+    """Two well separated components: each marker is drawn near the top of its ILT peak, and moves if the amount changes."""
+    t, y = decay(comps=((600, 0.004), (400, 0.05)), n=512)
+    me = multiexp.fit_with_comparison(t, y, 2, offset=False, compare_up_to=2)["selected"]
+    il = ilt_tools.run(t, y, 1e-4, 1.0, 100, 1e8)
+    mk = ilt_tools.exp_markers(me, il)
+    heights = sorted(il["spectrum"][np.argmin(abs(np.array(il["tau"]) - p["T2_peak"]))] for p in il["peaks"])
+    got = sorted(m["height"] for m in mk)
+    assert got == pytest.approx(heights, rel=0.25)                       # same amounts -> same heights
+    assert [m["matched_peak"] is not None for m in mk] == [True, True]
+    inflated = {**me, "components": [{**c, "A": 2 * c["A"]} for c in me["components"]]}
+    assert [m["height"] for m in ilt_tools.exp_markers(inflated, il)] == pytest.approx([2 * m["height"] for m in mk])   # twice the amount, twice the height
+
+
+def test_exp_markers_without_an_ilt_peak_have_no_height():
+    il = {"tau": [1e-3, 1e-2], "spectrum": [0.0, 0.0], "peaks": []}
+    me = {"components": [{"T2": 5e-3, "A": 10.0, "fraction": 1.0}]}
+    assert ilt_tools.exp_markers(me, il)[0]["height"] is None
+
+
+def test_process_attaches_markers_only_when_both_analyses_ran():
+    load(DATA / "CPMG_EtGly" / "1")
+    both = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "compare": False}, "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})
+    assert len(both["ilt"]["exp_markers"]) == 1
+    only = process({"echo": "integrate", "multiexp": {"enabled": False}, "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})
+    assert "exp_markers" not in only["ilt"]
