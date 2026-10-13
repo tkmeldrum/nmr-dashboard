@@ -88,3 +88,7 @@ table.grid td:first-child { width:auto; }
 progress { width:12rem; accent-color:var(--accent); }
 .table-wrap th a, .note a { color:var(--accent); }
 .plots .plot-card > div[id^="plot-sp"] { height:22rem; }
+.card-note { margin:.25rem .75rem .5rem; font-size:.85rem; }
+.run-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem 1rem; margin:1.25rem 0 0; padding-top:1rem; border-top:1px solid var(--line); }
+.run-bar .message { flex-basis:100%; margin:0; }
+#next-results:disabled { opacity:.6; cursor:default; }

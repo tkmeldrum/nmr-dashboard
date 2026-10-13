@@ -25,6 +25,8 @@ worker.onmessage = (e) => {
     state.results = m.result;
     setRunning(false, "Done.");
     setTabEnabled("results", true);
+    $("next-results").disabled = false;
+    $("next-results").textContent = "Results →";
     showTab("results");
   } else if (m.type === "error") {
     $("status").textContent = "Python ready.";
@@ -114,7 +116,8 @@ function resetSections() {
   hideMessage();
   $("params-section").hidden = true;
   state.result = state.results = null;
-  for (const t of ["raw", "process", "results"]) setTabEnabled(t, false);
+  for (const t of ["raw", "process", "uncertainty", "results"]) setTabEnabled(t, false);
+  $("next-results").disabled = true;
   showTab("load");
 }
 
@@ -270,10 +273,12 @@ function showResult(r) {
   initProcessDefaults(r.raw);
   setTabEnabled("raw", true);
   setTabEnabled("process", true);
+  setTabEnabled("uncertainty", true);
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
 initTabs((name) => {
+  $("run-bar").hidden = name !== "process" && name !== "uncertainty";     // one Run button for both option tabs
   if (name === "raw") renderRaw();       // plots drawn while hidden have no width, so draw on show
   if (name === "results") renderResults();
 });

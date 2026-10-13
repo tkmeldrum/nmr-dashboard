@@ -87,7 +87,7 @@ def test_ft_runs_on_every_sample_including_two_point_data(d):
     ft = res["ft"]
     assert len(ft["z_um"]) == len(ft["profile"]) and ft["window"][0] < ft["window"][1] and ft["window_auto"]
     assert len(res["decay"]["y"]) == n
-    assert len(ft["heat"]["mag"]) == len(ft["heat"]["z_um"]) <= 256
+    assert len(ft["heat"]["mag"]) == len(ft["heat"]["z_um"]) == ft["nfft"]      # full zero-filled grid, not thinned
 
 
 def test_ft_decay_tracks_integrated_decay_on_good_data():

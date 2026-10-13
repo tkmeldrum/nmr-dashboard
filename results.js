@@ -47,7 +47,11 @@ function renderFt(r) {
   }, CFG);
   const t = r.decay.t, h = f.heat;
   const base2 = baseLayout("Echo magnitude after FT", "Echo time (s)", "z (µm)");
-  Plotly.react("plot-ftmap", [{ type: "heatmap", z: h.mag, x: h.echo_idx.map((i) => t[i]), y: h.z_um, colorscale: "Viridis", colorbar: { title: "|S|" } }], base2, CFG);
+  Plotly.react("plot-ftmap", [{ type: "heatmap", z: h.mag, x: h.echo_idx.map((i) => t[i]), y: h.z_um, colorscale: "Viridis", colorbar: { title: "|S|" }, zsmooth: false }],
+    { ...base2, yaxis: { ...base2.yaxis, autorange: "reversed" } }, CFG);      // + z (+ frequency) points down, toward the magnet
+  $("ftmap-note").textContent =
+    `Drawn on the full zero-filled grid (${f.nfft} points, Δz = ${fmt(f.zf_step_um)} µm). The natural resolution is ${fmt(f.resolution_um)} µm: ` +
+    `zero-filling interpolates and adds no resolution. + z is down (toward the magnet).`;
 }
 
 // ── FT: fits at every z position ──────────────────────────────────────────
@@ -55,15 +59,19 @@ function renderSpatial(r) {
   const sp = r.spatial;
   $("spatial-results").hidden = !sp;
   if (!sp) return;
-  const f = r.ft, z = sp.z_um, linear = $("sp-linear").checked;
+  const f = r.ft, linear = $("sp-linear").checked;
+  const il0 = sp.ilt;
   $("spatial-stats").textContent =
-    `${z.length} positions every ${fmt(f.spacing_um)} µm${f.spacing_auto ? " (the natural resolution)" : ""}. ` +
-    `Positions closer than the resolution of ${fmt(f.resolution_um)} µm are not independent measurements.`;
+    (sp.multiexp ? `Exponential fits: ${f.n_positions_kept} of ${f.n_positions} positions (every ${fmt(f.spacing_um)} µm${f.spacing_auto ? ", the natural resolution" : ""}). ` : "") +
+    (il0 ? `ILT: ${f.n_ilt_positions_kept} of ${f.n_ilt_positions} positions on the zero-filled grid (every ${fmt(f.zf_step_um)} µm) so the map matches the other heat maps. ` : "") +
+    `Positions with signal below ${fmt(f.min_signal_pct)}% of the profile maximum are not fitted (gaps). ` +
+    `Positions closer than the natural resolution of ${fmt(f.resolution_um)} µm are not independent measurements.`;
   const t2 = baseLayout("", "z (µm)", "T₂ (s)").yaxis;
 
   const me = sp.multiexp;
   $("card-sp-t2").hidden = $("card-sp-amp").hidden = !me;
   if (me) {
+    const z = me.z_um;
     const sym = me.flag.map((fl, i) => (fl || !me.ok[i] ? "circle-open" : "circle"));
     const palette = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple];
     const label = (k) => (me.n === 1 ? "T₂" : `T₂,${k + 1}`);
@@ -84,19 +92,32 @@ function renderSpatial(r) {
   }
 
   const il = sp.ilt;
-  $("card-sp-ilt").hidden = $("card-sp-iltsum").hidden = !il;
+  for (const id of ["card-sp-ilt", "card-sp-iltsum", "card-sp-iltfrac"]) $(id).hidden = !il;
   if (il) {
+    const z = il.z_um;
     const zmap = il.tau.map((_, j) => il.spectra.map((row) => row[j]));      // [tau][position]
+    const bandColors = ["#ffffff", COLORS.orange, COLORS.purple, "#56B4E9", "#F0E442"];
+    const bandName = (b) => `peak ${fmtSci(b.t2_peak)} s`;
+    // One track per ILT peak: the geometric-mean T2 inside that peak's band, so the lines follow the heat-map ridges.
+    const tracks = il.bands.map((b, k) => ({
+      x: z, y: il.band_mean_T2[k], mode: "lines", name: bandName(b), connectgaps: false,
+      line: { color: bandColors[k % bandColors.length], width: 2.5 },
+    }));
     Plotly.react("plot-sp-ilt", [
       { type: "heatmap", x: z, y: il.tau, z: zmap, colorscale: "Viridis", colorbar: { title: "f" }, zsmooth: false },
-      { x: z, y: il.mean_T2, mode: "lines", name: "mean T₂", line: { color: COLORS.orange, width: 2 } },
+      ...tracks,
     ], baseLayout("ILT T₂ distribution vs position", "z (µm)", "T₂ (s)",
       { yaxis: { ...t2, type: "log", tickformat: ".0e", range: [Math.log10(il.tau[0]), Math.log10(il.tau[il.tau.length - 1])] } }), CFG);
 
-    Plotly.react("plot-sp-iltsum", [
-      { x: z, y: il.mean_T2, name: "ILT mean T₂ (geometric)", mode: "lines+markers", line: { color: COLORS.green }, marker: { size: 6 } },
-      { x: z, y: il.peak_T2, name: "ILT peak T₂", mode: "markers", marker: { color: COLORS.purple, symbol: "diamond", size: 7 } },
-    ], baseLayout("ILT T₂ surrogates vs position", "z (µm)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+    const palette = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple, "#56B4E9"];
+    Plotly.react("plot-sp-iltsum", il.bands.map((b, k) => ({
+      x: z, y: il.band_mean_T2[k], name: bandName(b), mode: "lines+markers", connectgaps: false,
+      line: { color: palette[k % palette.length] }, marker: { size: 4 },
+    })), baseLayout("ILT peak T₂ vs position (geometric mean per peak)", "z (µm)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+
+    Plotly.react("plot-sp-iltfrac", il.bands.map((b, k) => ({
+      x: z, y: il.band_fraction[k], name: bandName(b), mode: "lines", line: { color: palette[k % palette.length], width: 2 },
+    })), baseLayout("Share of the signal in each ILT peak", "z (µm)", "Fraction", { yaxis: { ...t2, title: "Fraction", range: [0, 1], type: "linear" } }), CFG);
   }
 }
 

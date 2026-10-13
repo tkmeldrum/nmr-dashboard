@@ -1,73 +1,120 @@
 """Run the decay analyses at every spatial position of an FT'd CPMG dataset.
 
 Output is column-oriented (one array per quantity, indexed by position) so the UI can plot
-T2(z), amplitude(z) and the ILT map directly.
+T2(z), amplitude(z) and the ILT map directly. The multi-exponential fits and the ILT use their
+own position sets: exponential fits are expensive, so they sit at the natural resolution by
+default, while the (cheap) ILT map covers every zero-filled grid point so heat maps look smooth.
 """
 import numpy as np
 
 from . import ilt_tools, multiexp
 from .ilt import run_1dilt
 
-FAST_STARTS = 5     # multi-exp starting guesses per position (the bulk fit uses more)
+FAST_STARTS = 5            # multi-exp starting guesses per position (the bulk fit uses more)
+NEGLIGIBLE_BAND = 0.01     # a band holding <1% of a position's signal gets no mean T2 there
 
 
-def _gmean_t2(tau, spectrum):
-    tot = spectrum.sum()
-    return float(np.exp(np.sum(spectrum * np.log(tau)) / tot)) if tot > 0 else None
+def _gmean(tau, spec):
+    tot = spec.sum()
+    return float(np.exp(np.sum(spec * np.log(tau)) / tot)) if tot > 0 else None
 
 
-def fit_positions(t, Y, z_um, me=None, il=None, progress=None):
-    """Y: (n_positions, n_echoes) decays at positions z_um. me/il are the multiexp / ilt settings dicts."""
-    npos = len(z_um)
-    out = {"z_um": z_um, "multiexp": None, "ilt": None}
-    do_me = bool(me and me.get("enabled"))
-    do_il = bool(il and il.get("enabled"))
+def _unpack(pos):
+    """(z, Y) or (z, Y, keep) -> (z, Y, keep); positions with keep False (no signal) are not fitted."""
+    z, Y = pos[0], pos[1]
+    keep = np.asarray(pos[2], bool) if len(pos) > 2 else np.ones(len(z), bool)
+    return z, Y, keep
 
-    if do_me:
-        n = int(me["n"])
-        nan = lambda *shape: np.full(shape, np.nan)
-        m = {"n": n, "offset": bool(me.get("offset", True)), "ci_level": float(me.get("ci_level", 0.95)),
-             "T2": nan(n, npos), "T2_se": nan(n, npos), "A": nan(n, npos), "A_se": nan(n, npos),
-             "fraction": nan(n, npos), "mean_T2": nan(npos), "mean_T2_se": nan(npos),
-             "total_amplitude": nan(npos), "rmse": nan(npos),
-             "ok": np.zeros(npos, bool), "flag": np.zeros(npos, bool)}
-    if do_il:
-        n_steps = min(int(il["n_steps"]), ilt_tools.STEPS_LIMIT)
-        params = {"ILTminmax": [float(il["t2_min"]), float(il["t2_max"])], "nrILTSteps": n_steps}
-        spectra, gm, peak, rm = [], np.full(npos, np.nan), np.full(npos, np.nan), np.full(npos, np.nan)
-        tau = None
 
+def _fit_multiexp(t, Y, z, keep, me, progress, done0, total):
+    npos, n = len(z), int(me["n"])
+    nan = lambda *shape: np.full(shape, np.nan)
+    m = {"n": n, "offset": bool(me.get("offset", True)), "ci_level": float(me.get("ci_level", 0.95)), "z_um": z,
+         "T2": nan(n, npos), "T2_se": nan(n, npos), "A": nan(n, npos), "A_se": nan(n, npos),
+         "fraction": nan(n, npos), "mean_T2": nan(npos), "mean_T2_se": nan(npos),
+         "total_amplitude": nan(npos), "rmse": nan(npos),
+         "ok": np.zeros(npos, bool), "flag": np.zeros(npos, bool)}
+    done = done0
     for i in range(npos):
-        y = Y[i]
-        if do_me:
-            try:
-                f = multiexp.fit(t, y, n, m["offset"], m["ci_level"], n_starts=FAST_STARTS)
-                for k, c in enumerate(f["components"]):
-                    m["T2"][k, i], m["T2_se"][k, i] = c["T2"], c["T2_se"]
-                    m["A"][k, i], m["A_se"][k, i] = c["A"], c["A_se"]
-                    m["fraction"][k, i] = c["fraction"]
-                m["mean_T2"][i], m["mean_T2_se"][i] = f["mean_T2"], f["mean_T2_se"]
-                m["total_amplitude"][i], m["rmse"][i] = f["total_amplitude"], f["rmse"]
-                m["ok"][i], m["flag"][i] = True, bool(f["warnings"])
-            except (ValueError, RuntimeError, FloatingPointError):
-                pass
-        if do_il:
-            try:
-                spec, tau, _, _, r = run_1dilt(y, t, params, alpha=float(il["alpha"]))
-                spectra.append(spec)
-                gm[i], rm[i] = _gmean_t2(tau, spec) or np.nan, r
-                peak[i] = tau[int(np.argmax(spec))] if spec.max() > 0 else np.nan
-            except (ValueError, RuntimeError, np.linalg.LinAlgError):
-                spectra.append(None)
+        if not keep[i]:
+            continue
+        try:
+            f = multiexp.fit(t, Y[i], n, m["offset"], m["ci_level"], n_starts=FAST_STARTS)
+            for k, c in enumerate(f["components"]):
+                m["T2"][k, i], m["T2_se"][k, i] = c["T2"], c["T2_se"]
+                m["A"][k, i], m["A_se"][k, i] = c["A"], c["A_se"]
+                m["fraction"][k, i] = c["fraction"]
+            m["mean_T2"][i], m["mean_T2_se"][i] = f["mean_T2"], f["mean_T2_se"]
+            m["total_amplitude"][i], m["rmse"][i] = f["total_amplitude"], f["rmse"]
+            m["ok"][i], m["flag"][i] = True, bool(f["warnings"])
+        except (ValueError, RuntimeError, FloatingPointError):
+            pass
+        done += 1
         if progress:
-            progress(i + 1, npos)
+            progress(done, total)
+    return m
 
+
+def _fit_ilt(t, Y, z, keep, il, peak_min_fraction, progress, done0, total):
+    npos = len(z)
+    params = {"ILTminmax": [float(il["t2_min"]), float(il["t2_max"])],
+              "nrILTSteps": min(int(il["n_steps"]), ilt_tools.STEPS_LIMIT)}
+    spectra, rmse, tau = [], np.full(npos, np.nan), None
+    done = done0
+    for i in range(npos):
+        if not keep[i]:
+            spectra.append(None)
+            continue
+        try:
+            spec, tau, _, _, r = run_1dilt(Y[i], t, params, alpha=float(il["alpha"]))
+            spectra.append(spec)
+            rmse[i] = r
+        except (ValueError, RuntimeError, np.linalg.LinAlgError):
+            spectra.append(None)
+        done += 1
+        if progress:
+            progress(done, total)
+    good = [s for s in spectra if s is not None]
+    width = len(good[0]) if good else 0
+    S = np.array([s if s is not None else np.full(width, np.nan) for s in spectra]).reshape(npos, width)
+
+    mean_T2 = np.array([_gmean(tau, s) or np.nan if s is not None else np.nan for s in spectra], float)
+    # One band per peak of the position-summed spectrum, so each band follows the same feature of the
+    # heat map at every position; per position: geometric-mean T2 within the band and its signal share.
+    bands = ilt_tools.band_edges(tau, np.nansum(S, axis=0), peak_min_fraction) if good else []
+    out_bands, b_mean, b_frac = [], [], []
+    for pk, lo, hi in bands:
+        out_bands.append({"t2_lo": float(tau[lo]), "t2_hi": float(tau[hi - 1]), "t2_peak": float(tau[pk])})
+        means, fracs = np.full(npos, np.nan), np.full(npos, np.nan)
+        for i, s in enumerate(spectra):
+            if s is None or s.sum() <= 0:
+                continue
+            seg = s[lo:hi]
+            fracs[i] = seg.sum() / s.sum()
+            if fracs[i] >= NEGLIGIBLE_BAND:
+                means[i] = _gmean(tau[lo:hi], seg)
+        b_mean.append(means)
+        b_frac.append(fracs)
+    return {"z_um": z, "tau": tau, "alpha": float(il["alpha"]), "n_steps": width, "spectra": S,
+            "mean_T2": mean_T2, "rmse": rmse, "bands": out_bands, "band_mean_T2": b_mean, "band_fraction": b_frac}
+
+
+def fit_positions(t, me_pos=None, il_pos=None, me=None, il=None, progress=None, peak_min_fraction=0.05):
+    """me_pos / il_pos are (z_um, Y[n_positions, n_echoes][, keep]) for the exponential fits and the ILT.
+
+    Positions with keep False (signal below the threshold) are skipped and come back as NaN/None, so
+    noise-only positions do not produce meaningless fits. progress(done, total) counts fitted positions.
+    """
+    do_me = bool(me and me.get("enabled") and me_pos is not None)
+    do_il = bool(il and il.get("enabled") and il_pos is not None)
+    mz, mY, mk = _unpack(me_pos) if do_me else (None, None, None)
+    iz, iY, ik = _unpack(il_pos) if do_il else (None, None, None)
+    total = (int(mk.sum()) if do_me else 0) + (int(ik.sum()) if do_il else 0)
+    out = {"multiexp": None, "ilt": None}
+    done = 0
     if do_me:
-        out["multiexp"] = m
+        out["multiexp"] = _fit_multiexp(t, mY, mz, mk, me, progress, done, total)
+        done += int(mk.sum())
     if do_il:
-        good = [s for s in spectra if s is not None]
-        width = len(good[0]) if good else 0
-        out["ilt"] = {"tau": tau, "alpha": float(il["alpha"]), "n_steps": width,
-                      "spectra": [s if s is not None else np.full(width, np.nan) for s in spectra],
-                      "mean_T2": gm, "peak_T2": peak, "rmse": rm}
+        out["ilt"] = _fit_ilt(t, iY, iz, ik, il, peak_min_fraction, progress, done, total)
     return out

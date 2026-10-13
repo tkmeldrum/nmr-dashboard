@@ -1,7 +1,7 @@
 // Left-to-right workflow tabs.
 import { $ } from "./state.js";
 
-export const TABS = ["load", "raw", "process", "results"];
+export const TABS = ["load", "raw", "process", "uncertainty", "results"];
 let onShow = () => {};
 
 export function showTab(name) {
