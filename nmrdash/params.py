@@ -67,6 +67,7 @@ def _t0(v):
 # (key, default, comment, check) per section, in file order
 SPEC = {
     "processing": [
+        ("exclude_first", 0, "Leave the first n echoes (for T1: delays) out of every fit, ILT, MCMC and bootstrap. They are still shown, as open markers.", _integer(0)),
         ("echo", "integrate", "How each echo becomes a decay: \"integrate\" (autophase, sum the points) or \"ft\" (Fourier transform:\n# signal vs position z; the analyses below then run at every z position).", _one_of("integrate", "ft")),
     ],
     "ft": [
@@ -213,6 +214,7 @@ def to_settings(params, echo_times_s, default_nucleus="1H"):
     ft, il, me, un = p["ft"], p["ilt"], p["multiexp"], p["uncertainty"]
     nz = lambda v: None if v == AUTO else v
     settings = {
+        "exclude_first": p["processing"]["exclude_first"],
         "echo": p["processing"]["echo"],
         "ft": {"nucleus": default_nucleus if ft["nucleus"] == AUTO else ft["nucleus"], "G": ft["G"], "zero_fill": ft["zero_fill"],
                "z_min": nz(ft["z_min"]), "z_max": nz(ft["z_max"]), "spacing_um": nz(ft["spacing_um"]),
@@ -239,7 +241,7 @@ def to_settings_t1(params):
     """Settings for a saturation-recovery dataset (no echo processing, no ILT, no FT)."""
     p = validate(params)
     t1, un, mc, bs = p["t1"], p["uncertainty"], p["mcmc"], p["bootstrap"]
-    settings = {"kind": "t1", "multiexp": {"enabled": True, "n": t1["components"], "offset": t1["offset"], "ci_level": un["ci_level"], "compare": t1["compare"]}}
+    settings = {"kind": "t1", "exclude_first": p["processing"]["exclude_first"], "multiexp": {"enabled": True, "n": t1["components"], "offset": t1["offset"], "ci_level": un["ci_level"], "compare": t1["compare"]}}
     target = {"target": "bulk", "z_um": None, "ci_level": un["ci_level"]}
     options = {
         "mcmc": {"enabled": mc["enabled"], **target, "nwalkers": mc["walkers"], "steps": mc["steps"], "burn": mc["burn"], "sample_sigma": mc["sample_sigma"], "seed": mc["seed"]},
@@ -252,6 +254,7 @@ def to_settings_t1(params):
 def from_settings(settings, options=None, base=None):
     """The inverse: the params that reproduce a page run (the page's settings + uncertainty options)."""
     p = validate(base) if base else defaults()
+    p["processing"]["exclude_first"] = int(settings.get("exclude_first", 0) or 0)
     if settings.get("kind") == "t1":
         me = settings.get("multiexp") or {}
         p["t1"].update({"components": me.get("n", 1), "offset": bool(me.get("offset", True)), "compare": bool(me.get("compare", True))})

@@ -152,7 +152,23 @@ def _jsonable(o):
     return o
 
 
-def _run_ft(cfg):
+MIN_POINTS_AFTER_EXCLUDING = 8      # fewer points than this cannot support a meaningful fit
+
+
+def _skip_count(settings, n_points):
+    """How many leading points (echoes, or delays for T1) to leave out of every fit: settings["exclude_first"], default 0."""
+    try:
+        skip = int(settings.get("exclude_first", 0) or 0)
+    except (TypeError, ValueError):
+        raise ValueError("exclude_first must be a whole number") from None
+    if skip < 0:
+        raise ValueError("The number of excluded points cannot be negative.")
+    if skip and n_points - skip < MIN_POINTS_AFTER_EXCLUDING:
+        raise ValueError(f"Excluding the first {skip} of {n_points} points leaves {n_points - skip}; at least {MIN_POINTS_AFTER_EXCLUDING} are needed.")
+    return skip
+
+
+def _run_ft(cfg, skip=0):
     td, params = _STATE["td"], _STATE["params"]
     nuc = cfg.get("nucleus", "1H")
     gamma = constants.GAMMA_MHZ_PER_T[nuc]
@@ -162,12 +178,13 @@ def _run_ft(cfg):
         raise ValueError("The gradient G must be positive.")
     r = echoes.ft(td, float(params.get("dwellTime", 1.0)), gamma, g, zf)
     z, S = r["z_um"], r["S"]
-    prof = echoes.profile(S)
+    S_fit = S[:, skip:]                           # excluded echoes take no part in the profile, window, fits or noise estimate
+    prof = echoes.profile(S_fit)
     z0, z1 = cfg.get("z_min"), cfg.get("z_max")
     auto = z0 is None or z1 is None
     if auto:
         z0, z1 = echoes.auto_window(z, prof)
-    y = echoes.window_decay(S, z, float(z0), float(z1))
+    y = echoes.window_decay(S, z, float(z0), float(z1))             # every echo, so the page can show the excluded ones
     dwell = float(params.get("dwellTime", 1.0))
     res = echoes.native_resolution_um(td.shape[0], dwell, gamma, g)
     spacing = cfg.get("spacing_um")
@@ -196,14 +213,16 @@ def _run_ft(cfg):
     if not keep.any():
         raise ValueError(f"No position has signal above {min_sig:.0%} of the profile maximum; lower the threshold or widen the window.")
     ft_out.update({"min_signal_pct": min_sig * 100, "n_positions_kept": int(keep.sum()), "n_ilt_positions_kept": int(keep_ilt.sum())})
-    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep, echoes.position_noise(S, idx), echoes.position_noise_series(S, idx)),
-                 "ilt": (z[idx_ilt], echoes.position_decays(S, idx_ilt), keep_ilt, echoes.position_noise(S, idx_ilt))}
-    return y, r["phase_deg"], ft_out, positions, echoes.window_noise_series(S, z, float(z0), float(z1))
+    positions = {"me": (z[idx], echoes.position_decays(S_fit, idx), keep, echoes.position_noise(S_fit, idx), echoes.position_noise_series(S_fit, idx)),
+                 "ilt": (z[idx_ilt], echoes.position_decays(S_fit, idx_ilt), keep_ilt, echoes.position_noise(S_fit, idx_ilt))}
+    return y, r["phase_deg"], ft_out, positions, echoes.window_noise_series(S_fit, z, float(z0), float(z1))
 
 
 def _process_t1(settings):
     """Saturation recovery: fit 1 (or 2) components; the sparse data have no ILT and no noise channel."""
-    t, y = _STATE["t1"]["t"], _STATE["t1"]["y"]
+    t_all, y_all = _STATE["t1"]["t"], _STATE["t1"]["y"]
+    skip = _skip_count(settings, len(t_all))
+    t, y = t_all[skip:], y_all[skip:]
     me = settings.get("multiexp") or {}
     n = int(me.get("n", 1))
     if n not in (1, 2):
@@ -211,7 +230,7 @@ def _process_t1(settings):
     res = multiexp.fit_with_comparison(t, y, n, bool(me.get("offset", constants.T1_DEFAULT_OFFSET)), float(me.get("ci_level", 0.95)),
                                        compare_up_to=2 if me.get("compare", True) else n, sigma=None, kind="saturation")
     out = {"settings": settings, "version": __version__, "mode": "t1", "ft": None, "spatial": None,
-           "decay": {"t": t, "y": y, "phase_deg": None, "noise_sigma": None}, "multiexp": res, "ilt": None}
+           "decay": {"t": t_all, "y": y_all, "skip": skip, "phase_deg": None, "noise_sigma": None}, "multiexp": res, "ilt": None}
     _STATE["processed"] = {"settings": settings, "t": t, "y": y, "sigma": None, "noise": None, "positions": None, "me_fit": res["selected"]}
     return _jsonable(out)
 
@@ -220,6 +239,7 @@ def process(settings, progress=None):
     """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
 
     settings = {
+      "exclude_first": 0,            # leading echoes (T1: delays) left out of every fit
       "echo": "integrate" | "ft",
       "ft": {"nucleus": "1H"|"19F", "G", "zero_fill", "z_min", "z_max" (None -> auto window),
              "spacing_um" (exp fits; None -> native resolution), "ilt_spacing_um" (None -> every zero-filled point),
@@ -233,20 +253,23 @@ def process(settings, progress=None):
         return _process_t1(settings)
     if "td" not in _STATE:
         raise RuntimeError("No supported dataset is loaded.")
-    t = _STATE["echo_s"]
+    t_all = _STATE["echo_s"]
+    skip = _skip_count(settings, len(t_all))
     mode = settings.get("echo", "integrate")
     ft_out, positions, series = None, None, None
     if mode == "integrate":
-        y, phase = echoes.integrate(_STATE["td"])
+        y_all, phase = echoes.integrate(_STATE["td"])
         series = echoes.integrate_noise_series(_STATE["td"])
+        series = None if series is None else series[skip:]
     elif mode == "ft":
-        y, phase, ft_out, positions, series = _run_ft(settings.get("ft") or {})
+        y_all, phase, ft_out, positions, series = _run_ft(settings.get("ft") or {}, skip)
     else:
         raise ValueError(f"Unsupported echo processing: {mode!r}")
+    t, y = t_all[skip:], y_all[skip:]                      # everything below (fits, ILT, MCMC, bootstrap) sees only these
 
     sigma = echoes.noise_sigma(series) if series is not None else None
     out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out, "spatial": None,
-           "decay": {"t": t, "y": y, "phase_deg": phase, "noise_sigma": sigma}, "multiexp": None, "ilt": None}
+           "decay": {"t": t_all, "y": y_all, "skip": skip, "phase_deg": phase, "noise_sigma": sigma}, "multiexp": None, "ilt": None}
 
     me = settings.get("multiexp") or {}
     if me.get("enabled"):
