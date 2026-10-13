@@ -149,7 +149,7 @@ def test_params_t1_section_and_settings():
     p = P.defaults()
     assert p["t1"] == {"components": 1, "offset": True, "compare": True}
     s, o = P.to_settings_t1(p)
-    assert s == T1_SETTINGS and o["bootstrap"]["do_ilt"] is False
+    assert s == {**T1_SETTINGS, "exclude_first": 0} and o["bootstrap"]["do_ilt"] is False
     with pytest.raises(ValueError, match="t1.components"):
         P.validate({"t1": {"components": 3}})
     back = P.from_settings(s, o)

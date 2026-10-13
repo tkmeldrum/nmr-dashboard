@@ -101,19 +101,22 @@ def decay_figure(res, mcmc=None, titles=True):
     t = np.asarray(res["decay"]["t"], float)
     y = np.asarray(res["decay"]["y"], float)
     fig, (ax, rax) = plt.subplots(2, 1, figsize=(7.2, 6), sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-    ax.plot(t, y, ".", color=_GREY, ms=3, label="data")
+    skip = res["decay"].get("skip", 0)
+    ax.plot(t[skip:], y[skip:], ".", color=_GREY, ms=3, label="data")
+    if skip:
+        ax.plot(t[:skip], y[:skip], "o", mfc="none", mec=_GREY, ms=4, label=f"excluded ({skip})")
     t1 = res.get("mode") == "t1"
     me = (res.get("multiexp") or {}).get("selected")
     if me:
         ax.plot(me["t_dense"], me["fit_dense"], color=_ORANGE, lw=1.8, label=f"{me['n']}-exponential " + ("recovery fit" if t1 else "fit"))
-        rax.plot(t, me["resid"], color=_ORANGE, lw=0.8)
+        rax.plot(t[skip:], me["resid"], color=_ORANGE, lw=0.8)
     if mcmc and mcmc.get("predictive"):
         pr = mcmc["predictive"]
         ax.fill_between(pr["t"], pr["lo"], pr["hi"], color=_ORANGE, alpha=0.25, lw=0, label=f"MCMC {round(100 * mcmc['level'])}% band")
     il = res.get("ilt")
     if il:
-        ax.plot(t, il["pred"], "--", color=_GREEN, lw=1.6, label="ILT fit")
-        rax.plot(t, il["resid"], color=_GREEN, lw=0.8)
+        ax.plot(t[skip:], il["pred"], "--", color=_GREEN, lw=1.6, label="ILT fit")
+        rax.plot(t[skip:], il["resid"], color=_GREEN, lw=0.8)
     rax.axhline(0, color="#222222", lw=1.6, zorder=1)             # bold zero line: where the residuals fall relative to 0
     rax.set_xlabel("Delay (s)" if t1 else "Echo time (s)")
     ax.set_ylabel("Signal (arb.)")

@@ -116,21 +116,26 @@ sample-data explorer; CI and Pages deploy.
 
 **Next (see `docs/PLAN.md` for the original phasing):**
 
-1. **PED analysis** (deferred at Tyler's request): port `PED/t2_analysis_real_data.py` (`PED_LBFGS`, `T2Analyzer`) from PyTorch to numpy/scipy L-BFGS,
+1. **Regularised inversion, replacing the ILT-only option** (flagged by Tyler, 2026-10-13): one "Regularised inversion" analysis
+   with a choice of penalty, each a checkbox so they can be compared on one plot: smoothing (the current MATLAB-matched ILT),
+   **L1**, **L2**, **SqrtLasso**, **ElasticNet** and **PED**. These are the regularisers already in `PED/t2_analysis_real_data.py`
+   (`PED_LBFGS`: softplus-positive weights, L-BFGS). It needs the PED port below as its engine; the page, params file,
+   bootstrap and provenance would then treat every penalty alike.
+2. **PED analysis** (deferred at Tyler's request): port `PED/t2_analysis_real_data.py` (`PED_LBFGS`, `T2Analyzer`) from PyTorch to numpy/scipy L-BFGS,
    keeping the regularisers (None, L1, L2, PED, ElasticNet, SQRLasso), with a **parity test against the PyTorch
    original** (needs PyTorch locally; not run in CI).
-2. ~~Uncertainty tab: MCMC and bootstrap~~ **done on branch `uncertainty`** (see the pull request); still to do: bootstrap
+3. ~~Uncertainty tab: MCMC and bootstrap~~ **done on branch `uncertainty`** (see the pull request); still to do: bootstrap
    bands for PED spectra once PED exists, and MCMC/bootstrap at *every* z position (today: one position at a time).
-3. **Plot controls and saving**: common plot settings (axis scale and limits, time units, fonts, line widths, colormap,
+4. **Plot controls and saving**: common plot settings (axis scale and limits, time units, fonts, line widths, colormap,
    figure size, a "no title" option for publication figures). Save numeric results (CSV) and figures (PNG/SVG/PDF,
    rendered with matplotlib) into a `processed_<timestamp>/` folder inside the data folder (Chrome/Edge via the File
    System Access API, or another folder the user picks); other browsers get a `.zip`. A `processing.json` records
    every setting plus the `nmrdash` version for reproducibility. *Needs testing in a real Chrome.*
-4. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
+5. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
    import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.
-5. **T₂–D (SSE-T2)**: next. The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
-6. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
-7. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
+6. **T₂–D (SSE-T2)**: next. The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
+7. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
+8. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
    others) and the NN-decays / T2-D formats from `pythonic/`; make `pythonic/` import from `nmrdash`; slim CI time.
 
 ## Run it on your own computer (command line, params file, batch)
@@ -149,6 +154,10 @@ nmrdash batch params.toml  data/series --list     # just list the datasets and t
 - **From the page:** the **Export params + script** button (Process and Uncertainty tabs) downloads a `params.toml` holding
   exactly the settings currently on the page, plus `process_nmr.py`, a short runner (`python process_nmr.py DATA_FOLDER`, add
   `--batch` for a folder of datasets). Use `defaults` in place of a params file to run with the built-in defaults.
+- **Excluding the first points:** `[processing] exclude_first = n` (or the "Exclude the first n echoes" field on the Process tab; for T1 it counts
+  delays) leaves the first n points out of **every** analysis: multi-exponential fit, ILT, per-position fits, MCMC, bootstrap and the noise estimate.
+  They are still plotted (open markers) and written to `decay.csv` with `included_in_fits = 0`. The first echo is often distorted: on `CPMG_EtGly`
+  (FT window sum) excluding just echo 1 cuts the MSE sixfold and moves T₂ from 3.85e-2 ± 0.76e-2 to 2.68e-2 ± 0.15e-2 s.
 - **Params file** (`nmrdash/params.py` is the single definition): sections `processing`, `ft`, `multiexp`, `ilt`,
   `uncertainty`, `mcmc`, `bootstrap`, `output`, `batch`; every setting is commented in the generated file, unknown names and
   out-of-range values are rejected with a message naming the setting, and `"auto"` means the same rule the page uses.

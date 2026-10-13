@@ -35,6 +35,7 @@ export function initProcessDefaults(raw) {
   $("ft-minsig").value = 5;
   showMsg("");
   $("run-status").textContent = "";
+  $("exclude-first").value = 0;
 }
 
 function num(id, label) {
@@ -43,13 +44,21 @@ function num(id, label) {
   return v;
 }
 
+function excludeFirst() {
+  const n = state.result.kind === "t1" ? state.result.raw.n_points : state.result.raw.n_echoes;
+  const v = Math.round(num("exclude-first", "The number of excluded points"));
+  if (v < 0) throw new Error("The number of excluded points cannot be negative.");
+  if (v && n - v < 8) throw new Error(`Excluding ${v} of ${n} points leaves only ${n - v}; at least 8 are needed.`);
+  return v;
+}
+
 export function readSettings() {
   if (state.result.kind === "t1") {                           // saturation recovery: one or two components, no echo processing, no ILT
     const n = +$("me-n").value, offset = $("me-offset").checked;
     if (2 * n + offset + 2 > state.result.raw.n_points) throw new Error(`${n} component${n > 1 ? "s" : ""} need more delays than this dataset has (${state.result.raw.n_points}).`);
-    return { kind: "t1", multiexp: { enabled: true, n, offset, ci_level: +$("me-ci").value, compare: $("me-compare").checked } };
+    return { kind: "t1", exclude_first: excludeFirst(), multiexp: { enabled: true, n, offset, ci_level: +$("me-ci").value, compare: $("me-compare").checked } };
   }
-  const settings = { echo: document.querySelector('input[name="echo"]:checked').value };
+  const settings = { exclude_first: excludeFirst(), echo: document.querySelector('input[name="echo"]:checked').value };
   if (settings.echo === "ft") {
     const G = num("ft-G", "G"), zf = Math.round(num("ft-zf", "Zero-fill"));
     if (G <= 0) throw new Error("G must be positive.");
