@@ -211,3 +211,15 @@ def test_pipeline_errors_are_clear():
         mcmc_start({})
     with pytest.raises(ValueError, match="after an FT run"):
         boot_start({"target": "position"})
+
+
+def test_walkers_start_when_a_component_sits_on_the_edge_of_the_prior():
+    """Regression: a least-squares T2 at the upper bound (the data cannot pin it down) used to leave every start point outside the prior."""
+    from nmrdash.pipeline import load as _load
+    _load(DATA / "CPMG_EtGly" / "2")
+    res = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": False, "ci_level": 0.95, "compare": False}})
+    assert max(c["T2"] for c in res["multiexp"]["selected"]["components"]) > 0.2              # pinned at 10 x the longest time
+    mcmc_start({"target": "bulk", "nwalkers": 32, "steps": 200, "burn": 50, "seed": 0})
+    mcmc_step(200)
+    out = mcmc_finish({"fg": "#222", "grid": "#aaa"}, 100)
+    assert any("edge of the range" in w for w in out["warnings"])
