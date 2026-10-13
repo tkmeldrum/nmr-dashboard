@@ -5,9 +5,27 @@ import { ILT_EQUATION, meDefinitions, meEquation } from "./equations.js";
 
 const LINKS = {
   RSS: "https://en.wikipedia.org/wiki/Residual_sum_of_squares",
+  MSE: "https://en.wikipedia.org/wiki/Mean_squared_error",
   AIC: "https://en.wikipedia.org/wiki/Akaike_information_criterion",
   BIC: "https://en.wikipedia.org/wiki/Bayesian_information_criterion",
+  CHI2: "https://en.wikipedia.org/wiki/Reduced_chi-squared_statistic",
+  NRMSD: "https://en.wikipedia.org/wiki/Root-mean-square_deviation#Normalization",
 };
+const link = (text, href) => ({ text, href });
+const d1 = (x) => (x === null || x === undefined ? "—" : x.toFixed(1));
+
+// Rows for a (statistic, value, meaning) table; a statistic may be a link object.
+function statTable(el, rows) {
+  table(el, ["Statistic", "Value", "Meaning"], rows.map(([a, b, c]) => [a, b, c]));
+  // table() writes plain text; turn the statistic cells into links where asked
+  [...el.querySelectorAll("tr")].slice(1).forEach((tr, i) => {
+    const stat = rows[i][3];
+    if (stat) {
+      const td = tr.firstChild;
+      td.replaceChildren(Object.assign(document.createElement("a"), { textContent: rows[i][0], href: stat, target: "_blank", rel: "noopener noreferrer" }));
+    }
+  });
+}
 
 // headers: strings, or {text, href} for a link to an explanation
 function table(el, headers, rows) {
@@ -91,11 +109,18 @@ function renderSpatial(r) {
     Plotly.react("plot-sp-amp", amps, baseLayout("Amplitude vs position", "z (µm)", "Amplitude (arb.)"), CFG);
   }
 
+  $("card-sp-chi2").hidden = !me;
+  if (me) {
+    const base3 = baseLayout("Fit quality vs position", "z (µm)", "Reduced χ²");
+    Plotly.react("plot-sp-chi2", [{ x: me.z_um, y: me.chi2_red, mode: "lines+markers", name: "reduced χ²", marker: { size: 6, color: COLORS.blue }, line: { color: COLORS.blue }, connectgaps: false }],
+      { ...base3, showlegend: false, yaxis: { ...base3.yaxis, rangemode: "tozero" },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: COLORS.grey, dash: "dot" } }] }, CFG);
+  }
+
   const il = sp.ilt;
   for (const id of ["card-sp-ilt", "card-sp-iltsum", "card-sp-iltfrac"]) $(id).hidden = !il;
   if (il) {
     const z = il.z_um;
-    const zmap = il.tau.map((_, j) => il.spectra.map((row) => row[j]));      // [tau][position]
     const bandColors = ["#ffffff", COLORS.orange, COLORS.purple, "#56B4E9", "#F0E442"];
     const bandName = (b) => `peak ${fmtSci(b.t2_peak)} s`;
     // One track per ILT peak: the geometric-mean T2 inside that peak's band, so the lines follow the heat-map ridges.
@@ -103,11 +128,7 @@ function renderSpatial(r) {
       x: z, y: il.band_mean_T2[k], mode: "lines", name: bandName(b), connectgaps: false,
       line: { color: bandColors[k % bandColors.length], width: 2.5 },
     }));
-    Plotly.react("plot-sp-ilt", [
-      { type: "heatmap", x: z, y: il.tau, z: zmap, colorscale: "Viridis", colorbar: { title: "f" }, zsmooth: false },
-      ...tracks,
-    ], baseLayout("ILT T₂ distribution vs position", "z (µm)", "T₂ (s)",
-      { yaxis: { ...t2, type: "log", tickformat: ".0e", range: [Math.log10(il.tau[0]), Math.log10(il.tau[il.tau.length - 1])] } }), CFG);
+    renderViewer(il, tracks);
 
     const palette = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple, "#56B4E9"];
     Plotly.react("plot-sp-iltsum", il.bands.map((b, k) => ({
@@ -119,6 +140,86 @@ function renderSpatial(r) {
       x: z, y: il.band_fraction[k], name: bandName(b), mode: "lines", line: { color: palette[k % palette.length], width: 2 },
     })), baseLayout("Share of the signal in each ILT peak", "z (µm)", "Fraction", { yaxis: { ...t2, title: "Fraction", range: [0, 1], type: "linear" } }), CFG);
   }
+}
+
+// ── linked cross-section viewer: ILT map (centre), spectrum at a position (right), signal at a T2 (top) ──
+const view = { key: "", i: 0, j: 0 };
+
+function renderViewer(il, tracks) {
+  const gd = $("plot-sp-ilt"), z = il.z_um, tau = il.tau;
+  const np = z.length, nt = tau.length, key = `${np}x${nt}`;
+  const zi = $("view-z"), tj = $("view-t2");
+  if (view.key !== key) {                                   // new dataset or grid: start on the strongest position and its main peak
+    const tot = il.spectra.map((row) => row.reduce((a, v) => a + (v ?? 0), 0));
+    view.i = tot.indexOf(Math.max(...tot));
+    const row = il.spectra[view.i].map((v) => v ?? -Infinity);
+    view.j = row.indexOf(Math.max(...row));
+    view.key = key;
+  }
+  zi.max = np - 1; zi.value = view.i;
+  tj.max = nt - 1; tj.value = view.j;
+
+  const zmap = tau.map((_, j) => il.spectra.map((row) => row[j]));            // [tau][position]
+  const colAt = (j) => il.spectra.map((row) => row[j]);                        // signal vs z at one T2
+  const grid = baseLayout("", "", "").xaxis;
+  const withData = z.filter((_, p) => il.spectra[p].some((v) => v !== null && v > 0));
+  const pad = withData.length > 1 ? 0.08 * (withData[withData.length - 1] - withData[0]) : 5;
+  const zRange = withData.length ? [withData[0] - pad, withData[withData.length - 1] + pad] : [z[0], z[np - 1]];   // zoom to where there is signal
+  const iTop = 1 + tracks.length, iRight = iTop + 1;
+  const data = [
+    { type: "heatmap", x: z, y: tau, z: zmap, colorscale: "Viridis", zsmooth: false, xaxis: "x", yaxis: "y",
+      colorbar: { title: "f", len: 0.7, y: 0, yanchor: "bottom", x: 1.02 }, hovertemplate: "z %{x:.1f} µm<br>T₂ %{y:.2e} s<br>f %{z:.3g}<extra></extra>" },
+    ...tracks.map((t) => ({ ...t, xaxis: "x", yaxis: "y" })),
+    { x: z, y: colAt(view.j), xaxis: "x2", yaxis: "y2", mode: "lines", line: { color: COLORS.blue, width: 2 }, name: "signal at T₂", connectgaps: false },
+    { x: il.spectra[view.i], y: tau, xaxis: "x3", yaxis: "y3", mode: "lines", line: { color: COLORS.green, width: 2 }, name: "spectrum at z", connectgaps: false },
+  ];
+  const cross = { color: "rgba(255,255,255,0.9)", width: 1, dash: "dot" };
+  const mark = { color: COLORS.orange, width: 1.5, dash: "dot" };
+  const L = (j) => tau[j];                    // shape coordinates on a log axis are data values
+  const layout = {
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: baseLayout("", "", "").font,
+    margin: { l: 65, r: 90, t: 15, b: 50 }, showlegend: false, hovermode: "closest",
+    xaxis: { ...grid, title: "z (µm)", domain: [0, 0.74], anchor: "y", range: zRange },
+    yaxis: { ...grid, title: "T₂ (s)", type: "log", tickformat: ".0e", domain: [0, 0.7], anchor: "x", range: [Math.log10(tau[0]), Math.log10(tau[nt - 1])] },
+    xaxis2: { ...grid, domain: [0, 0.74], anchor: "y2", matches: "x", showticklabels: false },
+    yaxis2: { ...grid, title: "Signal", domain: [0.77, 1], anchor: "x2" },
+    xaxis3: { ...grid, title: "Signal", domain: [0.8, 1], anchor: "y3" },
+    yaxis3: { ...grid, domain: [0, 0.7], anchor: "x3", type: "log", matches: "y", showticklabels: false },
+    shapes: [
+      { type: "line", xref: "x", yref: "y domain", x0: z[view.i], x1: z[view.i], y0: 0, y1: 1, line: cross },
+      { type: "line", xref: "x domain", yref: "y", x0: 0, x1: 1, y0: L(view.j), y1: L(view.j), line: cross },
+      { type: "line", xref: "x2", yref: "y2 domain", x0: z[view.i], x1: z[view.i], y0: 0, y1: 1, line: mark },
+      { type: "line", xref: "x3 domain", yref: "y3", x0: 0, x1: 1, y0: L(view.j), y1: L(view.j), line: mark },
+    ],
+  };
+  Plotly.react(gd, data, layout, CFG);
+
+  const update = () => {
+    $("view-z-out").textContent = `${z[view.i].toFixed(1)} µm`;
+    $("view-t2-out").textContent = `${fmtSci(tau[view.j])} s`;
+    Plotly.restyle(gd, { x: [z], y: [colAt(view.j)] }, [iTop]);
+    Plotly.restyle(gd, { x: [il.spectra[view.i]], y: [tau] }, [iRight]);
+    Plotly.relayout(gd, {
+      "shapes[0].x0": z[view.i], "shapes[0].x1": z[view.i], "shapes[2].x0": z[view.i], "shapes[2].x1": z[view.i],
+      "shapes[1].y0": L(view.j), "shapes[1].y1": L(view.j), "shapes[3].y0": L(view.j), "shapes[3].y1": L(view.j),
+    });
+  };
+  const nearest = (arr, v, log = false) => arr.reduce((best, x, k) => (Math.abs((log ? Math.log(x) : x) - (log ? Math.log(v) : v)) < Math.abs((log ? Math.log(arr[best]) : arr[best]) - (log ? Math.log(v) : v)) ? k : best), 0);
+  zi.oninput = () => { view.i = +zi.value; update(); };
+  tj.oninput = () => { view.j = +tj.value; update(); };
+  gd.removeAllListeners?.("plotly_click");
+  gd.on("plotly_click", (ev) => {                          // click the map to move both cuts; click a side panel to move one
+    const pt = ev.points && ev.points[0];
+    if (!pt) return;
+    const axis = pt.data.xaxis || "x";                     // heatmap and peak tracks are on "x"; the top panel is "x2", the spectrum "x3"
+    if (axis === "x") { view.i = nearest(z, pt.x); view.j = nearest(tau, pt.y, true); }
+    else if (axis === "x2") view.i = nearest(z, pt.x);
+    else if (axis === "x3") view.j = nearest(tau, pt.y, true);
+    zi.value = view.i; tj.value = view.j;
+    update();
+  });
+  $("view-z-out").textContent = `${z[view.i].toFixed(1)} µm`;
+  $("view-t2-out").textContent = `${fmtSci(tau[view.j])} s`;
 }
 
 // ── decay + fits (integrated decay, or the FT window sum) ────────────────
@@ -185,12 +286,32 @@ function renderMultiexp(r) {
   } else {
     extra.push(`amplitude-weighted mean T₂ ${fmtSci(me.mean_T2)} s (uncertainty undetermined)`);
   }
-  extra.push(`residual SD ${fmt(me.resid_sd)}`, `R² ${fmt(me.r2, 5)}`, `${me.dof} degrees of freedom`);
   $("me-stats").textContent = extra.join(" · ");
 
+  const sig = me.noise_sigma;
+  statTable($("me-quality"), [
+    ["RSS", fmtSci(me.rss), "Σ residual²; grows with amplitude² and with the number of echoes", LINKS.RSS],
+    ["MSE", fmtSci(me.mse), "RSS / N; removes the echo count but still scales with amplitude²", LINKS.MSE],
+    ["Residual SD", fmt(me.resid_sd), "√(RSS / (N − k)), in signal units"],
+    ["Residual SD / amplitude", me.resid_sd_over_amp === null ? "—" : pct(me.resid_sd_over_amp, 2),
+      "residual SD ÷ the fitted signal range (max − min over the echoes); independent of amplitude and echo count", LINKS.NRMSD],
+    ["Noise σ", sig ? fmt(sig) : "—", sig ? "from the imaginary channel after phasing (model-free)" : "unavailable: the data has no imaginary channel"],
+    ["Reduced χ²", me.chi2_red === null ? "—" : fmt(me.chi2_red), "RSS / (σ²(N − k)); ≈ 1 when the model explains everything the noise allows", LINKS.CHI2],
+    ["R²", fmt(me.r2, 5), "fraction of variance explained (depends on how much of the decay was sampled)"],
+    ["Degrees of freedom", String(me.dof), "N − k"],
+  ]);
+  $("quality-note").textContent = me.chi2_red === null ? "" :
+    me.chi2_red > 2 ? "Reduced χ² well above 1: the model is missing structure in the decay (or the noise estimate is too low)."
+    : me.chi2_red < 0.5 ? "Reduced χ² well below 1: the noise estimate is probably too high, or the fit is over-parameterised."
+    : "Reduced χ² is close to 1: the residuals are consistent with the measured noise.";
+
   const best = r.multiexp.recommended_n;
-  table($("me-compare-table"), ["Components", "Parameters", { text: "RSS", href: LINKS.RSS }, { text: "AIC", href: LINKS.AIC }, { text: "BIC", href: LINKS.BIC }, ""],
-    r.multiexp.comparison.map((c) => [String(c.n), String(c.n_params), fmt(c.rss), fmt(c.aic, 5), fmt(c.bic, 5),
+  table($("me-compare-table"),
+    ["Components", "Parameters", link("RSS", LINKS.RSS), link("MSE", LINKS.MSE), link("Residual SD / amplitude", LINKS.NRMSD),
+     link("Reduced χ²", LINKS.CHI2), link("ΔAIC", LINKS.AIC), link("ΔBIC", LINKS.BIC), ""],
+    r.multiexp.comparison.map((c) => [String(c.n), String(c.n_params), fmtSci(c.rss), fmtSci(c.mse),
+      c.resid_sd_over_amp === null ? "—" : pct(c.resid_sd_over_amp, 2), c.chi2_red === null ? "—" : fmt(c.chi2_red),
+      d1(c.d_aic), d1(c.d_bic),
       [c.n === me.n ? "shown above" : "", c.n === best ? "lowest BIC" : ""].filter(Boolean).join(", ")]));
 }
 
@@ -219,6 +340,14 @@ function renderIlt(r) {
   const xaxis = { ...base.xaxis, type: "log", dtick: 1, tickformat: ".0e", range: [Math.log10(il.t2_min), Math.log10(il.t2_max)] };
   Plotly.react("plot-spectrum", traces, { ...base, xaxis }, CFG);
   $("ilt-stats").textContent = `α = ${fmtSci(il.alpha)} · ${il.n_steps} grid points (max ${r.settings.ilt.n_steps}) · T₂ ${fmtSci(il.t2_min)}–${fmtSci(il.t2_max)} s · RMSE ${fmt(il.rmse)}`;
+  statTable($("ilt-quality"), [
+    ["RSS", fmtSci(il.rss), "Σ residual²", LINKS.RSS],
+    ["MSE", fmtSci(il.mse), "RSS / N", LINKS.MSE],
+    ["RMSE / amplitude", il.rmse_over_amp === null ? "—" : pct(il.rmse_over_amp, 2), "RMSE ÷ the fitted signal range (max − min over the echoes)", LINKS.NRMSD],
+    ["Noise σ", il.noise_sigma ? fmt(il.noise_sigma) : "—", "from the imaginary channel"],
+    ["χ² per point", il.chi2_per_point === null ? "—" : fmt(il.chi2_per_point),
+      "RSS / (σ² N); regularisation has no clean parameter count, so this is not a reduced χ²", LINKS.CHI2],
+  ]);
   table($("ilt-peaks"), ["Peak T₂ (s)", "Mean T₂ of peak (s)", "Fraction of signal"],
     il.peaks.length ? il.peaks.map((p) => [fmtSci(p.T2_peak), fmtSci(p.T2_mean), pct(p.fraction)]) : [["no resolved peaks", "", ""]]);
 

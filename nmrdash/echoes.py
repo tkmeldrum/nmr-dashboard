@@ -2,6 +2,27 @@
 import numpy as np
 
 
+def noise_sigma(im):
+    """Noise SD of a decay from the imaginary channel (robust MAD estimate, one value per echo).
+
+    After zero-order phasing the imaginary channel holds only noise, so its scatter measures the
+    noise on the real decay without needing any model. Returns None if it cannot be measured.
+    """
+    im = np.asarray(im, float)
+    if im.size < 8:
+        return None
+    sigma = 1.4826 * float(np.median(np.abs(im - np.median(im))))
+    return sigma if np.isfinite(sigma) and sigma > 0 else None
+
+
+def integrate_noise(td):
+    """Noise SD of the integrated decay (see noise_sigma); None for real-valued data."""
+    td = np.asarray(td)
+    if not np.iscomplexobj(td):
+        return None
+    return noise_sigma((td * np.exp(-1j * np.angle(td.sum()))).imag.sum(axis=0))
+
+
 def integrate(td):
     """Phase-correct and integrate each echo.
 
@@ -106,3 +127,20 @@ def position_decays(S, idx):
     if np.iscomplexobj(X):
         X = X * np.exp(-1j * np.angle(X.sum(axis=1)))[:, None]
     return X.real
+
+
+def window_noise(S, z_um, z_min, z_max):
+    """Noise SD of the window-summed decay, from the imaginary channel of the phased spectrum."""
+    if not np.iscomplexobj(S):
+        return None
+    mask = (z_um >= z_min) & (z_um <= z_max)
+    return noise_sigma(S[mask].sum(axis=0).imag)
+
+
+def position_noise(S, idx):
+    """Noise SD at each chosen z (NaN where it cannot be measured), matching position_decays' phasing."""
+    X = S[idx]
+    if not np.iscomplexobj(X):
+        return np.full(len(idx), np.nan)
+    X = X * np.exp(-1j * np.angle(X.sum(axis=1)))[:, None]
+    return np.array([noise_sigma(row) or np.nan for row in X.imag])

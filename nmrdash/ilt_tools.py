@@ -52,12 +52,19 @@ def band_edges(tau, spectrum, min_fraction=PEAK_MIN_FRACTION):
 
 
 def run(t, y, t2_min, t2_max, n_steps, alpha, sweep=False,
-        peak_min_fraction=PEAK_MIN_FRACTION, sweep_range=DEFAULT_SWEEP):
+        peak_min_fraction=PEAK_MIN_FRACTION, sweep_range=DEFAULT_SWEEP, sigma=None):
     """n_steps is a maximum: the grid is also capped at the number of echoes."""
     n_steps = min(int(n_steps), STEPS_LIMIT)
     spectrum, tau, pred, resid, rmse = run_1dilt(
         y, t, {"ILTminmax": [t2_min, t2_max], "nrILTSteps": n_steps}, alpha=alpha)
+    rss = float(np.sum(np.asarray(resid) ** 2))
+    amp = float(np.ptp(pred))                           # fitted signal range over the sampled echoes (as in multiexp)
     out = {
+        "rss": rss, "mse": rss / len(t), "signal_range": amp,
+        "rmse_over_amp": float(rmse) / amp if amp > 0 else None,
+        "noise_sigma": sigma,
+        # the regularised fit has no clean parameter count, so this is chi-square per point, not reduced chi-square
+        "chi2_per_point": rss / (sigma ** 2 * len(t)) if sigma else None,
         "alpha": alpha, "t2_min": t2_min, "t2_max": t2_max, "n_steps": len(tau),
         "tau": tau, "spectrum": spectrum, "pred": pred, "resid": resid, "rmse": float(rmse),
         "peaks": summarize_peaks(tau, spectrum, peak_min_fraction), "sweep": None,
