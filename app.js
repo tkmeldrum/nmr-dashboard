@@ -5,6 +5,7 @@ import { initRaw, renderRaw } from "./raw.js";
 import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
 import { handleReply } from "./rpc.js";
+import { initProvenance, refreshProvenance } from "./provenance.js";
 import { initUncertainty, resetUncertainty, runUncertainty } from "./uncertainty.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ worker.onmessage = (e) => {
     $("next-results").disabled = false;
     $("next-results").textContent = "Results →";
     resetUncertainty();
+    refreshProvenance();
     showTab("results");
     runUncertainty();                       // MCMC / bootstrap, if requested on the Uncertainty tab (asks first)
   } else if (m.type === "error") {
@@ -122,6 +124,8 @@ function resetSections() {
   hideMessage();
   $("params-section").hidden = true;
   state.result = state.results = null;
+  state.provenance = null;
+  $("prov-details").hidden = true;
   resetUncertainty();
   for (const t of ["raw", "process", "uncertainty", "results"]) setTabEnabled(t, false);
   $("next-results").disabled = true;
@@ -293,4 +297,5 @@ initRaw();
 initProcess();
 initResults();
 initUncertainty();
+initProvenance();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderRaw(); renderResults(); });

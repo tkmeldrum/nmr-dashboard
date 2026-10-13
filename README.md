@@ -64,8 +64,10 @@ index.html, style.css, *.js      the page (plain ES modules, no build step)
   results.js    results, fit tables, linked ILT viewer        equations.js model equations
   plotutil.js   plot styling, number formatting               state.js     shared state
 worker.js       Pyodide in a Web Worker (load / process messages, progress)
-nmrdash/        the Python package (also runs on a desktop: pip install -e .)
+nmrdash/        the Python package (also runs on a desktop: pip install -e .; its command is `nmrdash`)
   kea_io.py echoes.py multiexp.py ilt.py ilt_tools.py spatial.py pipeline.py constants.py display_params.py
+  uncertainty.py (MCMC, bootstrap)   params.py (the params file)   runner.py cli.py (run, batch)
+  outputs.py figures.py formatting.py (results on disk)   provenance.py export.py
 tests/          pytest: synthetic recovery tests, statistics invariance tests, every sample dataset
 test_data/      sample Kea datasets (PUBLIC, see below)
 tools/          build_site.py (assembles the deployable site), dev_server.py (local server)
@@ -93,7 +95,7 @@ Deploys: every push to `main` runs the tests, builds the site and publishes it t
 
 ## Status and roadmap
 
-**Done:** load and raw display; MCMC and bootstrap (on the `uncertainty` branch, not yet merged); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
+**Done:** load and raw display; MCMC and bootstrap (branch `uncertainty`, not yet merged); command-line tool, params file, batch/time-series and provenance (branch `script-export`, built on top of it); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
 tables and α sweep; spatially resolved fits with a linked cross-section viewer; fit-quality statistics; tabbed workflow;
 sample-data explorer; CI and Pages deploy.
 
@@ -109,13 +111,50 @@ sample-data explorer; CI and Pages deploy.
    rendered with matplotlib) into a `processed_<timestamp>/` folder inside the data folder (Chrome/Edge via the File
    System Access API, or another folder the user picks); other browsers get a `.zip`. A `processing.json` records
    every setting plus the `nmrdash` version for reproducibility. *Needs testing in a real Chrome.*
-4. **Export a processing script**: generate a standalone Python script from the settings chosen in the browser, so the
-   same analysis can run on local hardware (faster, no browser limits), and extend it to **batch and time-series** data.
-   The settings are already one JSON object and `nmrdash` is pip-installable, so the script is mostly that JSON plus
-   `load()` / `process()` calls in a loop.
+4. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
+   import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.
 5. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
 6. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
    others) and the NN-decays / T2-D formats from `pythonic/`; make `pythonic/` import from `nmrdash`; slim CI time.
+
+## Run it on your own computer (command line, params file, batch)
+
+The same code the page runs is a normal Python package with a command-line tool, so an analysis can be repeated on local
+hardware, on many datasets, or on a cluster.
+
+```bash
+pip install "nmrdash[mcmc] @ git+https://github.com/tkmeldrum/nmr-dashboard"     # once (or pip install -e . in a checkout)
+nmrdash params -o params.toml                  # a fully commented params file to edit
+nmrdash run   params.toml  data/CPMG/1         # one dataset: a folder with acqu.par + data.2d
+nmrdash batch params.toml  data/series --jobs 8   # every dataset under a folder (a time series), 8 at a time
+nmrdash batch params.toml  data/series --list     # just list the datasets and their timestamps
+```
+
+- **From the page:** the **Export params + script** button (Process and Uncertainty tabs) downloads a `params.toml` holding
+  exactly the settings currently on the page, plus `process_nmr.py`, a short runner (`python process_nmr.py DATA_FOLDER`, add
+  `--batch` for a folder of datasets). Use `defaults` in place of a params file to run with the built-in defaults.
+- **Params file** (`nmrdash/params.py` is the single definition): sections `processing`, `ft`, `multiexp`, `ilt`,
+  `uncertainty`, `mcmc`, `bootstrap`, `output`, `batch`; every setting is commented in the generated file, unknown names and
+  out-of-range values are rejected with a message naming the setting, and `"auto"` means the same rule the page uses.
+- **Where results go:** a `processed_<timestamp>` folder **inside each data folder** (raw data is never touched; re-running
+  never overwrites, it adds `-2`, `-3`, …), or under `output.directory` / `--out`. It holds CSV tables (decay, fit components
+  with intervals, fit quality, model comparison, ILT spectrum / peaks / α sweep, FT profile and per-position tables, MCMC and
+  bootstrap summaries and samples), figures (`png`/`pdf`/`svg`; titles can be switched off), `summary.md` (readable, same
+  number formatting as the page), `params_used.toml` (the resolved settings, runnable again) and `provenance.json`.
+- **Batch:** every folder under the root holding `acqu.par` is a dataset (results folders are skipped), sorted by its
+  `data.2d` modification time. `batch_summary.csv` has a row per dataset with `timestamp_utc`, `timestamp_local`,
+  **`elapsed_min`** (from the first dataset, a date-time you set, or none: `[batch] t0`), status, fit results and ILT peaks;
+  `timeseries.png` plots the T₂ components and amplitude against elapsed time. A dataset that cannot be processed (for
+  example non-CPMG data) is recorded as skipped or failed and never stops the rest. If copying files reset the
+  modification times, give the real ones in a CSV (`folder,timestamp`) with `[batch] timestamps_file`.
+- **Provenance** (script **and** page): `provenance.json` records the input files with **SHA-256**, the fully resolved
+  settings, the exact params file text, the `acqu.par` values that matter, random seeds, the `nmrdash` version and commit
+  (flagged if the checkout had uncommitted changes), Python / numpy / scipy / matplotlib / emcee versions and the platform
+  (for the page: Pyodide and the browser), the command line, and warnings raised. On the page, **Results → How these results
+  were produced** shows it and downloads it; it is refreshed after MCMC / bootstrap runs.
+- **Reproducibility note:** the page and a local run give the same result up to the numerical libraries' rounding
+  (the page runs numpy 2.0 / scipy 1.14 under Pyodide). On a test dataset the fitted T₂ agrees to ~3×10⁻⁷ relative, far below
+  its uncertainty; the recorded versions explain any such difference.
 
 ## How the long jobs work
 
