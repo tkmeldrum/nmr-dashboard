@@ -52,7 +52,8 @@ export function initT2dDefaults(r) {
   $("t2d-equation").innerHTML = T2D_EQUATION;
   const b = r.raw.b_vec.map((x) => x * 1e9), [lo, hi] = resolvableD(r.raw.b_vec);
   $("t2d-window-hint").textContent = `Your b-values (${Math.min(...b).toExponential(1)} – ${Math.max(...b).toExponential(1)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
-    "The range above is yours to choose, but outside this one the solution is regularisation, not data.";
+    "The range above is yours to choose, but outside this one the solution is regularisation, not data." +
+    " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ.";
   showMsg("");
   $("run-status").textContent = "";
 }

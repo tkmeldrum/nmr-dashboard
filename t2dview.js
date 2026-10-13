@@ -32,7 +32,8 @@ export function renderT2d(r) {
   if (t.fraction_in_sensitive_window !== null && t.fraction_in_sensitive_window < 0.9) {
     msgs.push(`Only ${pct(t.fraction_in_sensitive_window, 0)} of the spectrum lies where the data can constrain it. Your b-values (${fmtSci(bmin)} – ${fmtSci(bmax)} s/m²) can tell apart diffusion ` +
       `coefficients from about ${fmtSci(lo)} to ${fmtSci(hi)} m²/s; signal the regularised solution places outside that range (the hatched band on the map) is extrapolation, not measurement. ` +
-      "Use “Use the range the b-values can resolve” on the Process tab and run again to see only what the data support.");
+      "Use “Use the range the b-values can resolve” on the Process tab and run again to see only what the data support."
+      + " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ.");
   }
   const edge = t.peaks.filter((p) => p.D_peak <= t.D[0] * 1.0001 || p.D_peak >= t.D[t.D.length - 1] * 0.9999 || p.T2_peak <= t.T2[0] * 1.0001 || p.T2_peak >= t.T2[t.T2.length - 1] * 0.9999);
   if (edge.length) msgs.push(`${edge.length} region${edge.length > 1 ? "s peak" : " peaks"} at the edge of the grid: signal may extend beyond the range you chose, so widen it to check.`);
