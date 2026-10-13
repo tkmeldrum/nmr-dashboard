@@ -182,6 +182,7 @@
   <!-- shared by the Process and Uncertainty tabs -->
   <div id="run-bar" class="run-bar" hidden>
     <button type="button" id="run-btn">Run processing</button>
+    <button type="button" id="export-btn" class="secondary" title="Download a params.toml with these settings and a small script that runs the same analysis on your own computer (single dataset or a batch)">Export params + script</button>
     <progress id="run-progress" max="1" value="0" hidden></progress>
     <span id="run-status" class="status" role="status"></span>
     <p id="process-msg" class="message" hidden></p>
@@ -191,6 +192,13 @@
   <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" hidden>
     <h2>Results</h2>
     <p id="results-summary" class="note"></p>
+    <details id="prov-details" class="prov" hidden>
+      <summary>How these results were produced (provenance)</summary>
+      <ul id="prov-lines"></ul>
+      <p class="note">The full record also holds your settings, the acquisition parameters, the random seeds and the exact params file, so the analysis can be audited
+        and repeated. The command-line tool writes the same record next to every result.</p>
+      <p><button type="button" id="prov-download">Download provenance.json</button></p>
+    </details>
 
     <div id="ft-results" hidden>
       <h3>Spatial profile (FT of each echo)</h3>
