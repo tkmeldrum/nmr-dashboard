@@ -48,7 +48,7 @@ export function initT2dDefaults(r) {
   const d = r.defaults;
   $("t2d-t2min").value = d.t2_min; $("t2d-t2max").value = d.t2_max; $("t2d-t2steps").value = d.t2_steps;
   $("t2d-dmin").value = d.d_min; $("t2d-dmax").value = d.d_max; $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
-  $("t2d-alpha").value = d.alpha; $("t2d-peakthr").value = d.peak_threshold_pct;
+  $("t2d-alpha").value = +Math.log10(d.alpha).toFixed(3); $("t2d-peakthr").value = d.peak_threshold_pct;
   $("t2d-equation").innerHTML = T2D_EQUATION;
   const b = r.raw.b_vec.map((x) => x * 1e9), [lo, hi] = resolvableD(r.raw.b_vec);
   $("t2d-window-hint").textContent = `Your b-values (${Math.min(...b).toExponential(1)} – ${Math.max(...b).toExponential(1)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
@@ -77,13 +77,13 @@ export function readSettings() {
     const t = {
       t2_min: num("t2d-t2min", "T₂ min"), t2_max: num("t2d-t2max", "T₂ max"), t2_steps: Math.round(num("t2d-t2steps", "T₂ points")),
       d_min: num("t2d-dmin", "D min"), d_max: num("t2d-dmax", "D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
-      alpha: num("t2d-alpha", "α"), peak_threshold_pct: num("t2d-peakthr", "Region threshold"),
+      alpha: 10 ** num("t2d-alpha", "log10 α"), peak_threshold_pct: num("t2d-peakthr", "Region threshold"),
     };
     if (t.t2_min <= 0 || t.t2_max <= t.t2_min) throw new Error("T₂ min must be positive and smaller than T₂ max.");
     if (t.d_min <= 0 || t.d_max <= t.d_min) throw new Error("D min must be positive and smaller than D max.");
     if (t.t2_steps < 10 || t.t2_steps > 400) throw new Error("T₂ points must be between 10 and 400.");
     if (t.d_steps < 5 || t.d_steps > 200) throw new Error("D points must be between 5 and 200.");
-    if (t.alpha <= 0) throw new Error("α must be positive.");
+    if (t.alpha <= 0) throw new Error("α must be a finite positive number.");
     if (t.peak_threshold_pct < 0 || t.peak_threshold_pct > 100) throw new Error("The region threshold must be between 0 and 100%.");
     return { kind: "t2d", exclude_first: excludeFirst(), t2d: t };
   }
@@ -122,14 +122,14 @@ export function readSettings() {
     throw new Error(`${settings.multiexp.n} components need more echoes than this dataset has (${nEchoes}).`);
   }
   const t2min = num("ilt-t2min", "T₂ min"), t2max = num("ilt-t2max", "T₂ max");
-  const steps = Math.round(num("ilt-steps", "Max grid points")), alpha = num("ilt-alpha", "α");
+  const steps = Math.round(num("ilt-steps", "Max grid points")), alpha = 10 ** num("ilt-alpha", "log10 α");
   const thr = num("ilt-peakthr", "Peak threshold"), lo = num("ilt-sweep-lo", "α sweep start"), hi = num("ilt-sweep-hi", "α sweep end");
   if (il) {
     if (t2min <= 0 || t2max <= t2min) throw new Error("T₂ min must be positive and smaller than T₂ max.");
     if (steps < 10 || steps > STEPS_LIMIT) throw new Error(`Max grid points must be between 10 and ${STEPS_LIMIT}.`);
     if (thr < 0 || thr > 100) throw new Error("Peak threshold must be between 0 and 100%.");
     if ($("ilt-sweep").checked && lo >= hi) throw new Error("The α sweep must start below where it ends.");
-    if (alpha <= 0) throw new Error("α must be positive.");
+    if (alpha <= 0) throw new Error("α must be a finite positive number.");
   }
   settings.ilt = {
     enabled: il, t2_min: t2min, t2_max: t2max,
