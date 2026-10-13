@@ -276,7 +276,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       <button type="button" id="collapse-all" class="secondary">Collapse all</button>
     </div>
 
-    <details id="ft-results" class="section" open hidden>
+    <details id="ft-results" class="section" hidden>
       <summary><h3>Spatial profile (FT of each echo)</h3></summary>
       <p id="ft-stats" class="note"></p>
       <div class="plots">
@@ -286,7 +286,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       <details class="more"><summary>Show more</summary><div class="more-body"><p>Left: the signal summed over echoes against position z (the shaded band is the analysed window). Right: the magnitude of every echo after the transform. The map is drawn on the full zero-filled grid; zero-filling interpolates and adds no resolution, so the natural resolution (above) is what limits how finely features can be separated. + z is down, toward the magnet.</p></div></details>
     </details>
 
-    <details id="spatial-results" class="section" open hidden>
+    <details id="spatial-results" class="section" hidden>
       <summary><h3>Spatially resolved fits</h3></summary>
       <label><input type="checkbox" id="sp-linear"> linear T₂ axis</label>
       <div class="plots">
@@ -342,7 +342,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       </div>
     </details>
 
-    <details id="me-results" class="section" open hidden>
+    <details id="me-results" class="section" hidden>
       <summary><h3><span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Saturation-recovery fit (T₁)</span></h3></summary>
       <details class="more"><summary>Show the model</summary><div class="more-body"><p class="equation" id="me-equation"></p><p class="equation small" id="me-defs"></p></div></details>
       <div id="me-warnings"></div>
@@ -357,7 +357,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
         RSS and MSE scale with the signal amplitude (and RSS with the number of data points); residual SD / amplitude and reduced χ² do not.</p></div></details>
     </details>
 
-    <details id="ilt-results" class="section" open hidden>
+    <details id="ilt-results" class="section" hidden>
       <summary><h3>T₂ spectrum (ILT)</h3></summary>
       <div class="plot-card wide"><div id="plot-spectrum"></div></div>
       <p id="ilt-stats" class="note"></p>
@@ -367,7 +367,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       <details class="more"><summary>Show the model and how to read this plot</summary><div class="more-body"><p class="equation" id="ilt-equation"></p><p>Orange diamonds are the exponential components. Each is drawn at the height an ILT peak holding the same <em>amount</em> of signal would have (using the width of the nearest ILT peak), so when the two analyses agree a diamond sits on top of its peak; labels give the fractions. A diamond well above or below a peak means the analyses disagree about how much signal is there.</p></div></details>
     </details>
 
-    <details id="unc-results" class="section" open hidden>
+    <details id="unc-results" class="section" hidden>
       <summary><h3>Uncertainty: MCMC and bootstrap</h3></summary>
       <div id="unc-bar" class="unc-bar" hidden>
         <progress id="unc-progress" max="1" value="0"></progress>
