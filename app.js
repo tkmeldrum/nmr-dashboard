@@ -1,6 +1,7 @@
 // Main thread: worker plumbing, folder loading, tab flow.
 import { $, state } from "./state.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
+import { setBusy, withBusy } from "./busy.js";
 import { initRaw, renderRaw } from "./raw.js";
 import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
@@ -9,25 +10,29 @@ import { initProvenance, refreshProvenance } from "./provenance.js";
 import { initUncertainty, resetUncertainty, runUncertainty } from "./uncertainty.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
+setBusy("Starting Python (the first visit downloads about 30 MB; later visits are cached)…");
 const worker = new Worker("worker.js");
 state.worker = worker;
 worker.onmessage = (e) => {
   const m = e.data;
-  if (m.type === "status") $("status").textContent = m.text;
+  if (m.type === "status") { $("status").textContent = m.text; if (!state.ready || state.running) setBusy(m.text); }
   else if (m.type === "ready") {
     state.ready = true;
     $("status").textContent = "Python ready.";
+    setBusy(null);
     if (state.pending) { sendLoad(state.pending); state.pending = null; }
   } else if (m.type === "loaded") {
     state.result = m.result;
     $("status").textContent = "Python ready.";
     showResult(m.result);
+    setBusy(null);
   } else if (m.type === "reply") {
     handleReply(m);
   } else if (m.type === "progress") {
     setProgress(m.done, m.total);
   } else if (m.type === "processed") {
     state.results = m.result;
+    setBusy(null);
     setRunning(false, "Done.");
     setTabEnabled("results", true);
     $("next-results").disabled = false;
@@ -40,12 +45,14 @@ worker.onmessage = (e) => {
     $("status").textContent = "Python ready.";
     if (state.running) processFailed(m.text);
     else showMessage("Error: " + m.text, "error");
+    setBusy(null);
   }
 };
 worker.postMessage({ type: "init" });
 
 function sendLoad(payload) {
   $("status").textContent = "Reading data…";
+  setBusy("Reading and phasing the data…");
   worker.postMessage(
     { type: "load", files: payload.files, timestampMs: payload.timestampMs },
     Object.values(payload.files)
@@ -135,12 +142,15 @@ function resetSections() {
 async function openFolder(dir) {
   resetSections();
   state.dirHandle = dir.handle || null;
+  setBusy("Looking for datasets in the folder…");
   try {
     datasets = (await findDatasets(dir)).sort(byLabel);
   } catch (err) {
+    setBusy(null);
     return showMessage("Could not read that folder: " + err.message, "error");
   }
   if (!datasets.length) {
+    setBusy(null);
     return showMessage("No acqu.par found in that folder or the folders inside it. Is it a Kea data folder?", "warn");
   }
   const sel = $("dataset-select");
@@ -152,6 +162,7 @@ async function openFolder(dir) {
 async function openDataset(i) {
   const ds = datasets[i];
   hideMessage();
+  setBusy("Reading the files from disk…");
   const want = ["acqu.par", "data.2d"];
   const files = {};
   let timestampMs = null;
@@ -290,8 +301,9 @@ function showResult(r) {
 // ── tabs ──────────────────────────────────────────────────────────────────
 initTabs((name) => {
   $("run-bar").hidden = name !== "process" && name !== "uncertainty";     // one Run button for both option tabs
-  if (name === "raw") renderRaw();       // plots drawn while hidden have no width, so draw on show
-  if (name === "results") renderResults();
+  // plots drawn while hidden have no width, so draw on show (with an indicator: big heat maps take a moment)
+  if (name === "raw") withBusy("Drawing the raw-data plots…", renderRaw);
+  if (name === "results") withBusy("Drawing the results…", renderResults);
 });
 initRaw();
 initProcess();

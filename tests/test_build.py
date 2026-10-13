@@ -25,7 +25,7 @@ def test_build_bundles_site(tmp_path):
     app = (out / "app.js").read_text()
     assert 'worker.js?v=abc123' in app and 'from "./state.js?v=abc123"' in app
     assert not any('.js"' in line and line.startswith("import") for line in app.splitlines())
-    for js in ("state.js", "tabs.js", "raw.js", "process.js", "results.js", "plotutil.js", "rpc.js", "uncertainty.js", "provenance.js"):
+    for js in ("state.js", "tabs.js", "raw.js", "process.js", "results.js", "plotutil.js", "rpc.js", "uncertainty.js", "provenance.js", "busy.js"):
         assert (out / js).is_file()
     expected = sorted([p.name for p in (ROOT / "nmrdash").glob("*.py")] + ["_buildinfo.py"])
     assert json.loads((out / "nmrdash-files.json").read_text()) == sorted(set(expected))
