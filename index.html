@@ -73,15 +73,18 @@
         <label class="opt"><input type="radio" name="echo" value="integrate" checked> Integrate each echo
           <small>autophase, then sum all points of every echo into one decay</small></label>
         <label class="opt"><input type="radio" name="echo" value="ft"> FT each echo
-          <small>signal vs position z; the decay is the sum over a z-window</small></label>
+          <small>signal vs position z; the fits are then run at every z position</small></label>
         <div class="fields" id="ft-fields">
           <label>Nucleus <select id="ft-nucleus"><option value="1H">¹H (proton)</option><option value="19F">¹⁹F</option></select></label>
           <label>G (T/m) <input type="number" id="ft-G" step="any" min="0" value="23.7"></label>
           <label>Zero-fill (×2<sup>n</sup>) <input type="number" id="ft-zf" step="1" min="0" max="6" value="4"></label>
           <label>z-window min (µm) <input type="number" id="ft-zmin" step="any" placeholder="auto"></label>
           <label>max (µm) <input type="number" id="ft-zmax" step="any" placeholder="auto"></label>
+          <label>z spacing (µm) <input type="number" id="ft-spacing" step="any" min="0" placeholder="auto"></label>
           <small class="hint" id="ft-nucleus-note"></small>
-          <small class="hint">Leave the window blank to use the region where the profile exceeds 10% of its maximum.</small>
+          <small class="hint">Leave the window blank to use the region where the profile exceeds 10% of its maximum. Fits are done every
+            <em>z spacing</em> µm across the window; blank = the natural resolution 1/(points × dwell × γG), since zero-filling interpolates but adds no resolution.
+            The window-summed decay is also fitted, as a reference.</small>
         </div>
       </fieldset>
 
@@ -95,12 +98,14 @@
             <label><input type="checkbox" id="me-offset" checked> constant offset</label>
             <label>Confidence level <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option></select></label>
             <label><input type="checkbox" id="me-compare" checked> compare 1–4 components (BIC)</label>
+            <p class="equation" id="me-eq-form"></p>
           </div>
         </div>
 
         <div class="analysis">
           <label class="opt"><input type="checkbox" id="ilt-enabled" checked> Inverse Laplace transform (ILT)</label>
           <div class="fields" id="ilt-fields">
+            <p class="equation" id="ilt-eq-form"></p>
             <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
             <label>T₂ max (s) <input type="number" id="ilt-t2max" step="any" min="0"></label>
             <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
@@ -124,6 +129,7 @@
 
       <p class="run-row">
         <button type="submit" id="run-btn">Run processing</button>
+        <progress id="run-progress" max="1" value="0" hidden></progress>
         <span id="run-status" class="status" role="status"></span>
       </p>
       <p id="process-msg" class="message" hidden></p>
@@ -144,7 +150,21 @@
       </div>
     </div>
 
-    <h3>Decay and fits</h3>
+    <div id="spatial-results" hidden>
+      <h3>Spatially resolved fits</h3>
+      <p id="spatial-stats" class="note"></p>
+      <label><input type="checkbox" id="sp-linear"> linear T₂ axis</label>
+      <div class="plots">
+        <div class="plot-card" id="card-sp-t2"><div id="plot-sp-t2"></div></div>
+        <div class="plot-card" id="card-sp-amp"><div id="plot-sp-amp"></div></div>
+        <div class="plot-card" id="card-sp-ilt"><div id="plot-sp-ilt"></div></div>
+        <div class="plot-card" id="card-sp-iltsum"><div id="plot-sp-iltsum"></div></div>
+      </div>
+      <p class="note">Open markers: that position's fit was flagged (a poorly determined component or no uncertainty estimate).
+        Error bars are ± one standard error.</p>
+    </div>
+
+    <h3 id="fit-heading">Decay and fits</h3>
     <div class="plot-card wide">
       <div id="plot-fit" class="tall"></div>
       <label><input type="checkbox" id="fit-log"> log y-axis</label>
@@ -152,15 +172,22 @@
 
     <div id="me-results" hidden>
       <h3>Multi-exponential fit</h3>
+      <p class="equation" id="me-equation"></p>
+      <p class="equation small" id="me-defs"></p>
       <div id="me-warnings"></div>
       <div class="table-wrap"><table id="me-table" class="grid"></table></div>
       <p id="me-stats" class="note"></p>
       <h4>Model comparison</h4>
+      <p class="note">RSS is the <a href="https://en.wikipedia.org/wiki/Residual_sum_of_squares" target="_blank" rel="noopener noreferrer">residual sum of squares</a>.
+        <a href="https://en.wikipedia.org/wiki/Akaike_information_criterion" target="_blank" rel="noopener noreferrer">AIC</a> and
+        <a href="https://en.wikipedia.org/wiki/Bayesian_information_criterion" target="_blank" rel="noopener noreferrer">BIC</a>
+        score fit quality against the number of parameters (lower is better); BIC penalises extra parameters more strongly.</p>
       <div class="table-wrap"><table id="me-compare-table" class="grid"></table></div>
     </div>
 
     <div id="ilt-results" hidden>
       <h3>T₂ spectrum (ILT)</h3>
+      <p class="equation" id="ilt-equation"></p>
       <div class="plot-card wide"><div id="plot-spectrum"></div></div>
       <p id="ilt-stats" class="note"></p>
       <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>

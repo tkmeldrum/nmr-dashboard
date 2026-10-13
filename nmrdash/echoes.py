@@ -67,3 +67,34 @@ def window_decay(S, z_um, z_min, z_max):
     if not mask.any():
         raise ValueError("The z-window contains no points; widen it.")
     return S[mask].sum(axis=0).real
+
+
+def native_resolution_um(n_pts, dwell_us, gamma_mhz_per_t, g_t_per_m):
+    """Spatial resolution set by the acquisition window: 1/(n_pts*dwell) in Hz, converted to µm.
+
+    Zero-filling interpolates but does not add resolution, so neighbouring z points of the
+    FFT are not independent on scales finer than this.
+    """
+    return 1e6 / (n_pts * dwell_us) / (gamma_mhz_per_t * g_t_per_m)
+
+
+def position_indices(z_um, z_min, z_max, spacing_um, max_positions=400):
+    """Indices into z_um of the positions to analyse: z_min, z_min+spacing, ... <= z_max."""
+    if spacing_um <= 0:
+        raise ValueError("The z spacing must be positive.")
+    n = int(np.floor((z_max - z_min) / spacing_um + 1e-9)) + 1
+    if n > max_positions:
+        raise ValueError(f"{n} positions requested (maximum {max_positions}); increase the z spacing or narrow the window.")
+    targets = z_min + spacing_um * np.arange(n)
+    return np.unique(np.abs(z_um[None, :] - targets[:, None]).argmin(axis=1))
+
+
+def position_decays(S, idx):
+    """Decay at each chosen z, with its own zero-order phase so the signal is in the real channel.
+
+    Returns (n_positions, n_echoes).
+    """
+    X = S[idx]
+    if np.iscomplexobj(X):
+        X = X * np.exp(-1j * np.angle(X.sum(axis=1)))[:, None]
+    return X.real

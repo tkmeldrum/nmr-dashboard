@@ -1,11 +1,26 @@
-// Results tab: decay + fits, fit tables, ILT spectrum.
+// Results tab: spatial profile and per-position fits (FT mode), decay + fits, fit tables, ILT spectrum.
 import { $, state } from "./state.js";
-import { baseLayout, CFG, COLORS, fmt, fmtCI as fmtCIplain, fmtCISci, fmtPair, fmtSci, pct } from "./plotutil.js";
+import { baseLayout, CFG, COLORS, fmt, fmtCI as fmtCIplain, fmtCIWith, fmtPair, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
+import { ILT_EQUATION, meDefinitions, meEquation } from "./equations.js";
 
+const LINKS = {
+  RSS: "https://en.wikipedia.org/wiki/Residual_sum_of_squares",
+  AIC: "https://en.wikipedia.org/wiki/Akaike_information_criterion",
+  BIC: "https://en.wikipedia.org/wiki/Bayesian_information_criterion",
+};
+
+// headers: strings, or {text, href} for a link to an explanation
 function table(el, headers, rows) {
   const mk = (tag, text) => Object.assign(document.createElement(tag), { textContent: text });
   const head = document.createElement("tr");
-  headers.forEach((h) => head.appendChild(mk("th", h)));
+  headers.forEach((h) => {
+    const th = mk("th", typeof h === "string" ? h : "");
+    if (typeof h !== "string") {
+      const a = Object.assign(document.createElement("a"), { textContent: h.text, href: h.href, target: "_blank", rel: "noopener noreferrer", title: "Open an explanation (new tab)" });
+      th.appendChild(a);
+    }
+    head.appendChild(th);
+  });
   el.replaceChildren(head, ...rows.map((r) => {
     const tr = document.createElement("tr");
     r.forEach((c) => tr.appendChild(mk("td", c)));
@@ -13,13 +28,18 @@ function table(el, headers, rows) {
   }));
 }
 
+// error-bar arrays: missing or absurd (undetermined) uncertainties are not drawn
+const bars = (se, v) => se.map((x, i) => (okUnc(v[i], x) ? x : 0));
+const T2_AXIS = (linear) => (linear ? { type: "linear", tickformat: ".1e" } : { type: "log", tickformat: ".0e" });
+
+// ── FT: profile and echo map ──────────────────────────────────────────────
 function renderFt(r) {
   $("ft-results").hidden = !r.ft;
   if (!r.ft) return;
   const f = r.ft, [w0, w1] = f.window;
   const nuc = f.nucleus === "19F" ? "¹⁹F" : "¹H";
   $("ft-stats").textContent = `${nuc} (γ/2π = ${f.gamma_mhz_per_t} MHz/T), G = ${f.G} T/m, zero-fill ×2^${f.zero_fill} → ${f.nfft} points, ` +
-    `echo centre at point ${f.center_point}. Decay = sum over z from ${fmt(w0)} to ${fmt(w1)} µm${f.window_auto ? " (automatic: profile > 10% of max)" : ""}.`;
+    `echo centre at point ${f.center_point}. Window ${fmt(w0)} to ${fmt(w1)} µm${f.window_auto ? " (automatic: profile > 10% of max)" : ""}.`;
   const base = baseLayout("Spatial profile", "z (µm)", "|Σ echoes| (arb.)");
   Plotly.react("plot-profile", [{ x: f.z_um, y: f.profile, mode: "lines", name: "Profile", line: { color: COLORS.blue } }], {
     ...base, showlegend: false,
@@ -30,10 +50,60 @@ function renderFt(r) {
   Plotly.react("plot-ftmap", [{ type: "heatmap", z: h.mag, x: h.echo_idx.map((i) => t[i]), y: h.z_um, colorscale: "Viridis", colorbar: { title: "|S|" } }], base2, CFG);
 }
 
+// ── FT: fits at every z position ──────────────────────────────────────────
+function renderSpatial(r) {
+  const sp = r.spatial;
+  $("spatial-results").hidden = !sp;
+  if (!sp) return;
+  const f = r.ft, z = sp.z_um, linear = $("sp-linear").checked;
+  $("spatial-stats").textContent =
+    `${z.length} positions every ${fmt(f.spacing_um)} µm${f.spacing_auto ? " (the natural resolution)" : ""}. ` +
+    `Positions closer than the resolution of ${fmt(f.resolution_um)} µm are not independent measurements.`;
+  const t2 = baseLayout("", "z (µm)", "T₂ (s)").yaxis;
+
+  const me = sp.multiexp;
+  $("card-sp-t2").hidden = $("card-sp-amp").hidden = !me;
+  if (me) {
+    const sym = me.flag.map((fl, i) => (fl || !me.ok[i] ? "circle-open" : "circle"));
+    const palette = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple];
+    const label = (k) => (me.n === 1 ? "T₂" : `T₂,${k + 1}`);
+    const traces = me.T2.map((row, k) => ({
+      x: z, y: row, name: label(k), mode: "markers", marker: { color: palette[k], size: 7, symbol: sym },
+      error_y: { type: "data", array: bars(me.T2_se[k], me.T2[k]), visible: true, thickness: 1, color: palette[k] },
+    }));
+    if (me.n > 1) traces.push({ x: z, y: me.mean_T2, name: "mean T₂", mode: "lines", line: { color: COLORS.grey, dash: "dot", width: 2 } });
+    Plotly.react("plot-sp-t2", traces, baseLayout("T₂ vs position (multi-exponential)", "z (µm)", "T₂ (s)",
+      { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+
+    const amps = me.A.map((row, k) => ({
+      x: z, y: row, name: me.n === 1 ? "A" : `A${k + 1}`, mode: "markers", marker: { color: palette[k], size: 7, symbol: sym },
+      error_y: { type: "data", array: bars(me.A_se[k], me.A[k]), visible: true, thickness: 1, color: palette[k] },
+    }));
+    if (me.n > 1) amps.push({ x: z, y: me.total_amplitude, name: "total", mode: "lines", line: { color: COLORS.grey, width: 2 } });
+    Plotly.react("plot-sp-amp", amps, baseLayout("Amplitude vs position", "z (µm)", "Amplitude (arb.)"), CFG);
+  }
+
+  const il = sp.ilt;
+  $("card-sp-ilt").hidden = $("card-sp-iltsum").hidden = !il;
+  if (il) {
+    const zmap = il.tau.map((_, j) => il.spectra.map((row) => row[j]));      // [tau][position]
+    Plotly.react("plot-sp-ilt", [
+      { type: "heatmap", x: z, y: il.tau, z: zmap, colorscale: "Viridis", colorbar: { title: "f" }, zsmooth: false },
+      { x: z, y: il.mean_T2, mode: "lines", name: "mean T₂", line: { color: COLORS.orange, width: 2 } },
+    ], baseLayout("ILT T₂ distribution vs position", "z (µm)", "T₂ (s)",
+      { yaxis: { ...t2, type: "log", tickformat: ".0e", range: [Math.log10(il.tau[0]), Math.log10(il.tau[il.tau.length - 1])] } }), CFG);
+
+    Plotly.react("plot-sp-iltsum", [
+      { x: z, y: il.mean_T2, name: "ILT mean T₂ (geometric)", mode: "lines+markers", line: { color: COLORS.green }, marker: { size: 6 } },
+      { x: z, y: il.peak_T2, name: "ILT peak T₂", mode: "markers", marker: { color: COLORS.purple, symbol: "diamond", size: 7 } },
+    ], baseLayout("ILT T₂ surrogates vs position", "z (µm)", "T₂ (s)", { yaxis: { ...t2, ...T2_AXIS(linear) } }), CFG);
+  }
+}
+
+// ── decay + fits (integrated decay, or the FT window sum) ────────────────
 function renderFit(r) {
   const { t, y } = r.decay;
-  const grey = COLORS.grey;
-  const traces = [{ x: t, y, name: "Data", mode: "markers", marker: { size: 4, color: grey }, xaxis: "x", yaxis: "y" }];
+  const traces = [{ x: t, y, name: "Data", mode: "markers", marker: { size: 4, color: COLORS.grey }, xaxis: "x", yaxis: "y" }];
   const me = r.multiexp && r.multiexp.selected;
   if (me) {
     traces.push({ x: me.t_dense, y: me.fit_dense, name: `${me.n}-exp fit`, mode: "lines", line: { color: COLORS.orange, width: 2 } });
@@ -43,7 +113,9 @@ function renderFit(r) {
     traces.push({ x: t, y: r.ilt.pred, name: "ILT fit", mode: "lines", line: { color: COLORS.green, width: 2, dash: "dash" } });
     traces.push({ x: t, y: r.ilt.resid, name: "ILT residual", mode: "lines", line: { color: COLORS.green, width: 1 }, yaxis: "y2", showlegend: false });
   }
-  const base = baseLayout(r.mode === "ft" ? "Echo decay (FT, summed over z-window)" : "Echo decay (phased, integrated)", "Echo time (s)", "Signal (arb.)");
+  const ft = r.mode === "ft";
+  $("fit-heading").textContent = ft ? "Window-summed decay and fits" : "Decay and fits";
+  const base = baseLayout(ft ? "Echo decay (FT, summed over z-window)" : "Echo decay (phased, integrated)", "Echo time (s)", "Signal (arb.)");
   Plotly.react("plot-fit", traces, {
     ...base,
     margin: { ...base.margin, b: 70 },
@@ -60,36 +132,51 @@ function renderMultiexp(r) {
   if (!r.multiexp) return;
   const me = r.multiexp.selected;
   const lvl = Math.round(me.ci_level * 100);
-  const rows = me.components.map((c, i) => [
-    String(i + 1), fmtSci(c.T2), "± " + fmtSci(c.T2_se), fmtCISci(c.T2_ci),
-    fmt(c.A), fmtCIplain(c.A_ci), `${pct(c.fraction)} ± ${pct(c.fraction_se)}`,
-  ]);
+  $("me-equation").innerHTML = meEquation(me.n, me.offset);
+  $("me-defs").innerHTML = meDefinitions(me.n);
+  $("me-defs").hidden = me.n < 2;
+
+  // Each value, its SE and its interval share one base exponent (e.g. 1.99e-2 ± 0.35e-2, [1.31e-2, 2.67e-2]).
+  const rows = me.components.map((c, i) => {
+    const okT = okUnc(c.T2, c.T2_se), okA = okUnc(c.A, c.A_se);
+    const gT = sciGroup(c.T2, okT ? c.T2_se : null);
+    const sciA = isOdd(c.A), gA = sciGroup(c.A, okA ? c.A_se : null);
+    return [
+      String(i + 1), gT.fmt(c.T2), okT ? "± " + gT.fmt(c.T2_se) : "undetermined", okT ? fmtCIWith(gT, c.T2_ci) : "—",
+      sciA ? gA.fmt(c.A) : fmt(c.A), !okA ? "—" : sciA ? fmtCIWith(gA, c.A_ci) : fmtCIplain(c.A_ci),
+      okUnc(c.fraction, c.fraction_se) ? `${pct(c.fraction)} ± ${pct(c.fraction_se)}` : pct(c.fraction),
+    ];
+  });
   table($("me-table"), ["#", "T₂ (s)", "SE", `${lvl}% CI`, "Amplitude", `${lvl}% CI`, "Fraction"], rows);
 
-  const w = $("me-warnings");
   const notes = [...me.warnings];
   if (r.multiexp.recommended_n !== me.n) {
     notes.push(`BIC prefers ${r.multiexp.recommended_n} component${r.multiexp.recommended_n > 1 ? "s" : ""} over the ${me.n} chosen (see model comparison).`);
   }
-  w.replaceChildren(...notes.map((text) => Object.assign(document.createElement("p"), { className: "message warn", textContent: text })));
+  $("me-warnings").replaceChildren(...notes.map((text) => Object.assign(document.createElement("p"), { className: "message warn", textContent: text })));
 
   const extra = [];
   if (me.offset) extra.push(`offset ${fmtPair(me.offset_value, me.offset_se)}`);
   extra.push(`total amplitude ${fmtPair(me.total_amplitude, me.total_amplitude_se)}`);
-  extra.push(`amplitude-weighted mean T₂ ${fmtSci(me.mean_T2)} ± ${fmtSci(me.mean_T2_se)} s`);
+  if (okUnc(me.mean_T2, me.mean_T2_se)) {
+    const gm = sciGroup(me.mean_T2, me.mean_T2_se);
+    extra.push(`amplitude-weighted mean T₂ ${gm.fmt(me.mean_T2)} ± ${gm.fmt(me.mean_T2_se)} s`);
+  } else {
+    extra.push(`amplitude-weighted mean T₂ ${fmtSci(me.mean_T2)} s (uncertainty undetermined)`);
+  }
   extra.push(`residual SD ${fmt(me.resid_sd)}`, `R² ${fmt(me.r2, 5)}`, `${me.dof} degrees of freedom`);
   $("me-stats").textContent = extra.join(" · ");
 
-  const cmp = r.multiexp.comparison;
   const best = r.multiexp.recommended_n;
-  table($("me-compare-table"), ["Components", "Parameters", "RSS", "AIC", "BIC", ""],
-    cmp.map((c) => [String(c.n), String(c.n_params), fmt(c.rss), fmt(c.aic, 5), fmt(c.bic, 5),
+  table($("me-compare-table"), ["Components", "Parameters", { text: "RSS", href: LINKS.RSS }, { text: "AIC", href: LINKS.AIC }, { text: "BIC", href: LINKS.BIC }, ""],
+    r.multiexp.comparison.map((c) => [String(c.n), String(c.n_params), fmt(c.rss), fmt(c.aic, 5), fmt(c.bic, 5),
       [c.n === me.n ? "shown above" : "", c.n === best ? "lowest BIC" : ""].filter(Boolean).join(", ")]));
 }
 
 function renderIlt(r) {
   $("ilt-results").hidden = !r.ilt;
   if (!r.ilt) return;
+  $("ilt-equation").innerHTML = ILT_EQUATION;
   const il = r.ilt;
   const traces = [{ x: il.tau, y: il.spectrum, name: "ILT", mode: "lines", line: { color: COLORS.green, width: 2 } }];
   if (il.peaks.length) {
@@ -131,6 +218,7 @@ export function renderResults() {
   $("results-summary").textContent =
     `${r.mode === "ft" ? "FT of each echo" : "Integrated each echo"} (autophase rotation ${fmt(r.decay.phase_deg, 4)}°) · ${r.decay.t.length} echoes`;
   renderFt(r);
+  renderSpatial(r);
   renderFit(r);
   renderMultiexp(r);
   renderIlt(r);
@@ -138,4 +226,5 @@ export function renderResults() {
 
 export function initResults() {
   $("fit-log").addEventListener("change", renderResults);
+  $("sp-linear").addEventListener("change", renderResults);
 }

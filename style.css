@@ -79,3 +79,12 @@ table.grid td { width:auto; padding:.3rem .8rem; white-space:nowrap; color:var(-
 table.grid td:first-child { width:auto; }
 .message.warn { margin:.5rem 0; }
 #ft-fields { padding-bottom:.4rem; }
+
+.equation { font-family:"STIX Two Text","Cambria Math",Cambria,"Times New Roman",serif; font-size:1.1rem;
+            background:var(--card); border:1px solid var(--line); border-radius:6px; padding:.4rem .8rem;
+            display:inline-block; margin:.4rem 0; flex-basis:100%; }
+.equation.small { font-size:.95rem; }
+.fields .equation { flex-basis:auto; }
+progress { width:12rem; accent-color:var(--accent); }
+.table-wrap th a, .note a { color:var(--accent); }
+.plots .plot-card > div[id^="plot-sp"] { height:22rem; }

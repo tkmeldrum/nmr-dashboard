@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, ilt_tools, multiexp
+from . import constants, echoes, ilt_tools, multiexp, spatial
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -133,23 +133,32 @@ def _run_ft(cfg):
     if auto:
         z0, z1 = echoes.auto_window(z, prof)
     y = echoes.window_decay(S, z, float(z0), float(z1))
+    dwell = float(params.get("dwellTime", 1.0))
+    res = echoes.native_resolution_um(td.shape[0], dwell, gamma, g)
+    spacing = cfg.get("spacing_um")
+    spacing_auto = spacing is None
+    spacing = float(float(f"{res:.2g}") if spacing_auto else spacing)
+    idx = echoes.position_indices(z, float(z0), float(z1), spacing)
+    Ypos = echoes.position_decays(S, idx)
     # thinned magnitude map for the heatmap (keeps the message small)
     zs, es = max(1, int(np.ceil(len(z) / 256))), max(1, int(np.ceil(S.shape[1] / 256)))
     ft_out = {
         "z_um": z, "profile": prof, "window": [float(z0), float(z1)], "window_auto": auto,
         "nucleus": nuc, "gamma_mhz_per_t": gamma, "G": g, "zero_fill": zf,
         "center_point": r["center"] + 1, "nfft": r["nfft"],
+        "resolution_um": res, "spacing_um": spacing, "spacing_auto": spacing_auto, "n_positions": len(idx),
         "heat": {"z_um": z[::zs], "echo_idx": np.arange(S.shape[1])[::es], "mag": np.abs(S[::zs, ::es])},
     }
-    return y, r["phase_deg"], ft_out
+    return y, r["phase_deg"], ft_out, (z[idx], Ypos)
 
 
-def process(settings):
+def process(settings, progress=None):
     """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
 
     settings = {
       "echo": "integrate" | "ft",
-      "ft": {"nucleus": "1H"|"19F", "G", "zero_fill", "z_min", "z_max" (None -> auto window)},
+      "ft": {"nucleus": "1H"|"19F", "G", "zero_fill", "z_min", "z_max" (None -> auto window),
+             "spacing_um" (None -> native resolution)},  # FT mode also fits every z position
       "multiexp": {"enabled", "n", "offset", "ci_level", "compare"},
       "ilt": {"enabled", "t2_min", "t2_max", "n_steps" (max grid points), "alpha", "sweep",
               "peak_threshold_pct", "sweep_lo", "sweep_hi"},
@@ -159,15 +168,15 @@ def process(settings):
         raise RuntimeError("No CPMG dataset is loaded.")
     t = _STATE["echo_s"]
     mode = settings.get("echo", "integrate")
-    ft_out = None
+    ft_out, positions = None, None
     if mode == "integrate":
         y, phase = echoes.integrate(_STATE["td"])
     elif mode == "ft":
-        y, phase, ft_out = _run_ft(settings.get("ft") or {})
+        y, phase, ft_out, positions = _run_ft(settings.get("ft") or {})
     else:
         raise ValueError(f"Unsupported echo processing: {mode!r}")
 
-    out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out,
+    out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out, "spatial": None,
            "decay": {"t": t, "y": y, "phase_deg": phase}, "multiexp": None, "ilt": None}
 
     me = settings.get("multiexp") or {}
@@ -182,4 +191,6 @@ def process(settings):
                                    int(il["n_steps"]), float(il["alpha"]), bool(il.get("sweep")),
                                    peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
                                    sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))))
+    if positions is not None and (me.get("enabled") or il.get("enabled")):
+        out["spatial"] = spatial.fit_positions(t, positions[1], positions[0], me, il, progress)
     return _jsonable(out)

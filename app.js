@@ -2,7 +2,7 @@
 import { $, state } from "./state.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { initRaw, renderRaw } from "./raw.js";
-import { initProcess, initProcessDefaults, processFailed, setRunning } from "./process.js";
+import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
@@ -19,6 +19,8 @@ worker.onmessage = (e) => {
     state.result = m.result;
     $("status").textContent = "Python ready.";
     showResult(m.result);
+  } else if (m.type === "progress") {
+    setProgress(m.done, m.total);
   } else if (m.type === "processed") {
     state.results = m.result;
     setRunning(false, "Done.");
