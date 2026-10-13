@@ -13,8 +13,16 @@ function showMsg(text) {
 export function initProcessDefaults(raw) {
   const t = raw.echo_time_s;
   $("ilt-t2min").value = 10 ** Math.floor(Math.log10(t[0]));
-  $("ilt-t2max").value = 10 ** Math.ceil(Math.log10(3 * t[t.length - 1]));
+  $("ilt-t2max").value = 10 ** Math.ceil(Math.log10(10 * t[t.length - 1]));
   $("ilt-steps").value = DEFAULT_MAX_STEPS;
+  const d = state.result.defaults;
+  if (d) {
+    $("ft-nucleus").value = d.nucleus;           // from b1Freq in acqu.par
+    $("ft-G").value = d.G;
+    $("ft-zf").value = d.zero_fill;
+    $("ft-nucleus-note").textContent = "Nucleus preset from acqu.par: " + d.nucleus_reason + ".";
+  }
+  $("ft-zmin").value = $("ft-zmax").value = "";
   showMsg("");
   $("run-status").textContent = "";
 }
@@ -27,6 +35,16 @@ function num(id, label) {
 
 export function readSettings() {
   const settings = { echo: document.querySelector('input[name="echo"]:checked').value };
+  if (settings.echo === "ft") {
+    const G = num("ft-G", "G"), zf = Math.round(num("ft-zf", "Zero-fill"));
+    if (G <= 0) throw new Error("G must be positive.");
+    if (zf < 0 || zf > 6) throw new Error("Zero-fill must be between 0 and 6.");
+    const zmin = $("ft-zmin").value.trim(), zmax = $("ft-zmax").value.trim();
+    if ((zmin === "") !== (zmax === "")) throw new Error("Give both ends of the z-window, or leave both blank for automatic.");
+    if (zmin !== "" && +zmin >= +zmax) throw new Error("The z-window minimum must be below its maximum.");
+    settings.ft = { nucleus: $("ft-nucleus").value, G, zero_fill: zf,
+                    z_min: zmin === "" ? null : +zmin, z_max: zmax === "" ? null : +zmax };
+  }
   const me = $("me-enabled").checked, il = $("ilt-enabled").checked;
   if (!me && !il) throw new Error("Choose at least one decay analysis.");
   settings.multiexp = {
@@ -72,6 +90,11 @@ export function initProcess() {
     $(box).addEventListener("change", sync);
     sync();
   }
+  const syncFt = () => $("ft-fields").querySelectorAll("input,select").forEach((el) => {
+    el.disabled = document.querySelector('input[name="echo"]:checked').value !== "ft";
+  });
+  document.querySelectorAll('input[name="echo"]').forEach((r) => r.addEventListener("change", syncFt));
+  syncFt();
   $("process-form").addEventListener("submit", (e) => {
     e.preventDefault();
     if (state.running || !state.result || !state.result.is_cpmg) return;
