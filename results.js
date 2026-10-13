@@ -245,6 +245,12 @@ function renderFit(r) {
     traces.push({ x: t, y: r.ilt.pred, name: "ILT fit", mode: "lines", line: { color: COLORS.green, width: 2, dash: "dash" } });
     traces.push({ x: t, y: r.ilt.resid, name: "ILT residual", mode: "lines", line: { color: COLORS.green, width: 1 }, yaxis: "y2", showlegend: false });
   }
+  const band = state.unc && state.unc.mcmc && state.unc.targetKind === "bulk" ? state.unc.mcmc.predictive : null;
+  if (band) {                                   // MCMC posterior-predictive band (only meaningful for the plotted decay)
+    const lv = Math.round(state.unc.mcmc.level * 100);
+    traces.push({ x: band.t, y: band.hi, mode: "lines", line: { width: 0 }, showlegend: false, hoverinfo: "skip" });
+    traces.push({ x: band.t, y: band.lo, mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(213,94,0,0.28)", name: `MCMC ${lv}% band` });
+  }
   const ft = r.mode === "ft";
   $("fit-heading").textContent = ft ? "Window-summed decay and fits" : "Decay and fits";
   const base = baseLayout(ft ? "Echo decay (FT, summed over z-window)" : "Echo decay (phased, integrated)", "Echo time (s)", "Signal (arb.)");

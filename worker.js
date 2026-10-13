@@ -49,7 +49,38 @@ function processDataset({ settings }) {
   postMessage({ type: "processed", result: JSON.parse(json) });
 }
 
+// Calls the page makes while a long job runs: small functions in nmrdash.pipeline, plus the one-off emcee install.
+const RPC_FUNCTIONS = new Set(["mcmc_start", "mcmc_step", "mcmc_finish", "boot_start", "boot_step", "boot_finish"]);
+
+async function installEmcee() {
+  try { pyodide.runPython("import emcee"); return { already: true }; } catch (_) { /* not installed yet */ }
+  status("Fetching the emcee package from PyPI (once, about 100 KB)…");
+  try {
+    await pyodide.loadPackage("micropip");
+    await pyodide.pyimport("micropip").install("emcee==3.1.6");
+  } catch (err) {
+    throw new Error("Could not download the emcee package from PyPI (are you offline?): " + (err.message || err));
+  }
+  return { installed: true };
+}
+
+async function handleRpc({ id, fn, args }) {
+  try {
+    let result;
+    if (fn === "install_emcee") result = await installEmcee();
+    else if (RPC_FUNCTIONS.has(fn)) {
+      pyodide.globals.set("_rpc_args", JSON.stringify(args));
+      result = JSON.parse(pyodide.runPython(
+        `import json\nfrom nmrdash import pipeline as _p\njson.dumps(_p.${fn}(*json.loads(_rpc_args)))`));
+    } else throw new Error("Unknown call: " + fn);
+    postMessage({ type: "reply", id, result });
+  } catch (err) {
+    postMessage({ type: "reply", id, error: String(err.message || err) });
+  }
+}
+
 onmessage = async (e) => {
+  if (e.data.type === "rpc") return handleRpc(e.data);
   try {
     if (e.data.type === "init") await init();
     else if (e.data.type === "load") loadDataset(e.data);

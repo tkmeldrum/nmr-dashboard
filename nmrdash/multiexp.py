@@ -7,6 +7,8 @@ scaled by the residual variance), as Student-t intervals; derived quantities
 (total amplitude, fractions, amplitude-weighted mean T2) use first-order error
 propagation with the full covariance. MCMC is a separate, later option.
 """
+import itertools
+
 import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
@@ -52,11 +54,12 @@ def _numeric_jacobian(f, p):
     return f0, J
 
 
-def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=None):
+def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=None, p0=None):
     """Fit one model; returns a JSON-friendly dict (NaN where not estimable).
 
     n_starts : number of starting guesses (the best of them is kept); fewer is faster.
     sigma : noise SD of y (e.g. from the imaginary channel); enables the reduced chi-square.
+    p0 : starting point [A1, T1, ..., (c)] tried first; if it converges no other start is used (fast refits, e.g. bootstrap).
     """
     t = np.asarray(t, float)
     y = np.asarray(y, float)
@@ -68,7 +71,12 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
     rng = np.random.default_rng(seed)
 
     best = None
-    for p0 in _starts(t, y, n, offset, lo_T, hi_T, rng, n_starts):
+    starts = _starts(t, y, n, offset, lo_T, hi_T, rng, n_starts)
+    user_start = None
+    if p0 is not None:
+        user_start = list(np.clip(p0, bounds[0], bounds[1]))
+        starts = itertools.chain([user_start], starts)
+    for p0 in starts:
         try:
             popt, pcov = curve_fit(lambda tt, *p: model(tt, np.array(p), n, offset), t, y,
                                    p0=p0, bounds=bounds, maxfev=4000)
@@ -77,6 +85,8 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         rss = float(np.sum((y - model(t, popt, n, offset)) ** 2))
         if best is None or rss < best[0]:
             best = (rss, popt, pcov)
+        if user_start is not None and best is not None:
+            break                                    # a supplied starting point that converged is enough
     if best is None:
         raise RuntimeError(f"{n}-component fit did not converge")
     rss, p, pcov = best

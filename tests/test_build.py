@@ -25,7 +25,7 @@ def test_build_bundles_site(tmp_path):
     app = (out / "app.js").read_text()
     assert 'worker.js?v=abc123' in app and 'from "./state.js?v=abc123"' in app
     assert not any('.js"' in line and line.startswith("import") for line in app.splitlines())
-    for js in ("state.js", "tabs.js", "raw.js", "process.js", "results.js", "plotutil.js"):
+    for js in ("state.js", "tabs.js", "raw.js", "process.js", "results.js", "plotutil.js", "rpc.js", "uncertainty.js"):
         assert (out / js).is_file()
     assert json.loads((out / "nmrdash-files.json").read_text()) == sorted(p.name for p in (ROOT / "nmrdash").glob("*.py"))
     manifest = json.loads((out / "test_data" / "manifest.json").read_text())
@@ -44,3 +44,20 @@ def test_no_timestamp_mode():
     r = load(ROOT / "test_data" / "CPMG_EtGly" / "1", None, fallback_to_mtime=False)
     row = next(x for x in r["display"] if x["label"] == "File timestamp")
     assert row["value"] == "not available"
+
+
+def test_html_ids_are_unique_and_every_js_lookup_exists():
+    """A duplicate id silently makes getElementById hit the wrong element (it once hid a checkbox instead of a plot)."""
+    import collections
+    import re
+    html = (ROOT / "index.html").read_text()
+    ids = re.findall(r'\bid="([^"]+)"', html)
+    dupes = [i for i, n in collections.Counter(ids).items() if n > 1]
+    assert not dupes, f"duplicate ids: {dupes}"
+    used = set()
+    for js in ROOT.glob("*.js"):
+        if js.name != "worker.js":
+            used |= set(re.findall(r'\$\("([^"]+)"\)', js.read_text()))
+    dynamic = {"tab-", "panel-"}                      # ids built as "tab-" + name in tabs.js
+    missing = sorted(i for i in used if i not in ids and not any(i.startswith(p) for p in dynamic))
+    assert not missing, f"JS looks up ids that are not in index.html: {missing}"

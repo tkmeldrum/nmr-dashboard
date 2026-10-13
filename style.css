@@ -98,3 +98,15 @@ progress { width:12rem; accent-color:var(--accent); }
 .viewer-controls label { display:flex; align-items:center; gap:.5rem; }
 .viewer-controls input { flex:1; min-width:6rem; }
 .viewer-controls output { min-width:9rem; font-variant-numeric:tabular-nums; }
+
+/* ── uncertainty ───────────────────────────────────────────────────────── */
+.unc-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; margin:.5rem 0; }
+.hist-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(15rem,1fr)); gap:.5rem; margin:.75rem 0; }
+.hist-grid > div { height:11rem; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+.plots .plot-card > div.tall { height:30rem; }
+img.corner { display:block; max-width:100%; margin:auto; }
+dialog { border:1px solid var(--line); border-radius:12px; background:var(--bg); color:var(--fg); max-width:32rem; padding:1.25rem 1.5rem; }
+dialog::backdrop { background:rgba(0,0,0,.45); }
+dialog menu { display:flex; justify-content:flex-end; gap:.75rem; padding:0; margin:1rem 0 0; }
+#unc-run { background:var(--accent); color:var(--bg); }
+#plot-boot-ilt { height:22rem; }
