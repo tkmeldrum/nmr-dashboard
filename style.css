@@ -155,3 +155,4 @@ details.section > summary h3 { margin:.7rem 0; }
 .ps-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(15rem, 1fr)); gap:.5rem 1rem; }
 .ps-grid input[type=number] { width:5rem; }
 .error-text { color:#c0392b; }
+td.outlier { background:rgba(213, 94, 0, .18); }
