@@ -1,3 +1,5 @@
+> **Status:** this was the original plan. For what is built and what comes next, see [README.md](../README.md).
+
 # Plan: Browser-based NMR processing dashboard (GitHub Pages, local-only processing)
 
 ## Context

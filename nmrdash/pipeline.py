@@ -166,9 +166,9 @@ def _run_ft(cfg):
     if not keep.any():
         raise ValueError(f"No position has signal above {min_sig:.0%} of the profile maximum; lower the threshold or widen the window.")
     ft_out.update({"min_signal_pct": min_sig * 100, "n_positions_kept": int(keep.sum()), "n_ilt_positions_kept": int(keep_ilt.sum())})
-    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep),
-                 "ilt": (z[idx_ilt], echoes.position_decays(S, idx_ilt), keep_ilt)}
-    return y, r["phase_deg"], ft_out, positions
+    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep, echoes.position_noise(S, idx)),
+                 "ilt": (z[idx_ilt], echoes.position_decays(S, idx_ilt), keep_ilt, echoes.position_noise(S, idx_ilt))}
+    return y, r["phase_deg"], ft_out, positions, echoes.window_noise(S, z, float(z0), float(z1))
 
 
 def process(settings, progress=None):
@@ -188,29 +188,30 @@ def process(settings, progress=None):
         raise RuntimeError("No CPMG dataset is loaded.")
     t = _STATE["echo_s"]
     mode = settings.get("echo", "integrate")
-    ft_out, positions = None, None
+    ft_out, positions, sigma = None, None, None
     if mode == "integrate":
         y, phase = echoes.integrate(_STATE["td"])
+        sigma = echoes.integrate_noise(_STATE["td"])
     elif mode == "ft":
-        y, phase, ft_out, positions = _run_ft(settings.get("ft") or {})
+        y, phase, ft_out, positions, sigma = _run_ft(settings.get("ft") or {})
     else:
         raise ValueError(f"Unsupported echo processing: {mode!r}")
 
     out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out, "spatial": None,
-           "decay": {"t": t, "y": y, "phase_deg": phase}, "multiexp": None, "ilt": None}
+           "decay": {"t": t, "y": y, "phase_deg": phase, "noise_sigma": sigma}, "multiexp": None, "ilt": None}
 
     me = settings.get("multiexp") or {}
     if me.get("enabled"):
         compare = 4 if me.get("compare") else int(me["n"])
         out["multiexp"] = multiexp.fit_with_comparison(
-            t, y, int(me["n"]), bool(me.get("offset", True)), float(me.get("ci_level", 0.95)), compare)
+            t, y, int(me["n"]), bool(me.get("offset", True)), float(me.get("ci_level", 0.95)), compare, sigma=sigma)
 
     il = settings.get("ilt") or {}
     if il.get("enabled"):
         out["ilt"] = ilt_tools.run(t, y, float(il["t2_min"]), float(il["t2_max"]),
                                    int(il["n_steps"]), float(il["alpha"]), bool(il.get("sweep")),
                                    peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
-                                   sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))))
+                                   sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))), sigma=sigma)
     if positions is not None and (me.get("enabled") or il.get("enabled")):
         out["spatial"] = spatial.fit_positions(
             t, positions["me"], positions["ilt"], me, il, progress,

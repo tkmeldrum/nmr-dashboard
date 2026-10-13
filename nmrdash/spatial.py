@@ -20,32 +20,35 @@ def _gmean(tau, spec):
 
 
 def _unpack(pos):
-    """(z, Y) or (z, Y, keep) -> (z, Y, keep); positions with keep False (no signal) are not fitted."""
+    """(z, Y[, keep[, sigma]]) -> (z, Y, keep, sigma); positions with keep False (no signal) are not fitted."""
     z, Y = pos[0], pos[1]
-    keep = np.asarray(pos[2], bool) if len(pos) > 2 else np.ones(len(z), bool)
-    return z, Y, keep
+    keep = np.asarray(pos[2], bool) if len(pos) > 2 and pos[2] is not None else np.ones(len(z), bool)
+    sigma = np.asarray(pos[3], float) if len(pos) > 3 and pos[3] is not None else np.full(len(z), np.nan)
+    return z, Y, keep, sigma
 
 
-def _fit_multiexp(t, Y, z, keep, me, progress, done0, total):
+def _fit_multiexp(t, Y, z, keep, sig, me, progress, done0, total):
     npos, n = len(z), int(me["n"])
     nan = lambda *shape: np.full(shape, np.nan)
     m = {"n": n, "offset": bool(me.get("offset", True)), "ci_level": float(me.get("ci_level", 0.95)), "z_um": z,
          "T2": nan(n, npos), "T2_se": nan(n, npos), "A": nan(n, npos), "A_se": nan(n, npos),
          "fraction": nan(n, npos), "mean_T2": nan(npos), "mean_T2_se": nan(npos),
-         "total_amplitude": nan(npos), "rmse": nan(npos),
+         "total_amplitude": nan(npos), "rmse": nan(npos), "chi2_red": nan(npos),
          "ok": np.zeros(npos, bool), "flag": np.zeros(npos, bool)}
     done = done0
     for i in range(npos):
         if not keep[i]:
             continue
         try:
-            f = multiexp.fit(t, Y[i], n, m["offset"], m["ci_level"], n_starts=FAST_STARTS)
+            f = multiexp.fit(t, Y[i], n, m["offset"], m["ci_level"], n_starts=FAST_STARTS,
+                             sigma=float(sig[i]) if np.isfinite(sig[i]) else None)
             for k, c in enumerate(f["components"]):
                 m["T2"][k, i], m["T2_se"][k, i] = c["T2"], c["T2_se"]
                 m["A"][k, i], m["A_se"][k, i] = c["A"], c["A_se"]
                 m["fraction"][k, i] = c["fraction"]
             m["mean_T2"][i], m["mean_T2_se"][i] = f["mean_T2"], f["mean_T2_se"]
             m["total_amplitude"][i], m["rmse"][i] = f["total_amplitude"], f["rmse"]
+            m["chi2_red"][i] = f["chi2_red"] if f["chi2_red"] is not None else np.nan
             m["ok"][i], m["flag"][i] = True, bool(f["warnings"])
         except (ValueError, RuntimeError, FloatingPointError):
             pass
@@ -55,7 +58,7 @@ def _fit_multiexp(t, Y, z, keep, me, progress, done0, total):
     return m
 
 
-def _fit_ilt(t, Y, z, keep, il, peak_min_fraction, progress, done0, total):
+def _fit_ilt(t, Y, z, keep, sig, il, peak_min_fraction, progress, done0, total):
     npos = len(z)
     params = {"ILTminmax": [float(il["t2_min"]), float(il["t2_max"])],
               "nrILTSteps": min(int(il["n_steps"]), ilt_tools.STEPS_LIMIT)}
@@ -107,14 +110,14 @@ def fit_positions(t, me_pos=None, il_pos=None, me=None, il=None, progress=None, 
     """
     do_me = bool(me and me.get("enabled") and me_pos is not None)
     do_il = bool(il and il.get("enabled") and il_pos is not None)
-    mz, mY, mk = _unpack(me_pos) if do_me else (None, None, None)
-    iz, iY, ik = _unpack(il_pos) if do_il else (None, None, None)
+    mz, mY, mk, msig = _unpack(me_pos) if do_me else (None,) * 4
+    iz, iY, ik, isig = _unpack(il_pos) if do_il else (None,) * 4
     total = (int(mk.sum()) if do_me else 0) + (int(ik.sum()) if do_il else 0)
     out = {"multiexp": None, "ilt": None}
     done = 0
     if do_me:
-        out["multiexp"] = _fit_multiexp(t, mY, mz, mk, me, progress, done, total)
+        out["multiexp"] = _fit_multiexp(t, mY, mz, mk, msig, me, progress, done, total)
         done += int(mk.sum())
     if do_il:
-        out["ilt"] = _fit_ilt(t, iY, iz, ik, il, peak_min_fraction, progress, done, total)
+        out["ilt"] = _fit_ilt(t, iY, iz, ik, isig, il, peak_min_fraction, progress, done, total)
     return out

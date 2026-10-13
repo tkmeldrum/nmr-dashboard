@@ -174,7 +174,16 @@
       <div class="plots">
         <div class="plot-card" id="card-sp-t2"><div id="plot-sp-t2"></div></div>
         <div class="plot-card" id="card-sp-amp"><div id="plot-sp-amp"></div></div>
-        <div class="plot-card" id="card-sp-ilt"><div id="plot-sp-ilt"></div></div>
+        <div class="plot-card" id="card-sp-chi2"><div id="plot-sp-chi2"></div></div>
+        <div class="plot-card span-all" id="card-sp-ilt">
+          <div id="plot-sp-ilt" class="viewer"></div>
+          <div class="viewer-controls">
+            <label>Position z <input type="range" id="view-z" min="0" max="0" value="0"> <output id="view-z-out"></output></label>
+            <label>T₂ <input type="range" id="view-t2" min="0" max="0" value="0"> <output id="view-t2-out"></output></label>
+          </div>
+          <p class="note card-note">Centre: ILT map (T₂ vs position) with the peak tracks. Right: the spectrum at the selected position.
+            Top: the signal at the selected T₂ along z. Drag the sliders, press ← → on a focused slider, or click the map to move the cut.</p>
+        </div>
         <div class="plot-card" id="card-sp-iltsum"><div id="plot-sp-iltsum"></div></div>
         <div class="plot-card" id="card-sp-iltfrac"><div id="plot-sp-iltfrac"></div></div>
       </div>
@@ -197,11 +206,13 @@
       <div id="me-warnings"></div>
       <div class="table-wrap"><table id="me-table" class="grid"></table></div>
       <p id="me-stats" class="note"></p>
+      <h4>Fit quality</h4>
+      <div class="table-wrap"><table id="me-quality" class="grid"></table></div>
+      <p id="quality-note" class="note"></p>
       <h4>Model comparison</h4>
-      <p class="note">RSS is the <a href="https://en.wikipedia.org/wiki/Residual_sum_of_squares" target="_blank" rel="noopener noreferrer">residual sum of squares</a>.
-        <a href="https://en.wikipedia.org/wiki/Akaike_information_criterion" target="_blank" rel="noopener noreferrer">AIC</a> and
-        <a href="https://en.wikipedia.org/wiki/Bayesian_information_criterion" target="_blank" rel="noopener noreferrer">BIC</a>
-        score fit quality against the number of parameters (lower is better); BIC penalises extra parameters more strongly.</p>
+      <p class="note">AIC and BIC are only meaningful as <em>differences</em> between models fitted to the same data, so the table
+        shows ΔAIC and ΔBIC relative to the best model (0 = best; a ΔBIC above ~10 is strong evidence against that model).
+        RSS and MSE scale with the signal amplitude (and RSS with the number of echoes); residual SD / amplitude and reduced χ² do not.</p>
       <div class="table-wrap"><table id="me-compare-table" class="grid"></table></div>
     </div>
 
@@ -210,6 +221,7 @@
       <p class="equation" id="ilt-equation"></p>
       <div class="plot-card wide"><div id="plot-spectrum"></div></div>
       <p id="ilt-stats" class="note"></p>
+      <div class="table-wrap"><table id="ilt-quality" class="grid"></table></div>
       <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>
       <div id="lcurve-card" class="plot-card wide" hidden><div id="plot-lcurve"></div></div>
     </div>

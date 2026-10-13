@@ -52,10 +52,11 @@ def _numeric_jacobian(f, p):
     return f0, J
 
 
-def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS):
+def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=None):
     """Fit one model; returns a JSON-friendly dict (NaN where not estimable).
 
     n_starts : number of starting guesses (the best of them is kept); fewer is faster.
+    sigma : noise SD of y (e.g. from the imaginary channel); enables the reduced chi-square.
     """
     t = np.asarray(t, float)
     y = np.asarray(y, float)
@@ -130,7 +131,17 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS):
         })
     t_dense = np.linspace(0, t[-1], 400)
     ss_tot = float(np.sum((y - y.mean()) ** 2))
+    # Denominator for the normalised residual: the fitted signal's range over the sampled echoes. Unlike the sum
+    # of component amplitudes it cannot be inflated by degenerate (cancelling) components, so it is comparable
+    # between models of different order.
+    amp = float(np.ptp(model(t, p, n, offset)))
     return {
+        "mse": rss / N,
+        # amplitude- and N-independent measures of fit quality
+        "signal_range": amp,
+        "resid_sd_over_amp": float(np.sqrt(s2) / amp) if amp > 0 else None,
+        "noise_sigma": sigma,
+        "chi2_red": float(rss / (sigma ** 2 * dof)) if sigma else None,
         "n": n, "offset": offset, "ci_level": ci_level, "t_crit": tcrit, "dof": dof,
         "components": comps,
         "offset_value": p[2 * n] if offset else None,
@@ -147,15 +158,25 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS):
     }
 
 
-def fit_with_comparison(t, y, n, offset=True, ci_level=0.95, compare_up_to=4):
-    """Fit the chosen n and, for model selection, 1..max(n, compare_up_to) ranked by BIC."""
-    selected = fit(t, y, n, offset, ci_level)
+def fit_with_comparison(t, y, n, offset=True, ci_level=0.95, compare_up_to=4, sigma=None):
+    """Fit the chosen n and, for model selection, 1..max(n, compare_up_to) ranked by BIC.
+
+    AIC/BIC only mean something as differences between models fitted to the same data, so each row
+    carries d_aic / d_bic relative to the best model (0 for the best).
+    """
+    selected = fit(t, y, n, offset, ci_level, sigma=sigma)
     rows = []
     for m in range(1, max(n, compare_up_to) + 1):
         try:
-            f = selected if m == n else fit(t, y, m, offset, ci_level)
+            f = selected if m == n else fit(t, y, m, offset, ci_level, sigma=sigma)
         except (ValueError, RuntimeError):
             continue
-        rows.append({"n": m, "n_params": f["n_params"], "rss": f["rss"], "aic": f["aic"], "bic": f["bic"]})
+        rows.append({"n": m, "n_params": f["n_params"], "rss": f["rss"], "mse": f["mse"],
+                     "resid_sd_over_amp": f["resid_sd_over_amp"], "chi2_red": f["chi2_red"],
+                     "aic": f["aic"], "bic": f["bic"]})
+    if rows:
+        a0, b0 = min(r["aic"] for r in rows), min(r["bic"] for r in rows)
+        for r in rows:
+            r["d_aic"], r["d_bic"] = r["aic"] - a0, r["bic"] - b0
     best = min(rows, key=lambda r: r["bic"])["n"] if rows else n
     return {"selected": selected, "comparison": rows, "recommended_n": best}
