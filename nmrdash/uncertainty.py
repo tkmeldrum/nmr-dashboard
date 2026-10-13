@@ -107,6 +107,7 @@ class Mcmc:
         self.sd0 = np.sqrt(rss0 / max(len(self.t) - len(self.p_ls), 1))
         self.lns_lo, self.lns_hi = np.log(self.sd0 / 20.0), np.log(self.sd0 * 20.0)
         self.rng = np.random.default_rng(self.seed)
+        self.theta0 = self._theta_from_params(self.p_ls)
         self.p0 = self._init_walkers()
         self._new_sampler()
         self.est_seconds = self._time_trial()
@@ -152,10 +153,12 @@ class Mcmc:
         for _ in range(60):
             th = base[None, :] * (1 + scale * self.rng.standard_normal((self.nwalkers, self.ndim)))
             lnT = th[:, 1:2 * self.n:2]
-            lnT[:] = np.clip(base[1:2 * self.n:2][None, :] + scale * self.rng.standard_normal(lnT.shape), self.lnlo + 1e-6, self.lnhi - 1e-6)
+            lnT[:] = base[1:2 * self.n:2][None, :] + scale * self.rng.standard_normal(lnT.shape)
             lnT.sort(axis=1)
-            if self.n > 1:                               # strictly ordered, even if the least-squares T2s coincide
-                lnT += 1e-4 * np.arange(self.n)[None, :]
+            # strictly ordered and strictly inside the prior, even if the least-squares T2s coincide or sit on the edge of the
+            # allowed range (a component the data cannot pin down often ends up exactly there)
+            k = np.arange(self.n)[None, :]
+            lnT[:] = np.clip(lnT, self.lnlo + 1e-4 * (k + 1), self.lnhi - 1e-4 * (self.n - k))
             th[:, 0:2 * self.n:2] = np.abs(th[:, 0:2 * self.n:2]) + 1e-9
             if np.all(np.isfinite(self._lnprob(th))):
                 return th
@@ -215,6 +218,11 @@ class Mcmc:
         acc = float(np.mean(self.sampler.acceptance_fraction))
         n_eff = float(self.nwalkers * len(post) / max(tau_max, 1.0))
         warnings = []
+        edge = [i + 1 for i in range(self.n) if min(self.theta0[2 * i + 1] - self.lnlo, self.lnhi - self.theta0[2 * i + 1]) < 1e-3]
+        if edge:
+            comp = ", ".join(f"{self.symbol},{i}" if self.n > 1 else self.symbol for i in edge)
+            warnings.append(f"The least-squares fit puts {comp} at the edge of the range the sampler allows (0.1 to 10 times the measured times), "
+                            "so the data do not determine it; its interval is cut off by that range, not by the data.")
         if len(post) < 50 * tau_max:
             warnings.append(f"The chain is only {len(post) / tau_max:.0f} autocorrelation times long (50+ recommended): "
                             "run more steps before trusting the tails of the intervals.")
