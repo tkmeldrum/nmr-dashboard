@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import echoes, ilt_tools, multiexp
+from . import constants, echoes, ilt_tools, multiexp
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -86,6 +86,9 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         re, im = (td.real, td.imag) if np.iscomplexobj(td) else (td, np.zeros_like(td))
         _STATE.clear()
         _STATE.update(td=td, echo_s=echo_s, params=params)
+        nucleus, why = constants.guess_nucleus(params.get("b1Freq"))
+        out["defaults"] = {"nucleus": nucleus, "nucleus_reason": why,
+                           "G": constants.DEFAULT_G_T_PER_M, "zero_fill": constants.DEFAULT_ZERO_FILL}
         out["raw"] = {
             "n_points": n_pts,
             "n_echoes": n_echo,
@@ -114,11 +117,39 @@ def _jsonable(o):
     return o
 
 
+def _run_ft(cfg):
+    td, params = _STATE["td"], _STATE["params"]
+    nuc = cfg.get("nucleus", "1H")
+    gamma = constants.GAMMA_MHZ_PER_T[nuc]
+    g = float(cfg.get("G", constants.DEFAULT_G_T_PER_M))
+    zf = int(cfg.get("zero_fill", constants.DEFAULT_ZERO_FILL))
+    if g <= 0:
+        raise ValueError("The gradient G must be positive.")
+    r = echoes.ft(td, float(params.get("dwellTime", 1.0)), gamma, g, zf)
+    z, S = r["z_um"], r["S"]
+    prof = echoes.profile(S)
+    z0, z1 = cfg.get("z_min"), cfg.get("z_max")
+    auto = z0 is None or z1 is None
+    if auto:
+        z0, z1 = echoes.auto_window(z, prof)
+    y = echoes.window_decay(S, z, float(z0), float(z1))
+    # thinned magnitude map for the heatmap (keeps the message small)
+    zs, es = max(1, int(np.ceil(len(z) / 256))), max(1, int(np.ceil(S.shape[1] / 256)))
+    ft_out = {
+        "z_um": z, "profile": prof, "window": [float(z0), float(z1)], "window_auto": auto,
+        "nucleus": nuc, "gamma_mhz_per_t": gamma, "G": g, "zero_fill": zf,
+        "center_point": r["center"] + 1, "nfft": r["nfft"],
+        "heat": {"z_um": z[::zs], "echo_idx": np.arange(S.shape[1])[::es], "mag": np.abs(S[::zs, ::es])},
+    }
+    return y, r["phase_deg"], ft_out
+
+
 def process(settings):
     """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
 
     settings = {
-      "echo": "integrate",
+      "echo": "integrate" | "ft",
+      "ft": {"nucleus": "1H"|"19F", "G", "zero_fill", "z_min", "z_max" (None -> auto window)},
       "multiexp": {"enabled", "n", "offset", "ci_level", "compare"},
       "ilt": {"enabled", "t2_min", "t2_max", "n_steps" (max grid points), "alpha", "sweep",
               "peak_threshold_pct", "sweep_lo", "sweep_hi"},
@@ -127,11 +158,16 @@ def process(settings):
     if "td" not in _STATE:
         raise RuntimeError("No CPMG dataset is loaded.")
     t = _STATE["echo_s"]
-    if settings.get("echo", "integrate") != "integrate":
-        raise ValueError(f"Unsupported echo processing: {settings.get('echo')!r}")
-    y, phase = echoes.integrate(_STATE["td"])
+    mode = settings.get("echo", "integrate")
+    ft_out = None
+    if mode == "integrate":
+        y, phase = echoes.integrate(_STATE["td"])
+    elif mode == "ft":
+        y, phase, ft_out = _run_ft(settings.get("ft") or {})
+    else:
+        raise ValueError(f"Unsupported echo processing: {mode!r}")
 
-    out = {"settings": settings, "version": __version__,
+    out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out,
            "decay": {"t": t, "y": y, "phase_deg": phase}, "multiexp": None, "ilt": None}
 
     me = settings.get("multiexp") or {}

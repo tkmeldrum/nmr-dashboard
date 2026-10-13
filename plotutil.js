@@ -30,3 +30,14 @@ export function fmt(x, sig = 3) {
 }
 export const fmtCI = (ci) => (ci && ci[0] !== null && ci[1] !== null ? `[${fmt(ci[0])}, ${fmt(ci[1])}]` : "—");
 export const pct = (x, d = 1) => (x === null || x === undefined ? "—" : (100 * x).toFixed(d) + "%");
+
+// Always scientific, so values and their uncertainties compare at a glance (e.g. 1.98e-2 ± 4.87e-4).
+export const fmtSci = (x, sig = 3) => (x === null || x === undefined || Number.isNaN(x) ? "—" : x === 0 ? "0" : x.toExponential(sig - 1));
+export const fmtCISci = (ci) => (ci && ci[0] !== null && ci[1] !== null ? `[${fmtSci(ci[0])}, ${fmtSci(ci[1])}]` : "—");
+
+// A value and its uncertainty share one notation: scientific if either needs it, else plain.
+export function fmtPair(v, se) {
+  const odd = (x) => x !== null && x !== undefined && x !== 0 && (Math.abs(x) < 1e-3 || Math.abs(x) >= 1e4);
+  const f = odd(v) || odd(se) ? fmtSci : fmt;
+  return `${f(v)} ± ${f(se)}`;
+}

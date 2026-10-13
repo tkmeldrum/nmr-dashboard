@@ -78,3 +78,4 @@ table.grid th { text-align:left; padding:.3rem .8rem; border-bottom:2px solid va
 table.grid td { width:auto; padding:.3rem .8rem; white-space:nowrap; color:var(--fg); }
 table.grid td:first-child { width:auto; }
 .message.warn { margin:.5rem 0; }
+#ft-fields { padding-bottom:.4rem; }

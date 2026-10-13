@@ -72,8 +72,17 @@
         <legend>1 · Echo processing</legend>
         <label class="opt"><input type="radio" name="echo" value="integrate" checked> Integrate each echo
           <small>autophase, then sum all points of every echo into one decay</small></label>
-        <label class="opt disabled"><input type="radio" name="echo" value="ft" disabled> FT each echo
-          <small>spatially resolved decays — coming in the next phase</small></label>
+        <label class="opt"><input type="radio" name="echo" value="ft"> FT each echo
+          <small>signal vs position z; the decay is the sum over a z-window</small></label>
+        <div class="fields" id="ft-fields">
+          <label>Nucleus <select id="ft-nucleus"><option value="1H">¹H (proton)</option><option value="19F">¹⁹F</option></select></label>
+          <label>G (T/m) <input type="number" id="ft-G" step="any" min="0" value="23.7"></label>
+          <label>Zero-fill (×2<sup>n</sup>) <input type="number" id="ft-zf" step="1" min="0" max="6" value="4"></label>
+          <label>z-window min (µm) <input type="number" id="ft-zmin" step="any" placeholder="auto"></label>
+          <label>max (µm) <input type="number" id="ft-zmax" step="any" placeholder="auto"></label>
+          <small class="hint" id="ft-nucleus-note"></small>
+          <small class="hint">Leave the window blank to use the region where the profile exceeds 10% of its maximum.</small>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -125,6 +134,15 @@
   <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" hidden>
     <h2>Results</h2>
     <p id="results-summary" class="note"></p>
+
+    <div id="ft-results" hidden>
+      <h3>Spatial profile (FT of each echo)</h3>
+      <p id="ft-stats" class="note"></p>
+      <div class="plots">
+        <div class="plot-card"><div id="plot-profile"></div></div>
+        <div class="plot-card"><div id="plot-ftmap"></div></div>
+      </div>
+    </div>
 
     <h3>Decay and fits</h3>
     <div class="plot-card wide">
