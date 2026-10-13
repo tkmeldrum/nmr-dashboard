@@ -51,6 +51,29 @@ def band_edges(tau, spectrum, min_fraction=PEAK_MIN_FRACTION):
     return [(int(pk), lo, hi) for pk, lo, hi in zip(peaks, cuts[:-1], cuts[1:])]
 
 
+def exp_markers(me, il):
+    """Where to draw each exponential component on the ILT plot so that its AMOUNT is comparable with the ILT peaks.
+
+    An ILT peak's area (sum over its grid points) is the signal it holds, the same quantity as a component's
+    amplitude A. A component is therefore drawn at the height an ILT peak with area A would have, taking the
+    height-to-area ratio of the nearest ILT peak (in ln T2). When the two analyses agree the marker lands on the
+    peak top; a gap means they disagree about the amount. height is None when there is no ILT peak to compare with.
+    """
+    tau, spec = np.asarray(il["tau"], float), np.asarray(il["spectrum"], float)
+    total = float(spec.sum())
+    out = []
+    for c in me["components"]:
+        m = {"T2": c["T2"], "amplitude": c["A"], "fraction": c["fraction"], "height": None, "matched_peak": None}
+        if il["peaks"] and total > 0 and c["T2"] > 0:
+            pk = min(il["peaks"], key=lambda q: abs(np.log(q["T2_peak"] / c["T2"])))
+            area = pk["fraction"] * total
+            if area > 0:
+                m["height"] = float(c["A"] * np.interp(pk["T2_peak"], tau, spec) / area)
+                m["matched_peak"] = pk["T2_peak"]
+        out.append(m)
+    return out
+
+
 def run(t, y, t2_min, t2_max, n_steps, alpha, sweep=False,
         peak_min_fraction=PEAK_MIN_FRACTION, sweep_range=DEFAULT_SWEEP, sigma=None):
     """n_steps is a maximum: the grid is also capped at the number of echoes."""
