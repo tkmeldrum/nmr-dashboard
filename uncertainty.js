@@ -204,13 +204,15 @@ export function renderUncertainty() {
 }
 
 const METHODS = ["least squares", "the bootstrap", "MCMC"];
-// A method's value that lies outside the interval another method gives is marked, since the methods should agree
-// where the problem is well determined (a disagreement is the point of running more than one).
+// A method's value is marked when it lies outside the interval of every other method that has one. Marking only that case
+// singles out the odd one out: if one method disagrees with two that agree, only that one is marked (with just two methods
+// that disagree, both are, since there is no telling which is wrong).
 export function flagged(text, i, est) {
   const me = est[i];
   if (!me) return text;
-  const against = est.map((e, j) => (j !== i && e && (me.v < e.lo || me.v > e.hi) ? METHODS[j] : null)).filter(Boolean);
-  return against.length ? { text: "⚠ " + text, cls: "outlier", title: `This value lies outside the interval from ${against.join(" and ")}.` } : text;
+  const others = est.map((e, j) => (j !== i && e ? METHODS[j] + "|" + (me.v < e.lo || me.v > e.hi ? 1 : 0) : null)).filter(Boolean);
+  if (!others.length || others.some((o) => o.endsWith("|0"))) return text;
+  return { text: "⚠ " + text, cls: "outlier", title: `This value lies outside the interval from ${others.map((o) => o.split("|")[0]).join(" and ")}.` };
 }
 
 function renderCompare(u) {
