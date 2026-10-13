@@ -9,11 +9,50 @@
 </head>
 <body>
 <main>
-  <h1>NMR Dashboard</h1>
-  <p class="note">All data is processed locally in your browser. Nothing is uploaded.</p>
-  <p id="status">Starting Python…</p>
-  <pre id="out"></pre>
+  <header>
+    <h1>NMR Dashboard</h1>
+    <p class="note">All data is processed locally in your browser. Nothing is uploaded.</p>
+    <p id="status" class="status" role="status">Starting Python…</p>
+  </header>
+
+  <section id="load">
+    <div id="drop" tabindex="0" role="button" aria-label="Drop a data folder here, or click to browse">
+      <strong>Drop a data folder here</strong>
+      <span>or click to browse (folder containing <code>acqu.par</code> and <code>data.2d</code>)</span>
+    </div>
+    <label id="chooser" hidden>Several datasets found. Open:
+      <select id="dataset-select"></select>
+    </label>
+    <p id="message" class="message" hidden></p>
+  </section>
+
+  <section id="params-section" hidden>
+    <h2>Parameters <small id="folder-name"></small></h2>
+    <table id="params"></table>
+    <details><summary>Show all parameters</summary><table id="params-all"></table></details>
+  </section>
+
+  <section id="raw-section" hidden>
+    <h2>Raw data</h2>
+    <div class="plots">
+      <div class="plot-card"><div id="plot-heat"></div></div>
+      <div class="plot-card">
+        <div id="plot-echo"></div>
+        <label class="slider">Echo <input type="range" id="echo-idx" min="0" value="0"> <output id="echo-idx-out">1</output></label>
+      </div>
+      <div class="plot-card">
+        <div id="plot-decay"></div>
+        <label><input type="checkbox" id="decay-log"> log y-axis</label>
+      </div>
+    </div>
+  </section>
+
+  <section id="process-section" hidden>
+    <h2>Processing</h2>
+    <p class="note">Processing options arrive in the next phase.</p>
+  </section>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

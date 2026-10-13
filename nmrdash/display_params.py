@@ -1,0 +1,49 @@
+"""Which acqu.par fields the dashboard shows up front, and how they are labelled.
+
+Edit DISPLAY_ROWS to change the curated list. Everything else in acqu.par is
+available behind "Show all parameters".
+"""
+from datetime import datetime
+
+# (label, acqu.par key, unit)
+DISPLAY_ROWS = [
+    ("Echo time", "echoTime", "µs"),
+    ("Number of echoes", "nrEchoes", ""),
+    ("Points per echo", "nrPnts", ""),
+    ("Dwell time", "dwellTime", "µs"),
+    ("Repetition time", "repTime", "ms"),
+    ("Number of scans", "nrScans", ""),
+    ("Data directory", "dataDirectory", ""),
+]
+
+
+def _fmt(v):
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def pulse_row(params):
+    """Pulse length with the 90/180 amplitudes, e.g. '2.25 µs (90°/180° amp: -10 / -4)'."""
+    pl = params.get("pulseLength")
+    if pl is None:
+        return None
+    a90, a180 = params.get("amp90"), params.get("amp180")
+    amps = ""
+    if a90 is not None and a180 is not None:
+        amps = f" (90°/180° amp: {_fmt(a90)} / {_fmt(a180)})"
+    return {"label": "Pulse length", "value": f"{_fmt(pl)} µs{amps}"}
+
+
+def build_display(params, timestamp=None):
+    """Curated [{label, value}, ...] list; timestamp is a datetime or None."""
+    rows = []
+    for label, key, unit in DISPLAY_ROWS:
+        if key in params:
+            rows.append({"label": label, "value": f"{_fmt(params[key])} {unit}".strip()})
+    pr = pulse_row(params)
+    if pr:
+        rows.insert(0, pr)
+    if timestamp is not None:
+        rows.append({"label": "File timestamp", "value": timestamp.strftime("%Y-%m-%d %H:%M:%S")})
+    return rows
