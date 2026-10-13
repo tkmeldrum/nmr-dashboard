@@ -70,6 +70,7 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         else:
             row.update(n_echoes=raw["n_echoes"], n_points=raw["n_points"], echo_time_us=info["params_all"].get("echoTime"))
             settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"])
+        row["exclude_first"] = settings.get("exclude_first", 0)
         res = pipeline.process(settings)
         warnings = []
         mcmc = boot = None
@@ -238,7 +239,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     fams = [("T2", "cpmg"), ("T1", "t1")]                                   # a folder may mix sequences: separate column families
     has = {lab: any(r.get("kind") == kind for r in rows) for lab, kind in fams}
     maxn = {lab: max((r["result"]["multiexp"]["n"] for r in rows if r.get("kind") == kind and r.get("result") and r["result"]["multiexp"]), default=0) for lab, kind in fams}
-    head = ["dataset", "kind", "timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "echo_time_us", "seconds", "output_dir"]
+    head = ["dataset", "kind", "timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "excluded_first", "echo_time_us", "seconds", "output_dir"]
     for lab, _ in fams:
         for k in range(1, maxn[lab] + 1):
             head += [f"{lab}_{k}_s", f"{lab}_{k}_se", f"amplitude_{k}" if lab == "T2" else f"T1_amplitude_{k}", f"fraction_{k}" if lab == "T2" else f"T1_fraction_{k}"]
@@ -249,7 +250,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     for r in rows:
         res = r.get("result") or {}
         me, il = res.get("multiexp"), res.get("ilt")
-        line = [r["dataset"], r.get("kind"), r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
+        line = [r["dataset"], r.get("kind"), r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("exclude_first"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
         for lab, kind in fams:
             for k in range(maxn[lab]):
                 c = me["components"][k] if (me and r.get("kind") == kind and k < len(me["components"])) else None

@@ -16,6 +16,7 @@ export function applyKind(kind) {
     $("me-offset").checked = true;                                                      // recovery curves rarely start at zero
     $("me-compare").checked = true;
   }
+  $("exclude-first").value = 0;                                                         // a new dataset starts with nothing excluded
   updateEquation();
 }
 

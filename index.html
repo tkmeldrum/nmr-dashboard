@@ -100,6 +100,13 @@
       <fieldset>
         <legend><span data-for="cpmg">2 · Decay analysis <small>(choose any)</small></span><span data-for="t1">Saturation-recovery analysis</span></legend>
 
+        <div class="analysis exclude-row">
+          <label>Exclude the first <input type="number" id="exclude-first" min="0" step="1" value="0" style="width:5rem">
+            <span data-for="cpmg">echoes</span><span data-for="t1">delays</span> from every fit</label>
+          <details class="more"><summary>Show more</summary><div class="more-body"><p>The first echo (and sometimes the next few) can be distorted, for example by pulse ringdown or imperfect refocusing, and then pulls every fit.
+            Excluded points are still plotted, as open markers, but take no part in any fit, ILT, MCMC or bootstrap. The default is 0 (use everything).</p></div></details>
+        </div>
+
         <div class="analysis">
           <label class="opt"><input type="checkbox" id="me-enabled" checked> <span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Recovery fit (T₁)</span></label>
           <div class="fields" id="me-fields">

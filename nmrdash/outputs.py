@@ -43,12 +43,14 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
     me = (res.get("multiexp") or {}).get("selected")
     il = res.get("ilt")
     lab = "T1" if res.get("mode") == "t1" else "T2"                  # name of the time constant in the file headers
-    cols, head = [t, y], ["delay_s" if lab == "T1" else "echo_time_s", "signal"]
+    skip = res["decay"].get("skip", 0)
+    pad = [None] * skip                                            # excluded leading points have no fit or residual
+    cols, head = [t, y, [int(i >= skip) for i in range(len(t))]], ["delay_s" if lab == "T1" else "echo_time_s", "signal", "included_in_fits"]
     if me:
-        cols += [me["fit"], me["resid"]]
+        cols += [pad + list(me["fit"]), pad + list(me["resid"])]
         head += [f"exp{me['n']}_fit", f"exp{me['n']}_residual"]
     if il:
-        cols += [il["pred"], il["resid"]]
+        cols += [pad + list(il["pred"]), pad + list(il["resid"])]
         head += ["ilt_fit", "ilt_residual"]
     out("decay.csv", head, zip(*cols))
 
@@ -169,6 +171,9 @@ def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
         L += [f"- Sequence: {acq.get('experiment', '?')}, echo time {acq.get('echoTime', '?')} µs, {acq.get('nrEchoes', '?')} echoes, {acq.get('nrPnts', '?')} points per echo",
               f"- data.2d written: {when or 'unknown'}", f"- Echo processing: {'FT of each echo (signal vs z)' if res.get('mode') == 'ft' else 'integrate each echo'}; "
               f"autophase rotation {F.fmt(res['decay']['phase_deg'], 4)}°; noise σ from the imaginary channel: {F.fmt(res['decay'].get('noise_sigma'))}", ""]
+    skip = res["decay"].get("skip", 0)
+    if skip:
+        L += [f"- The first {skip} {'delays' if t1 else 'echoes'} are excluded from every fit (they are still shown, as open markers).", ""]
     for w in warnings:
         L.append(f"> **Warning:** {w}")
     if warnings:
