@@ -89,6 +89,14 @@ def position_indices(z_um, z_min, z_max, spacing_um, max_positions=400):
     return np.unique(np.abs(z_um[None, :] - targets[:, None]).argmin(axis=1))
 
 
+def grid_indices(z_um, z_min, z_max):
+    """Every zero-filled FFT point with z_min <= z <= z_max."""
+    idx = np.flatnonzero((z_um >= z_min) & (z_um <= z_max))
+    if len(idx) == 0:
+        raise ValueError("The z-window contains no points; widen it.")
+    return idx
+
+
 def position_decays(S, idx):
     """Decay at each chosen z, with its own zero-order phase so the signal is in the real channel.
 

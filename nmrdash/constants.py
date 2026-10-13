@@ -3,6 +3,7 @@
 GAMMA_MHZ_PER_T = {"1H": 42.577, "19F": 40.078}   # gyromagnetic ratio / 2π
 DEFAULT_G_T_PER_M = 23.7                          # static gradient, T/m
 DEFAULT_ZERO_FILL = 4                             # FFT length = nextpow2(nrPnts * 2**zf)
+DEFAULT_Z_WINDOW_UM = (-200.0, 200.0)             # sample region; + z = + frequency = closer to the magnet (down)
 
 # ASSUMPTION to confirm: b1Freq = 19.44 MHz in acqu.par is the 1H Larmor frequency of this magnet
 # (B0 = 19.44 / 42.577 = 0.4566 T), so 19F would sit at 19.44 * 40.078 / 42.577 = 18.30 MHz.

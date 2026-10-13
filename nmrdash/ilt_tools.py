@@ -35,6 +35,22 @@ def summarize_peaks(tau, spectrum, min_fraction=PEAK_MIN_FRACTION):
     return out
 
 
+def band_edges(tau, spectrum, min_fraction=PEAK_MIN_FRACTION):
+    """Partition the T2 grid into one band per peak of `spectrum`: [(peak_idx, lo, hi)], hi exclusive.
+
+    Boundaries sit at the valleys between neighbouring peaks, so the bands tile the whole grid.
+    Pass the position-summed spectrum to get bands that stay fixed across positions.
+    """
+    spectrum = np.asarray(spectrum, float)
+    if spectrum.sum() <= 0:
+        return []
+    peaks, _ = find_peaks(spectrum, height=min_fraction * spectrum.max())
+    if len(peaks) == 0:
+        return []
+    cuts = [0] + [int(a + np.argmin(spectrum[a:b + 1])) for a, b in zip(peaks[:-1], peaks[1:])] + [len(spectrum)]
+    return [(int(pk), lo, hi) for pk, lo, hi in zip(peaks, cuts[:-1], cuts[1:])]
+
+
 def run(t, y, t2_min, t2_max, n_steps, alpha, sweep=False,
         peak_min_fraction=PEAK_MIN_FRACTION, sweep_range=DEFAULT_SWEEP):
     """n_steps is a maximum: the grid is also capped at the number of echoes."""

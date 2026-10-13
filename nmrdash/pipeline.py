@@ -10,6 +10,10 @@ from . import constants, echoes, ilt_tools, multiexp, spatial
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
+ILT_MAX_POSITIONS = 1500   # the ILT is cheap, so its map may cover every zero-filled point
+DEFAULT_MIN_SIGNAL_PCT = 5   # fit only positions whose profile is >= 5% of its maximum
+HEAT_MAX_CELLS = 600_000   # cap on z x echo cells sent for the echo map
+
 # The dataset currently loaded in this interpreter (one per browser tab / notebook session).
 _STATE = {}
 
@@ -88,7 +92,8 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         _STATE.update(td=td, echo_s=echo_s, params=params)
         nucleus, why = constants.guess_nucleus(params.get("b1Freq"))
         out["defaults"] = {"nucleus": nucleus, "nucleus_reason": why,
-                           "G": constants.DEFAULT_G_T_PER_M, "zero_fill": constants.DEFAULT_ZERO_FILL}
+                           "G": constants.DEFAULT_G_T_PER_M, "zero_fill": constants.DEFAULT_ZERO_FILL,
+                           "z_window_um": list(constants.DEFAULT_Z_WINDOW_UM)}
         out["raw"] = {
             "n_points": n_pts,
             "n_echoes": n_echo,
@@ -138,18 +143,32 @@ def _run_ft(cfg):
     spacing = cfg.get("spacing_um")
     spacing_auto = spacing is None
     spacing = float(float(f"{res:.2g}") if spacing_auto else spacing)
-    idx = echoes.position_indices(z, float(z0), float(z1), spacing)
-    Ypos = echoes.position_decays(S, idx)
-    # thinned magnitude map for the heatmap (keeps the message small)
-    zs, es = max(1, int(np.ceil(len(z) / 256))), max(1, int(np.ceil(S.shape[1] / 256)))
+    idx = echoes.position_indices(z, float(z0), float(z1), spacing)                     # exponential fits
+    ilt_sp = cfg.get("ilt_spacing_um")
+    idx_ilt = (echoes.grid_indices(z, float(z0), float(z1)) if ilt_sp is None               # ILT map: every zero-filled point
+               else echoes.position_indices(z, float(z0), float(z1), float(ilt_sp), max_positions=ILT_MAX_POSITIONS))
+    if len(idx_ilt) > ILT_MAX_POSITIONS:
+        raise ValueError(f"{len(idx_ilt)} ILT positions (maximum {ILT_MAX_POSITIONS}); set an ILT spacing or narrow the window.")
+    # echo map on the full zero-filled grid (same zf as the processing); only echoes are thinned, to bound the message size
+    es = max(1, int(np.ceil(S.shape[1] * len(z) / HEAT_MAX_CELLS)))
     ft_out = {
         "z_um": z, "profile": prof, "window": [float(z0), float(z1)], "window_auto": auto,
         "nucleus": nuc, "gamma_mhz_per_t": gamma, "G": g, "zero_fill": zf,
-        "center_point": r["center"] + 1, "nfft": r["nfft"],
+        "center_point": r["center"] + 1, "nfft": r["nfft"], "zf_step_um": float(z[1] - z[0]),
         "resolution_um": res, "spacing_um": spacing, "spacing_auto": spacing_auto, "n_positions": len(idx),
-        "heat": {"z_um": z[::zs], "echo_idx": np.arange(S.shape[1])[::es], "mag": np.abs(S[::zs, ::es])},
+        "n_ilt_positions": len(idx_ilt),
+        "heat": {"z_um": z, "echo_idx": np.arange(S.shape[1])[::es], "mag": np.abs(S[:, ::es])},
     }
-    return y, r["phase_deg"], ft_out, (z[idx], Ypos)
+    # Skip positions with no signal: fitting noise gives meaningless T2s and wastes time.
+    min_sig = float(cfg.get("min_signal_pct", DEFAULT_MIN_SIGNAL_PCT)) / 100
+    sig = prof / prof.max() if prof.max() > 0 else np.zeros_like(prof)
+    keep, keep_ilt = sig[idx] >= min_sig, sig[idx_ilt] >= min_sig
+    if not keep.any():
+        raise ValueError(f"No position has signal above {min_sig:.0%} of the profile maximum; lower the threshold or widen the window.")
+    ft_out.update({"min_signal_pct": min_sig * 100, "n_positions_kept": int(keep.sum()), "n_ilt_positions_kept": int(keep_ilt.sum())})
+    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep),
+                 "ilt": (z[idx_ilt], echoes.position_decays(S, idx_ilt), keep_ilt)}
+    return y, r["phase_deg"], ft_out, positions
 
 
 def process(settings, progress=None):
@@ -158,7 +177,8 @@ def process(settings, progress=None):
     settings = {
       "echo": "integrate" | "ft",
       "ft": {"nucleus": "1H"|"19F", "G", "zero_fill", "z_min", "z_max" (None -> auto window),
-             "spacing_um" (None -> native resolution)},  # FT mode also fits every z position
+             "spacing_um" (exp fits; None -> native resolution), "ilt_spacing_um" (None -> every zero-filled point),
+             "min_signal_pct" (skip positions below this % of the profile max)},  # FT mode also fits every z position
       "multiexp": {"enabled", "n", "offset", "ci_level", "compare"},
       "ilt": {"enabled", "t2_min", "t2_max", "n_steps" (max grid points), "alpha", "sweep",
               "peak_threshold_pct", "sweep_lo", "sweep_hi"},
@@ -192,5 +212,7 @@ def process(settings, progress=None):
                                    peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
                                    sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))))
     if positions is not None and (me.get("enabled") or il.get("enabled")):
-        out["spatial"] = spatial.fit_positions(t, positions[1], positions[0], me, il, progress)
+        out["spatial"] = spatial.fit_positions(
+            t, positions["me"], positions["ilt"], me, il, progress,
+            peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100)
     return _jsonable(out)

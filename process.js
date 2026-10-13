@@ -23,7 +23,11 @@ export function initProcessDefaults(raw) {
     $("ft-zf").value = d.zero_fill;
     $("ft-nucleus-note").textContent = "Nucleus preset from acqu.par: " + d.nucleus_reason + ".";
   }
-  $("ft-zmin").value = $("ft-zmax").value = $("ft-spacing").value = "";
+  const zw = d && d.z_window_um;                                          // default window: −200 to +200 µm
+  $("ft-zmin").value = zw ? zw[0] : "";
+  $("ft-zmax").value = zw ? zw[1] : "";
+  $("ft-spacing").value = $("ft-ilt-spacing").value = "";
+  $("ft-minsig").value = 5;
   showMsg("");
   $("run-status").textContent = "";
 }
@@ -45,9 +49,14 @@ export function readSettings() {
     if (zmin !== "" && +zmin >= +zmax) throw new Error("The z-window minimum must be below its maximum.");
     const sp = $("ft-spacing").value.trim();
     if (sp !== "" && !(+sp > 0)) throw new Error("The z spacing must be positive (or blank for automatic).");
+    const minsig = num("ft-minsig", "Min signal");
+    if (minsig < 0 || minsig > 100) throw new Error("Min signal must be between 0 and 100%.");
+    const isp = $("ft-ilt-spacing").value.trim();
+    if (isp !== "" && !(+isp > 0)) throw new Error("The ILT map spacing must be positive (or blank for every zero-filled point).");
     settings.ft = { nucleus: $("ft-nucleus").value, G, zero_fill: zf,
                     z_min: zmin === "" ? null : +zmin, z_max: zmax === "" ? null : +zmax,
-                    spacing_um: sp === "" ? null : +sp };
+                    spacing_um: sp === "" ? null : +sp, ilt_spacing_um: isp === "" ? null : +isp,
+                    min_signal_pct: minsig };
   }
   const me = $("me-enabled").checked, il = $("ilt-enabled").checked;
   if (!me && !il) throw new Error("Choose at least one decay analysis.");
@@ -112,8 +121,8 @@ export function initProcess() {
   });
   document.querySelectorAll('input[name="echo"]').forEach((r) => r.addEventListener("change", syncFt));
   syncFt();
-  $("process-form").addEventListener("submit", (e) => {
-    e.preventDefault();
+  $("process-form").addEventListener("submit", (e) => e.preventDefault());   // Enter in a field must not reload the page
+  $("run-btn").addEventListener("click", () => {
     if (state.running || !state.result || !state.result.is_cpmg) return;
     let settings;
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
