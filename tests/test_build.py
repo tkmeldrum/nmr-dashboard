@@ -38,4 +38,5 @@ def test_build_bundles_site(tmp_path):
 
 def test_no_timestamp_mode():
     r = load(ROOT / "test_data" / "CPMG_EtGly" / "1", None, fallback_to_mtime=False)
-    assert "File timestamp" not in [x["label"] for x in r["display"]]
+    row = next(x for x in r["display"] if x["label"] == "File timestamp")
+    assert row["value"] == "not available"

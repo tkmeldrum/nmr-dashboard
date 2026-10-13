@@ -59,12 +59,10 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
 
     if timestamp_ms is not None:
         ts = datetime.fromtimestamp(timestamp_ms / 1000)
-    elif not fallback_to_mtime:
-        ts = None
-    elif data_path.is_file():
+    elif fallback_to_mtime and data_path.is_file():
         ts = datetime.fromtimestamp(data_path.stat().st_mtime)
     else:
-        ts = datetime.fromtimestamp(par_path.stat().st_mtime)
+        ts = None
 
     is_cpmg, reason = check_cpmg(params, header)
     out = {
