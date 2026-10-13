@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, export, ilt_tools, multiexp, provenance, sequences, spatial, uncertainty
+from . import constants, echoes, export, ilt2d, ilt_tools, multiexp, provenance, sequences, spatial, t2d, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -62,6 +62,19 @@ def _load_t1(d, params, out, timestamp_ms):
     out["defaults"] = {"t1_components": 1, "t1_offset": constants.T1_DEFAULT_OFFSET}
 
 
+def _load_t2d(d, params, out, timestamp_ms):
+    """T2-D (SSE-T2): echo trains for every diffusion delay; see t2d.py for the files."""
+    L = t2d.load(d, params)
+    skip_noise = L["noise"]
+    _STATE.update(t2d=L, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
+    n_echo, n_tau = L["data"].shape
+    out["raw"] = {"n_echoes": n_echo, "n_tau": n_tau, "echo_time_s": _clean(L["echo_s"]), "b_vec": _clean(L["b_vec"]),
+                  "tau_s": None if L["tau_s"] is None else _clean(L["tau_s"]),
+                  "data": _clean(L["data"].T),                       # rows = diffusion delay, columns = echo
+                  "noise_sigma": t2d.noise_sigma(skip_noise)}
+    out["defaults"] = dict(constants.T2D_DEFAULTS)
+
+
 def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
     """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
 
@@ -85,6 +98,8 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         ts = datetime.fromtimestamp(timestamp_ms / 1000)
     elif fallback_to_mtime and data_path.is_file():
         ts = datetime.fromtimestamp(data_path.stat().st_mtime)
+    elif fallback_to_mtime and (d / "data2D_Cp.2d").is_file():
+        ts = datetime.fromtimestamp((d / "data2D_Cp.2d").stat().st_mtime)
     elif fallback_to_mtime and (d / "data.dat").is_file():
         ts = datetime.fromtimestamp((d / "data.dat").stat().st_mtime)
     else:
@@ -107,11 +122,11 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         "reason": reason,
         "raw": None,
     }
-    if seq["kind"] == "t1" and seq["supported"]:
+    if seq["kind"] in ("t1", "t2d") and seq["supported"]:
         try:
-            _load_t1(d, params, out, timestamp_ms)
-        except ValueError as exc:                       # a malformed data.dat: say so instead of crashing
-            out.update(supported=False, reason=str(exc))
+            (_load_t1 if seq["kind"] == "t1" else _load_t2d)(d, params, out, timestamp_ms)
+        except (ValueError, OSError, KeyError) as exc:   # a malformed or incomplete folder: say so instead of crashing
+            out.update(supported=False, reason=f"{exc}" if not isinstance(exc, KeyError) else f"acqu.par has no {exc} entry")
     if is_cpmg:
         n_pts, n_echo = header["xDim"], header["yDim"]
         td = spec[: n_pts * n_echo].reshape((n_pts, n_echo), order="F")
@@ -218,6 +233,45 @@ def _run_ft(cfg, skip=0):
     return y, r["phase_deg"], ft_out, positions, echoes.window_noise_series(S_fit, z, float(z0), float(z1))
 
 
+def _t2d_cfg(settings):
+    cfg = {**constants.T2D_DEFAULTS, **(settings.get("t2d") or {})}
+    if cfg["d_min"] == "auto" or cfg["d_max"] == "auto":                     # the range these b-values can resolve
+        cfg["d_min"], cfg["d_max"] = (float(f"{v:.2g}") for v in ilt2d.sensitive_d_window(_STATE["t2d"]["b_vec"]))
+    for k in ("t2_min", "t2_max", "d_min", "d_max", "alpha"):
+        if not cfg[k] > 0:
+            raise ValueError(f"{k} must be positive")
+    if cfg["t2_min"] >= cfg["t2_max"] or cfg["d_min"] >= cfg["d_max"]:
+        raise ValueError("The minimum of each range must be below its maximum.")
+    return cfg
+
+
+def t2d_estimate(settings):
+    """{n_T2, n_D, seconds}: the grid the solver will use and a time estimate from a short timed trial on this machine."""
+    L = _STATE.get("t2d")
+    if L is None:
+        raise RuntimeError("No T2-D dataset is loaded.")
+    cfg = _t2d_cfg(settings)
+    skip = _skip_count(settings, len(L["echo_s"]))
+    nT2, nD = ilt2d.grid_sizes(len(L["echo_s"]) - skip, len(L["b_vec"]), cfg["t2_steps"], cfg["d_steps"])
+    if "t2d_speed" not in _STATE:
+        _STATE["t2d_speed"] = ilt2d.trial_seconds(L["echo_s"], L["b_vec"])
+    return {"n_T2": nT2, "n_D": nD, "unknowns": nT2 * nD, "seconds": ilt2d.estimate_seconds(nT2, nD, _STATE["t2d_speed"])}
+
+
+def _process_t2d(settings):
+    """T2-D: one 2D ILT of the (echo x diffusion-delay) matrix. The first `exclude_first` echoes are left out, as in every fit."""
+    L = _STATE["t2d"]
+    cfg = _t2d_cfg(settings)
+    skip = _skip_count(settings, len(L["echo_s"]))
+    sigma = t2d.noise_sigma(L["noise"], skip)
+    res = ilt2d.run(L["data"][skip:], L["echo_s"][skip:], L["b_vec"], cfg["t2_min"], cfg["t2_max"], cfg["t2_steps"], cfg["d_min"], cfg["d_max"], cfg["d_steps"],
+                    cfg["alpha"], sigma=sigma, peak_min_fraction=float(cfg["peak_threshold_pct"]) / 100)
+    out = {"settings": settings, "version": __version__, "mode": "t2d", "ft": None, "spatial": None, "multiexp": None, "ilt": None, "t2d": res,
+           "decay": {"t": L["echo_s"], "y": None, "skip": skip, "phase_deg": None, "noise_sigma": sigma}}
+    _STATE["processed"] = {"settings": settings}
+    return _jsonable(out)
+
+
 def _process_t1(settings):
     """Saturation recovery: fit 1 (or 2) components; the sparse data have no ILT and no noise channel."""
     t_all, y_all = _STATE["t1"]["t"], _STATE["t1"]["y"]
@@ -251,6 +305,8 @@ def process(settings, progress=None):
     """
     if "t1" in _STATE:
         return _process_t1(settings)
+    if "t2d" in _STATE:
+        return _process_t2d(settings)
     if "td" not in _STATE:
         raise RuntimeError("No supported dataset is loaded.")
     t_all = _STATE["echo_s"]
@@ -301,6 +357,8 @@ def _target(cfg):
     pr = _STATE.get("processed")
     if not pr:
         raise RuntimeError("Run the processing first.")
+    if "t2d" in _STATE:
+        raise ValueError("MCMC and the bootstrap are not available for T2-D data yet.")
     t, settings = pr["t"], pr["settings"]
     if cfg.get("target", "bulk") == "bulk":
         return {"t": t, "y": pr["y"], "sigma": pr["sigma"], "noise": pr["noise"], "me_fit": pr["me_fit"],

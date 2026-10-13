@@ -105,7 +105,10 @@ def test_process_all_samples_json_safe(d):
 
 
 def test_process_requires_loaded_dataset():
-    load(DATA / "M1115_rt_30phr" / "1")       # a sequence that cannot be processed yet clears the state
+    load(DATA / "T1SAT" / "1")
+    load(DATA / "CPMG_EtGly" / "1")           # loading anything replaces what was loaded before
+    from nmrdash.pipeline import _STATE
+    _STATE.clear()                            # nothing loaded (what an unsupported folder leaves behind)
     with pytest.raises(RuntimeError, match="No supported dataset"):
         process({"echo": "integrate"})
 

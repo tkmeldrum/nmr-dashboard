@@ -2,6 +2,7 @@
 import { $, state } from "./state.js";
 import { baseLayout, CFG, COLORS, ink, fmt, fmtCI as fmtCIplain, fmtCIWith, fmtPair, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
 import { ILT_EQUATION, meDefinitions, meEquation } from "./equations.js";
+import { renderT2d } from "./t2dview.js";
 
 const LINKS = {
   RSS: "https://en.wikipedia.org/wiki/Residual_sum_of_squares",
@@ -412,11 +413,14 @@ export function renderResults() {
   const r = state.results;
   if (!r) return;
   const phase = r.decay.phase_deg === null ? "" : ` (autophase rotation ${fmt(r.decay.phase_deg, 4)}°)`;
-  $("results-summary").textContent =
-    `${r.mode === "ft" ? "FT of each echo" : r.mode === "t1" ? "Saturation-recovery data" : "Integrated each echo"}${phase} · ${r.decay.t.length} ${r.mode === "t1" ? "delays" : "echoes"}`;
+  $("results-summary").textContent = r.mode === "t2d"
+    ? `T₂–D inversion · ${r.decay.t.length} echoes × ${r.t2d.b_vec.length} diffusion delays`
+    : `${r.mode === "ft" ? "FT of each echo" : r.mode === "t1" ? "Saturation-recovery data" : "Integrated each echo"}${phase} · ${r.decay.t.length} ${r.mode === "t1" ? "delays" : "echoes"}`;
+  $("fit-section").hidden = r.mode === "t2d";                 // the decay-and-fit plot belongs to the other sequences
+  renderT2d(r);
   renderFt(r);
   renderSpatial(r);
-  renderFit(r);
+  if (r.mode !== "t2d") renderFit(r);
   renderMultiexp(r);
   renderIlt(r);
 }

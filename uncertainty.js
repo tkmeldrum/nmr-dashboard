@@ -60,10 +60,10 @@ function validate(o) {
   if (o.target === "position" && state.results.mode !== "ft") throw new Error("Choosing a z position needs the FT echo processing.");
 }
 
-const duration = (s) => (s < 1.5 ? "a second" : s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
+export const duration = (s) => (s < 1.5 ? "a second" : s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
 const msg = (text, kind = "") => { const m = $("unc-message"); m.textContent = text; m.className = "message " + kind; m.hidden = !text; };
 
-function ask(text) {
+export function ask(text) {
   return new Promise((resolve) => {
     const d = $("unc-dialog");
     $("unc-dialog-text").textContent = text;
