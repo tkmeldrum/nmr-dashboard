@@ -138,10 +138,44 @@
         <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
     </fieldset>
     <fieldset>
-      <legend>Resampling methods <small>(coming soon)</small></legend>
-      <label class="opt disabled"><input type="checkbox" disabled> MCMC <small>posterior samples, corner and trace plots (multi-exponential fits)</small></label>
-      <label class="opt disabled"><input type="checkbox" disabled> Bootstrap <small>uncertainty bands for ILT and PED spectra</small></label>
+      <legend>Decay to analyse <small>(for MCMC and bootstrap)</small></legend>
+      <label class="opt"><input type="radio" name="unc-target" value="bulk" checked> The whole decay <small>(integrated, or the FT window sum)</small></label>
+      <label class="opt"><input type="radio" name="unc-target" value="position"> One z position <small>(FT mode)</small>
+        nearest to <input type="number" id="unc-z" step="any" placeholder="strongest" style="width:8rem"> µm</label>
     </fieldset>
+
+    <fieldset>
+      <legend>MCMC <small>(Bayesian posterior of the multi-exponential fit)</small></legend>
+      <label class="opt"><input type="checkbox" id="mcmc-enabled"> Run MCMC</label>
+      <div class="fields" id="mcmc-fields">
+        <label>Walkers <input type="number" id="mcmc-walkers" value="32" min="8" step="2"></label>
+        <label>Steps <input type="number" id="mcmc-steps" value="6000" min="100" step="500"></label>
+        <label>Burn-in <input type="number" id="mcmc-burn" value="2000" min="0" step="100"></label>
+        <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small>(otherwise fixed from the imaginary channel)</small></label>
+        <small class="hint">Uses the model chosen on the Process tab. Priors: amplitudes flat and ≥ 0; T₂ log-uniform between a tenth of the first and ten times the last echo time,
+          ordered fast → slow so components cannot swap; offset flat; σ log-uniform if sampled. Intervals are central credible intervals at the level above.
+          The default 6000 steps is about 100 autocorrelation times for a typical decay; strongly correlated parameters (a window shorter than T₂) need more, and the page warns when the chain is too short.</small>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Bootstrap <small>(refit surrogate decays)</small></legend>
+      <label class="opt"><input type="checkbox" id="boot-enabled"> Run bootstrap</label>
+      <div class="fields" id="boot-fields">
+        <label>Replicates <input type="number" id="boot-n" value="200" min="20" step="20"></label>
+        <label>Noise source
+          <select id="boot-method">
+            <option value="auto" selected>measured noise (imaginary channel)</option>
+            <option value="residual">resample the fit residuals</option>
+            <option value="parametric">Gaussian, σ from the imaginary channel</option>
+          </select></label>
+        <label><input type="checkbox" id="boot-me" checked> multi-exponential fit</label>
+        <label><input type="checkbox" id="boot-ilt" checked> ILT spectrum</label>
+        <small class="hint">Each replicate is the fitted curve plus resampled noise, refitted. The preferred noise source resamples the values actually measured in the
+          imaginary channel (it contains only noise after phasing), so no Gaussian assumption is needed. Real-valued data falls back to residual resampling.</small>
+      </div>
+    </fieldset>
+    <p class="note">MCMC and the bootstrap run after the processing, on the Results tab, once you have seen a time estimate and confirmed.</p>
     <p class="next"><button type="button" data-next="results" id="next-results" disabled>Results appear after you run the processing ↓</button></p>
   </section>
 
@@ -226,7 +260,57 @@
       <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>
       <div id="lcurve-card" class="plot-card wide" hidden><div id="plot-lcurve"></div></div>
     </div>
+
+    <div id="unc-results" hidden>
+      <h3>Uncertainty: MCMC and bootstrap</h3>
+      <div id="unc-bar" class="unc-bar" hidden>
+        <progress id="unc-progress" max="1" value="0"></progress>
+        <span id="unc-status" class="status" role="status"></span>
+        <button type="button" id="unc-stop">Stop and keep partial results</button>
+      </div>
+      <p id="unc-message" class="message" hidden></p>
+      <p id="unc-target-note" class="note"></p>
+      <div id="unc-compare" hidden>
+        <h4>Methods compared</h4>
+        <div class="table-wrap"><table id="unc-compare-table" class="grid"></table></div>
+        <p class="note">Each cell is value [interval at the chosen level]; a row shares one notation. Where the methods disagree, trust the sampling methods over
+          the covariance: the least-squares interval assumes a Gaussian, symmetric likelihood.</p>
+      </div>
+      <div id="mcmc-results" hidden>
+        <h4>MCMC</h4>
+        <p id="mcmc-diag" class="note"></p>
+        <div id="mcmc-warnings"></div>
+        <div class="table-wrap"><table id="mcmc-table" class="grid"></table></div>
+        <div class="plots">
+          <div class="plot-card"><div id="plot-mcmc-trace" class="tall"></div></div>
+          <div class="plot-card"><img id="mcmc-corner" class="corner" alt="Corner plot of the MCMC posterior samples"></div>
+        </div>
+        <p class="note">Trace: a few walkers (burn-in shaded); a healthy chain looks like stationary noise. Corner plot: marginal and pairwise posteriors, orange marks the least-squares fit.</p>
+      </div>
+      <div id="boot-results" hidden>
+        <h4>Bootstrap</h4>
+        <p id="boot-diag" class="note"></p>
+        <div id="boot-warnings"></div>
+        <div class="table-wrap"><table id="boot-table" class="grid"></table></div>
+        <div id="boot-hists" class="hist-grid"></div>
+        <div id="boot-ilt-results" hidden>
+          <div class="plot-card wide"><div id="plot-boot-ilt"></div></div>
+          <div class="table-wrap"><table id="boot-peaks" class="grid"></table></div>
+        </div>
+      </div>
+    </div>
   </section>
+
+  <dialog id="unc-dialog" aria-labelledby="unc-dialog-title">
+    <form method="dialog">
+      <h3 id="unc-dialog-title">Run MCMC / bootstrap?</h3>
+      <p id="unc-dialog-text"></p>
+      <menu>
+        <button value="skip">Skip</button>
+        <button value="run" id="unc-run">Run</button>
+      </menu>
+    </form>
+  </dialog>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script type="module" src="app.js"></script>

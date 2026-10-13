@@ -4,6 +4,8 @@ import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { initRaw, renderRaw } from "./raw.js";
 import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
+import { handleReply } from "./rpc.js";
+import { initUncertainty, resetUncertainty, runUncertainty } from "./uncertainty.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
 const worker = new Worker("worker.js");
@@ -19,6 +21,8 @@ worker.onmessage = (e) => {
     state.result = m.result;
     $("status").textContent = "Python ready.";
     showResult(m.result);
+  } else if (m.type === "reply") {
+    handleReply(m);
   } else if (m.type === "progress") {
     setProgress(m.done, m.total);
   } else if (m.type === "processed") {
@@ -27,7 +31,9 @@ worker.onmessage = (e) => {
     setTabEnabled("results", true);
     $("next-results").disabled = false;
     $("next-results").textContent = "Results →";
+    resetUncertainty();
     showTab("results");
+    runUncertainty();                       // MCMC / bootstrap, if requested on the Uncertainty tab (asks first)
   } else if (m.type === "error") {
     $("status").textContent = "Python ready.";
     if (state.running) processFailed(m.text);
@@ -116,6 +122,7 @@ function resetSections() {
   hideMessage();
   $("params-section").hidden = true;
   state.result = state.results = null;
+  resetUncertainty();
   for (const t of ["raw", "process", "uncertainty", "results"]) setTabEnabled(t, false);
   $("next-results").disabled = true;
   showTab("load");
@@ -285,4 +292,5 @@ initTabs((name) => {
 initRaw();
 initProcess();
 initResults();
+initUncertainty();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderRaw(); renderResults(); });
