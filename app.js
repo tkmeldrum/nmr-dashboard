@@ -1,5 +1,6 @@
 // Main thread: worker plumbing, folder loading, tab flow.
 import { $, state } from "./state.js";
+import { initFeedback } from "./feedback.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { setBusy, withBusy } from "./busy.js";
 import { applyKind } from "./kinds.js";
@@ -355,6 +356,7 @@ initTabs((name) => {
 });
 initRaw();
 initProcess();
+initFeedback();
 initResults();
 initUncertainty();
 $("busy-stop").addEventListener("click", restartPython);
