@@ -269,6 +269,108 @@ def save_figure(fig, path, fmt="png", dpi=150):
     plt.close(fig)
 
 
+# ── plot settings (the "Plot settings" panel on the page and [output.style] ideas for scripts) ─────────────
+
+STYLE_DEFAULTS = {
+    "font_size": 10.0,        # points; every text scales with it
+    "line_scale": 1.0,        # multiplies the line widths
+    "marker_scale": 1.0,      # multiplies the marker sizes
+    "cmap": "viridis",        # colour map of the heat maps (the diverging residual map keeps its own)
+    "width": None, "height": None,   # inches; None keeps each figure's own size
+    "legend": True,
+    "title": "auto",          # "auto" = each figure's own title, "none", or "custom" (with title_text)
+    "title_text": "",
+    "time_unit": "s",         # "s" or "ms": tick labels and axis labels only; the numbers saved to the CSV stay in seconds
+    "decay_logy": False,      # log y-axis on the decay figure
+}
+
+
+def style_from(d):
+    """A complete, validated style dict from a partial one (unknown keys are ignored)."""
+    s = dict(STYLE_DEFAULTS)
+    for k, v in (d or {}).items():
+        if k in s and v is not None and v != "":
+            s[k] = v
+    s["font_size"] = min(max(float(s["font_size"]), 4.0), 40.0)
+    s["line_scale"] = min(max(float(s["line_scale"]), 0.1), 10.0)
+    s["marker_scale"] = min(max(float(s["marker_scale"]), 0.1), 10.0)
+    for k in ("width", "height"):
+        s[k] = None if s[k] is None else min(max(float(s[k]), 1.0), 40.0)
+    if s["title"] not in ("auto", "none", "custom"):
+        s["title"] = "auto"
+    if s["time_unit"] not in ("s", "ms"):
+        s["time_unit"] = "s"
+    s["legend"], s["decay_logy"] = bool(s["legend"]), bool(s["decay_logy"])
+    import matplotlib
+    if s["cmap"] not in matplotlib.colormaps:
+        s["cmap"] = "viridis"
+    return s
+
+
+def styled(builder, style, *args, name="", retight=True):
+    """Build a figure with builder(*args, titles=...) and then apply the plot settings to it."""
+    plt = _plt()
+    s = style_from(style)
+    with plt.rc_context({"font.size": s["font_size"]}):
+        fig = builder(*args, titles=s["title"] == "auto")
+        _apply(fig, s, name, retight)
+    return fig
+
+
+def _apply(fig, s, name, retight):
+    import warnings
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.lines import Line2D
+    from matplotlib.collections import LineCollection
+    from matplotlib.text import Annotation
+    from matplotlib.ticker import FuncFormatter
+    for a in fig.axes:
+        for ln in a.findobj(Line2D):
+            ln.set_linewidth(ln.get_linewidth() * s["line_scale"])
+            ln.set_markersize(ln.get_markersize() * s["marker_scale"])
+        for lc in a.findobj(LineCollection):
+            lc.set_linewidth([w * s["line_scale"] for w in np.atleast_1d(lc.get_linewidth())])
+        for an in a.findobj(Annotation):
+            an.set_fontsize(an.get_fontsize() * s["font_size"] / 10.0)      # annotations carry their own small size
+    for m in fig.findobj(lambda o: isinstance(o, ScalarMappable)):
+        cm = getattr(m, "cmap", None)
+        if cm is not None and cm.name == "viridis" and s["cmap"] != "viridis":
+            m.set_cmap(s["cmap"])
+    if not s["legend"]:
+        for a in fig.axes:
+            if a.get_legend():
+                a.get_legend().remove()
+    if s["decay_logy"] and name == "decay_fit" and fig.axes:
+        fig.axes[0].set_yscale("log")
+    if s["title"] == "custom" and s["title_text"]:
+        if len(fig.axes) > 2:
+            fig.suptitle(s["title_text"])
+        else:
+            fig.axes[0].set_title(s["title_text"])
+    if s["width"] or s["height"]:
+        w0, h0 = fig.get_size_inches()
+        fig.set_size_inches(s["width"] or w0, s["height"] or h0)
+        if retight:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    fig.tight_layout()
+                except Exception:
+                    pass
+    if s["time_unit"] == "ms":
+        for a in fig.axes:
+            for which in ("x", "y"):
+                label = getattr(a, f"get_{which}label")()
+                if "(s)" not in label:
+                    continue
+                getattr(a, f"set_{which}label")(label.replace("(s)", "(ms)"))
+                axis = a.xaxis if which == "x" else a.yaxis
+                if getattr(a, f"get_{which}scale")() == "log":
+                    axis.set_major_formatter(FuncFormatter(lambda v, _p: _decade(v * 1e3)))
+                else:
+                    axis.set_major_formatter(FuncFormatter(lambda v, _p: f"{v * 1e3:.6g}"))
+
+
 def timeseries_figure(rows, titles=True, symbol="T2"):
     """Batch: each multi-exponential time constant (T2 or T1) and the total amplitude against elapsed time (or dataset number)."""
     plt = _plt()

@@ -151,31 +151,38 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
 
 # ── figures ──────────────────────────────────────────────────────────────────
 
-def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True, band=None):
-    """band: the MCMC result to draw as a band on the decay figure (only when MCMC analysed that same decay)."""
+def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True, band=None, style=None):
+    """band: the MCMC result to draw as a band on the decay figure (only when MCMC analysed that same decay).
+
+    style: plot settings (see figures.STYLE_DEFAULTS). Without it, `titles` alone decides whether the figures carry titles.
+    """
     d = Path(d)
     written = []
+    st = dict(style or {})
+    if style is None:
+        st["title"] = "auto" if titles else "none"
 
-    def save(name, fig):
+    def save(name, builder, *args, retight=True):
+        fig = figures.styled(builder, st, *args, name=name, retight=retight)
         figures.save_figure(fig, d / f"{name}.{fmt}", fmt, dpi)
         written.append(f"{name}.{fmt}")
 
     if res.get("mode") == "t2d":
-        save("t2d_spectrum", figures.t2d_spectrum_figure(res, titles))
-        save("t2d_fit", figures.t2d_fit_figure(res, titles))
+        save("t2d_spectrum", figures.t2d_spectrum_figure, res, retight=False)
+        save("t2d_fit", figures.t2d_fit_figure, res)
         return written
-    save("decay_fit", figures.decay_figure(res, band, titles))
+    save("decay_fit", lambda r, b, titles: figures.decay_figure(r, b, titles), res, band)
     if res.get("ilt"):
-        save("ilt_spectrum", figures.ilt_figure(res, titles))
+        save("ilt_spectrum", figures.ilt_figure, res)
     if res.get("ft"):
-        save("spatial", figures.spatial_figure(res, titles))
+        save("spatial", figures.spatial_figure, res)
     if mcmc:
         (d / "mcmc_corner.png").write_bytes(base64.b64decode(mcmc["corner_png_b64"]))
         written.append("mcmc_corner.png")
     if boot and boot.get("ilt"):
-        save("bootstrap_ilt", figures.bootstrap_ilt_figure(boot, titles))
+        save("bootstrap_ilt", figures.bootstrap_ilt_figure, boot)
     if boot and boot.get("multiexp"):
-        save("bootstrap_distributions", figures.bootstrap_hist_figure(boot, titles))
+        save("bootstrap_distributions", figures.bootstrap_hist_figure, boot)
     return written
 
 

@@ -1,5 +1,7 @@
 // Main thread: worker plumbing, folder loading, tab flow.
 import { $, state } from "./state.js";
+import { initPlotStyle } from "./plotstyle.js";
+import { initSave } from "./save.js";
 import { initFeedback } from "./feedback.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { setBusy, withBusy } from "./busy.js";
@@ -9,7 +11,7 @@ import { initProcess, initProcessDefaults, initT2dDefaults, processFailed, setPr
 import { initResults, renderResults } from "./results.js";
 import { handleReply } from "./rpc.js";
 import { initProvenance, refreshProvenance } from "./provenance.js";
-import { initUncertainty, resetUncertainty, runUncertainty } from "./uncertainty.js";
+import { initUncertainty, renderUncertainty, resetUncertainty, runUncertainty } from "./uncertainty.js";
 
 // ── worker ────────────────────────────────────────────────────────────────
 setBusy("Starting Python (the first visit downloads about 30 MB; later visits are cached)…");
@@ -204,6 +206,8 @@ async function openDataset(i) {
   // when the data were written: the main data file of whichever sequence this is
   const timestampMs = written["data.2d"] ?? written["data2D_Cp.2d"] ?? written["data2D.dat"] ?? written["data.dat"] ?? null;
   $("folder-name").textContent = ds.label;
+  state.dataDir = ds.dir.handle || null;                 // where "Save to the data folder" writes (only with a real folder handle)
+  document.dispatchEvent(new Event("datasetchange"));
   const payload = { files, timestampMs };
   if (state.ready) sendLoad(payload);
   else { state.pending = payload; $("status").textContent = "Python is still loading; your data will open as soon as it's ready."; }
@@ -241,7 +245,8 @@ $("sample-select").addEventListener("change", async (e) => {
   resetSections();
   $("chooser").hidden = true;
   datasets = [];
-  state.dirHandle = null;
+  state.dirHandle = state.dataDir = null;
+  document.dispatchEvent(new Event("datasetchange"));
   try {
     const files = {};
     for (const name of s.files.filter((f) => f !== "data.1d")) {
@@ -359,6 +364,8 @@ initProcess();
 initFeedback();
 initResults();
 initUncertainty();
+initSave();
+initPlotStyle(() => { if (state.result) renderRaw(); if (state.results) { renderResults(); renderUncertainty(); } });
 $("busy-stop").addEventListener("click", restartPython);
 initProvenance();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderRaw(); renderResults(); });
