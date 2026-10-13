@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, ilt_tools, multiexp, spatial
+from . import constants, echoes, ilt_tools, multiexp, spatial, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -166,9 +166,9 @@ def _run_ft(cfg):
     if not keep.any():
         raise ValueError(f"No position has signal above {min_sig:.0%} of the profile maximum; lower the threshold or widen the window.")
     ft_out.update({"min_signal_pct": min_sig * 100, "n_positions_kept": int(keep.sum()), "n_ilt_positions_kept": int(keep_ilt.sum())})
-    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep, echoes.position_noise(S, idx)),
+    positions = {"me": (z[idx], echoes.position_decays(S, idx), keep, echoes.position_noise(S, idx), echoes.position_noise_series(S, idx)),
                  "ilt": (z[idx_ilt], echoes.position_decays(S, idx_ilt), keep_ilt, echoes.position_noise(S, idx_ilt))}
-    return y, r["phase_deg"], ft_out, positions, echoes.window_noise(S, z, float(z0), float(z1))
+    return y, r["phase_deg"], ft_out, positions, echoes.window_noise_series(S, z, float(z0), float(z1))
 
 
 def process(settings, progress=None):
@@ -188,15 +188,16 @@ def process(settings, progress=None):
         raise RuntimeError("No CPMG dataset is loaded.")
     t = _STATE["echo_s"]
     mode = settings.get("echo", "integrate")
-    ft_out, positions, sigma = None, None, None
+    ft_out, positions, series = None, None, None
     if mode == "integrate":
         y, phase = echoes.integrate(_STATE["td"])
-        sigma = echoes.integrate_noise(_STATE["td"])
+        series = echoes.integrate_noise_series(_STATE["td"])
     elif mode == "ft":
-        y, phase, ft_out, positions, sigma = _run_ft(settings.get("ft") or {})
+        y, phase, ft_out, positions, series = _run_ft(settings.get("ft") or {})
     else:
         raise ValueError(f"Unsupported echo processing: {mode!r}")
 
+    sigma = echoes.noise_sigma(series) if series is not None else None
     out = {"settings": settings, "version": __version__, "mode": mode, "ft": ft_out, "spatial": None,
            "decay": {"t": t, "y": y, "phase_deg": phase, "noise_sigma": sigma}, "multiexp": None, "ilt": None}
 
@@ -212,8 +213,97 @@ def process(settings, progress=None):
                                    int(il["n_steps"]), float(il["alpha"]), bool(il.get("sweep")),
                                    peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100,
                                    sweep_range=(float(il.get("sweep_lo", 4)), float(il.get("sweep_hi", 12))), sigma=sigma)
+    _STATE["processed"] = {"settings": settings, "t": t, "y": y, "sigma": sigma, "noise": series, "positions": positions,
+                           "me_fit": out["multiexp"]["selected"] if out["multiexp"] else None}
     if positions is not None and (me.get("enabled") or il.get("enabled")):
         out["spatial"] = spatial.fit_positions(
             t, positions["me"], positions["ilt"], me, il, progress,
             peak_min_fraction=float(il.get("peak_threshold_pct", 5)) / 100)
     return _jsonable(out)
+
+
+# ── MCMC and bootstrap: chunked so the page can show progress, stop early and keep partial results ──
+
+def _target(cfg):
+    """The decay to analyse: the bulk decay, or (FT mode) the fitted position nearest cfg['z_um']."""
+    pr = _STATE.get("processed")
+    if not pr:
+        raise RuntimeError("Run the processing first.")
+    t, settings = pr["t"], pr["settings"]
+    if cfg.get("target", "bulk") == "bulk":
+        return {"t": t, "y": pr["y"], "sigma": pr["sigma"], "noise": pr["noise"], "me_fit": pr["me_fit"],
+                "label": "window-summed decay" if settings.get("echo") == "ft" else "integrated decay", "z_um": None}
+    if pr["positions"] is None:
+        raise ValueError("A position can only be chosen after an FT run.")
+    z, Y, keep, sig, noise = pr["positions"]["me"]
+    ok = np.flatnonzero(keep)
+    if len(ok) == 0:
+        raise ValueError("No position has signal to analyse.")
+    zq = cfg.get("z_um")
+    i = int(ok[np.argmax(Y[ok].sum(axis=1))]) if zq is None else int(ok[np.argmin(np.abs(z[ok] - float(zq)))])
+    s = float(sig[i]) if np.isfinite(sig[i]) else None
+    return {"t": t, "y": Y[i], "sigma": s, "noise": None if noise is None else noise[i], "me_fit": None,
+            "label": f"position z = {z[i]:.1f} µm", "z_um": float(z[i])}
+
+
+def _me_for(tg, cfg_settings):
+    me = cfg_settings.get("multiexp") or {}
+    if not me.get("enabled"):
+        raise ValueError("Enable the multi-exponential fit on the Process tab first (MCMC and the exponential bootstrap use that model).")
+    fit = tg["me_fit"] or multiexp.fit(tg["t"], tg["y"], int(me["n"]), bool(me.get("offset", True)),
+                                       float(me.get("ci_level", 0.95)), sigma=tg["sigma"])
+    return me, fit
+
+
+def mcmc_start(cfg):
+    """Set up (and time) an MCMC run on the chosen decay. cfg: target, z_um, nwalkers, steps, burn, ci_level, sample_sigma, seed."""
+    tg = _target(cfg)
+    me, fit = _me_for(tg, _STATE["processed"]["settings"])
+    sigma = None if (cfg.get("sample_sigma") or tg["sigma"] is None) else tg["sigma"]
+    run = uncertainty.Mcmc(tg["t"], tg["y"], int(me["n"]), bool(me.get("offset", True)), fit, sigma=sigma,
+                           ci_level=float(cfg.get("ci_level", 0.95)), nwalkers=int(cfg.get("nwalkers", 32)),
+                           steps=int(cfg.get("steps", 6000)), burn=int(cfg.get("burn", 2000)), seed=int(cfg.get("seed", 0)))
+    _STATE["mcmc"] = run
+    return _jsonable({"ndim": run.ndim, "nwalkers": run.nwalkers, "steps": run.steps, "est_seconds": run.est_seconds,
+                      "target": tg["label"], "sigma_sampled": run.sample_sigma,
+                      "note": None if sigma is not None else "No imaginary channel (or sampling requested): sigma is sampled as a parameter."})
+
+
+def mcmc_step(k):
+    return _STATE["mcmc"].step(int(k))
+
+
+def mcmc_finish(theme=None):
+    return _jsonable(_STATE["mcmc"].result(theme))
+
+
+def boot_start(cfg):
+    """Set up (and time) a bootstrap. cfg: target, z_um, replicates, method, do_multiexp, do_ilt, ci_level, seed."""
+    tg = _target(cfg)
+    settings = _STATE["processed"]["settings"]
+    me = fit = ilt = None
+    if cfg.get("do_multiexp", True):
+        me, fit = _me_for(tg, settings)
+    il = settings.get("ilt") or {}
+    if cfg.get("do_ilt", True):
+        if not il.get("enabled"):
+            if me is None:
+                raise ValueError("Enable the multi-exponential fit or the ILT on the Process tab first.")
+        else:
+            ilt = il
+    if me is None and ilt is None:
+        raise ValueError("Nothing to bootstrap: choose the multi-exponential fit and/or the ILT.")
+    run = uncertainty.Bootstrap(tg["t"], tg["y"], tg["noise"], tg["sigma"], me=me, ls_fit=fit, ilt=ilt,
+                                method=cfg.get("method"), replicates=int(cfg.get("replicates", 200)),
+                                ci_level=float(cfg.get("ci_level", 0.95)), seed=int(cfg.get("seed", 0)),
+                                peak_min_fraction=float((il or {}).get("peak_threshold_pct", 5)) / 100)
+    _STATE["boot"] = run
+    return _jsonable({"replicates": run.B, "done": run.done, "est_seconds": run.est_seconds, "method": run.method, "target": tg["label"]})
+
+
+def boot_step(k):
+    return _STATE["boot"].step(int(k))
+
+
+def boot_finish():
+    return _jsonable(_STATE["boot"].result())
