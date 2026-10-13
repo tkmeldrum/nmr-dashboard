@@ -110,3 +110,7 @@ dialog::backdrop { background:rgba(0,0,0,.45); }
 dialog menu { display:flex; justify-content:flex-end; gap:.75rem; padding:0; margin:1rem 0 0; }
 #unc-run { background:var(--accent); color:var(--bg); }
 #plot-boot-ilt { height:22rem; }
+button.secondary { background:transparent; }
+.prov { margin:.5rem 0 1rem; padding:.5rem .9rem; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+.prov summary { cursor:pointer; font-weight:600; }
+.prov ul { margin:.5rem 0; padding-left:1.2rem; font-size:.9rem; word-break:break-word; }

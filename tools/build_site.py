@@ -30,6 +30,25 @@ def sample_manifest(root=ROOT):
     return out
 
 
+def commit_id():
+    import os
+    import subprocess
+    if os.environ.get("GITHUB_SHA"):
+        return os.environ["GITHUB_SHA"]
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip() or None
+    except Exception:
+        return None
+
+
+def tree_is_dirty():
+    import subprocess
+    try:
+        return bool(subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", "nmrdash"], capture_output=True, text=True, timeout=5).stdout.strip())
+    except Exception:
+        return None
+
+
 def _sub(text, old, new):
     assert old in text, f"expected {old!r} in source"
     return text.replace(old, new)
@@ -60,6 +79,9 @@ def build(out, version):
     names = sorted(p.name for p in (ROOT / "nmrdash").glob("*.py"))
     for n in names:
         shutil.copy(ROOT / "nmrdash" / n, pkg / n)
+    # record which commit the deployed code came from, so provenance can name it
+    (pkg / "_buildinfo.py").write_text(f'COMMIT = {commit_id()!r}\nDIRTY = {tree_is_dirty()!r}\nBUILT_VERSION = {version!r}\n')
+    names = sorted(names + ["_buildinfo.py"])
     (out / "nmrdash-files.json").write_text(json.dumps(names))
 
     manifest = sample_manifest()

@@ -186,7 +186,7 @@ class Mcmc:
             out[..., -1] = np.exp(out[..., -1])
         return out
 
-    def result(self, theme=None):
+    def result(self, theme=None, max_samples=0):
         if self.done < 10:
             raise RuntimeError("Too few MCMC steps to summarise yet.")
         theme = theme or {}
@@ -247,6 +247,7 @@ class Mcmc:
             "trace": {"names": names, "step": (np.arange(chain.shape[0])[::tstep]).tolist(), "values": traces, "burn": burn},
             "predictive": {"t": t_dense, "lo": plo, "median": pmed, "hi": phi},
             "corner_png_b64": png,
+            "samples": {"names": names, "values": flat[rng.choice(len(flat), size=min(max_samples, len(flat)), replace=False)]} if max_samples else None,
         }
 
     def _ls_se(self, j):

@@ -3,6 +3,7 @@ import { $, state } from "./state.js";
 import { rpc } from "./rpc.js";
 import { baseLayout, CFG, COLORS, fmt, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
 import { renderResults } from "./results.js";
+import { refreshProvenance } from "./provenance.js";
 
 const run = { stop: false, running: false };
 const Z_FOR = { 0.68: 0.994, 0.95: 1.96, 0.99: 2.576 };   // normal quantiles, for least-squares intervals when no t value is at hand
@@ -32,6 +33,17 @@ function readOptions() {
             burn: Math.round(+$("mcmc-burn").value), sample_sigma: $("mcmc-sigma").checked },
     boot: { enabled: $("boot-enabled").checked, replicates: Math.round(+$("boot-n").value), method: $("boot-method").value,
             do_multiexp: $("boot-me").checked, do_ilt: $("boot-ilt").checked },
+  };
+}
+
+// The options in the shape the script's params use (seeds are the Python defaults).
+export function exportOptions() {
+  const o = readOptions();
+  const base = { target: o.target, z_um: o.z_um, ci_level: o.level, seed: 0 };
+  return {
+    mcmc: { enabled: o.mcmc.enabled, ...base, nwalkers: o.mcmc.nwalkers, steps: o.mcmc.steps, burn: o.mcmc.burn, sample_sigma: o.mcmc.sample_sigma },
+    bootstrap: { enabled: o.boot.enabled, ...base, replicates: o.boot.replicates, method: o.boot.method === "auto" ? null : o.boot.method,
+                 do_multiexp: o.boot.do_multiexp, do_ilt: o.boot.do_ilt },
   };
 }
 
@@ -132,6 +144,7 @@ export async function runUncertainty() {
     }
     bar.hidden = true;
     renderResults();                 // redraw the decay with the posterior-predictive band
+    refreshProvenance();             // the record now also says which MCMC / bootstrap runs produced the intervals
   } catch (err) {
     bar.hidden = true;
     msg("Uncertainty analysis failed: " + err.message, "error");

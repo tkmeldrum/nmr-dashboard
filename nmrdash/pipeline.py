@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, ilt_tools, multiexp, spatial, uncertainty
+from . import constants, echoes, export, ilt_tools, multiexp, provenance, spatial, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -89,7 +89,7 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         summed, _phase = echoes.integrate(td)
         re, im = (td.real, td.imag) if np.iscomplexobj(td) else (td, np.zeros_like(td))
         _STATE.clear()
-        _STATE.update(td=td, echo_s=echo_s, params=params)
+        _STATE.update(td=td, echo_s=echo_s, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
         nucleus, why = constants.guess_nucleus(params.get("b1Freq"))
         out["defaults"] = {"nucleus": nucleus, "nucleus_reason": why,
                            "G": constants.DEFAULT_G_T_PER_M, "zero_fill": constants.DEFAULT_ZERO_FILL,
@@ -273,8 +273,8 @@ def mcmc_step(k):
     return _STATE["mcmc"].step(int(k))
 
 
-def mcmc_finish(theme=None):
-    return _jsonable(_STATE["mcmc"].result(theme))
+def mcmc_finish(theme=None, max_samples=0):
+    return _jsonable(_STATE["mcmc"].result(theme, max_samples))
 
 
 def boot_start(cfg):
@@ -307,3 +307,34 @@ def boot_step(k):
 
 def boot_finish():
     return _jsonable(_STATE["boot"].result())
+
+
+# ── provenance and export, for the web page ──────────────────────────────────
+
+def get_provenance(page=None, options=None):
+    """Provenance of the last processing run on the loaded dataset: {record, lines}.
+
+    page: {dataset, browser: {...}, uncertainty: {...}} from the page (label, user agent, which MCMC / bootstrap ran).
+    options: the uncertainty options in the same shape the script's params use (see params.to_settings).
+    """
+    pr, src = _STATE.get("processed"), _STATE.get("source")
+    if not pr or not src:
+        raise RuntimeError("Run the processing first.")
+    page = page or {}
+    from . import params as P
+    text = P.dump_toml(P.from_settings(pr["settings"], options))
+    notes = ["Computed in the browser with Pyodide; the data never left this computer."] + list(page.get("notes") or [])
+    extra = dict(page.get("browser") or {})
+    if page.get("uncertainty"):
+        extra["uncertainty_runs"] = page["uncertainty"]
+    rec = provenance.build(src["dir"], pr["settings"], options or {}, params_text=text, command=None, dataset=page.get("dataset"),
+                           acquisition=_STATE["params"], notes=notes, extra=extra or None, modified_ms=src["timestamp_ms"])
+    return _jsonable({"record": rec, "lines": provenance.describe(rec)})
+
+
+def export_params(settings, options=None, dataset=None):
+    return export.params_text(settings, options, dataset)
+
+
+def export_script():
+    return export.SCRIPT
