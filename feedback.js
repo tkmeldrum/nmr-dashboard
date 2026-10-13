@@ -1,9 +1,8 @@
-// Feedback and problem reports. Nothing is sent by the page itself: the buttons open the user's
-// own mail program or a GitHub issue, pre-filled with text the user can read and edit first.
+// Feedback and problem reports. Nothing is sent by the page itself: the button opens the user's
+// own mail program with the text pre-filled for them to read, edit and send.
 import { $, state } from "./state.js";
 
-const EMAIL = "tkmeldrum@wm.edu";
-const ISSUES = "https://github.com/tkmeldrum/nmr-dashboard/issues/new";
+const EMAIL = ["tkmeldrum", "wm.edu"].join("@");        // assembled here so address harvesters reading the page or repo text do not find it
 
 function diagnostics() {
   const tab = document.querySelector('[role="tab"][aria-selected="true"]');
@@ -30,8 +29,5 @@ export function initFeedback() {
   $("fb-diag").addEventListener("change", refresh);
   $("fb-mail").addEventListener("click", () => {
     location.href = `mailto:${EMAIL}?subject=${encodeURIComponent("NMR dashboard feedback")}&body=${encodeURIComponent(body())}`;
-  });
-  $("fb-issue").addEventListener("click", () => {
-    window.open(`${ISSUES}?title=${encodeURIComponent("Feedback")}&body=${encodeURIComponent(body())}`, "_blank", "noopener");
   });
 }
