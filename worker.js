@@ -7,7 +7,12 @@ let pyodide;
 const status = (text) => postMessage({ type: "status", text });
 
 // A Python exception arrives with its whole traceback; the last line ("ValueError: ...") is the part worth showing.
-const brief = (err) => String((err && err.message) || err).trim().split("\n").map((l) => l.trim()).filter(Boolean).pop();
+// the last line of a Python traceback, or the whole of an import error (whose useful part is not its last line)
+const brief = (err) => {
+  const lines = String((err && err.message) || err).trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  const i = lines.findLastIndex((l) => /^\w*(Error|Exception)\b/.test(l));
+  return /ModuleNotFoundError/.test(lines[i] || "") ? lines.slice(i).join(" ") : lines.pop();
+};
 
 async function init() {
   status("Loading Python (first load ~30 MB, then cached)…");
@@ -54,7 +59,7 @@ function processDataset({ settings }) {
 
 // Calls the page makes while a long job runs: small functions in nmrdash.pipeline, plus the one-off emcee install.
 const RPC_FUNCTIONS = new Set(["mcmc_start", "mcmc_step", "mcmc_finish", "boot_start", "boot_step", "boot_finish",
-                               "get_provenance", "export_params", "export_script", "t2d_estimate"]);
+                               "get_provenance", "export_params", "export_script", "t2d_estimate", "save_bundle"]);
 
 async function installEmcee() {
   try { pyodide.runPython("import emcee"); return { already: true }; } catch (_) { /* not installed yet */ }

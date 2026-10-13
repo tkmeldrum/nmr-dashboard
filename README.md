@@ -150,11 +150,13 @@ sample-data explorer; CI and Pages deploy.
    original** (needs PyTorch locally; not run in CI).
 3. ~~Uncertainty tab: MCMC and bootstrap~~ **done on branch `uncertainty`** (see the pull request); still to do: bootstrap
    bands for PED spectra once PED exists, and MCMC/bootstrap at *every* z position (today: one position at a time).
-4. **Plot controls and saving**: common plot settings (axis scale and limits, time units, fonts, line widths, colormap,
-   figure size, a "no title" option for publication figures). Save numeric results (CSV) and figures (PNG/SVG/PDF,
-   rendered with matplotlib) into a `processed_<timestamp>/` folder inside the data folder (Chrome/Edge via the File
-   System Access API, or another folder the user picks); other browsers get a `.zip`. A `processing.json` records
-   every setting plus the `nmrdash` version for reproducibility. *Needs testing in a real Chrome.*
+4. ~~Plot controls and saving~~ **done on branch `save-and-plot-controls`**: a Save card on the Results tab writes tables (CSV),
+   figures (PNG/SVG/PDF, matplotlib), `params_used.toml`, `provenance.json` and `summary.md` into a new
+   `processed_<timestamp>/` folder (inside the data folder, or another folder, in Chrome/Edge; a `.zip` elsewhere).
+   Plot settings (font size, line and marker scale, colour map, figure size, titles none/custom, legends, time units)
+   apply to the page's plots and the saved figures; time units and figure size are saved-figure only. Still to do:
+   numeric axis limits, per-figure settings, `[output.style]` in the params file. *The real File System Access path
+   (permission prompt, a real folder) has only been tested against a stand-in directory; try it in Chrome.*
 5. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
    import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.
 6. ~~T₂–D (SSE-T2)~~ **done on branch `t2d`**. Still to do: a parametric few-component T₂–D model with MCMC, and a bootstrap of the 2D map (opt-in; each replicate is a full solve). Original notes: The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
@@ -216,4 +218,4 @@ Content-Security-Policy already allows `pypi.org` and `files.pythonhosted.org`),
 ## Not yet verified
 
 Everything was checked in headless Chromium against the built site (files served from disk), never against the live URL in
-a normal browser. Not tested at all: the real File System Access save path, Safari/Firefox, ¹⁹F data, and the `emcee` download from the real PyPI inside a real browser (in tests the same files are served from a local cache).
+a normal browser. Not tested at all: the real File System Access save path (only a stand-in directory was), Safari/Firefox, ¹⁹F data, and the `emcee` download from the real PyPI inside a real browser (in tests the same files are served from a local cache).

@@ -1,4 +1,5 @@
 """Thin entry points called by the browser worker (and usable from notebooks)."""
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -290,6 +291,14 @@ def _process_t1(settings):
 
 
 def process(settings, progress=None):
+    """Run the analysis; the result is also kept so the page can save everything that is on screen (see save_bundle)."""
+    out = _process(settings, progress)
+    _STATE["last_result"] = out
+    _STATE.pop("mcmc", None), _STATE.pop("boot", None)             # uncertainty runs belong to the processing they followed
+    return out
+
+
+def _process(settings, progress=None):
     """Run the requested processing on the loaded dataset; returns a JSON-ready dict.
 
     settings = {
@@ -394,6 +403,7 @@ def mcmc_start(cfg):
                            ci_level=float(cfg.get("ci_level", 0.95)), nwalkers=int(cfg.get("nwalkers", 32)),
                            steps=int(cfg.get("steps", 6000)), burn=int(cfg.get("burn", 2000)), seed=int(cfg.get("seed", 0)))
     _STATE["mcmc"] = run
+    _STATE["mcmc_target"] = cfg.get("target", "bulk")
     return _jsonable({"ndim": run.ndim, "nwalkers": run.nwalkers, "steps": run.steps, "est_seconds": run.est_seconds,
                       "target": tg["label"], "sigma_sampled": run.sample_sigma,
                       "note": None if sigma is not None else "No imaginary channel (or sampling requested): sigma is sampled as a parameter."})
@@ -441,12 +451,7 @@ def boot_finish():
 
 # ── provenance and export, for the web page ──────────────────────────────────
 
-def get_provenance(page=None, options=None):
-    """Provenance of the last processing run on the loaded dataset: {record, lines}.
-
-    page: {dataset, browser: {...}, uncertainty: {...}} from the page (label, user agent, which MCMC / bootstrap ran).
-    options: the uncertainty options in the same shape the script's params use (see params.to_settings).
-    """
+def _provenance_record(page=None, options=None, outputs=None):
     pr, src = _STATE.get("processed"), _STATE.get("source")
     if not pr or not src:
         raise RuntimeError("Run the processing first.")
@@ -457,8 +462,17 @@ def get_provenance(page=None, options=None):
     extra = dict(page.get("browser") or {})
     if page.get("uncertainty"):
         extra["uncertainty_runs"] = page["uncertainty"]
-    rec = provenance.build(src["dir"], pr["settings"], options or {}, params_text=text, command=None, dataset=page.get("dataset"),
-                           acquisition=_STATE["params"], notes=notes, extra=extra or None, modified_ms=src["timestamp_ms"])
+    return provenance.build(src["dir"], pr["settings"], options or {}, params_text=text, command=None, dataset=page.get("dataset"),
+                            acquisition=_STATE["params"], notes=notes, extra=extra or None, outputs=outputs, modified_ms=src["timestamp_ms"]), text
+
+
+def get_provenance(page=None, options=None):
+    """Provenance of the last processing run on the loaded dataset: {record, lines}.
+
+    page: {dataset, browser: {...}, uncertainty: {...}} from the page (label, user agent, which MCMC / bootstrap ran).
+    options: the uncertainty options in the same shape the script's params use (see params.to_settings).
+    """
+    rec, _ = _provenance_record(page, options)
     return _jsonable({"record": rec, "lines": provenance.describe(rec)})
 
 
@@ -468,3 +482,54 @@ def export_params(settings, options=None, dataset=None):
 
 def export_script():
     return export.SCRIPT
+
+
+def save_bundle(opts):
+    """Everything the page shows, as files: tables, figures, params_used.toml, provenance.json and summary.md.
+
+    opts: {figure_format, dpi, style, csv, figures, samples, mcmc, boot, zip, options, page}.
+    Returns {"folder": "processed_<stamp>", "files": {name: base64}} or, with zip, {"zip_name", "zip_b64", "files": [names]}.
+    """
+    import base64, io, tempfile, zipfile
+    from pathlib import Path
+    from . import outputs
+    from . import params as P
+    res = _STATE.get("last_result")
+    pr = _STATE.get("processed")
+    if not res or not pr:
+        raise RuntimeError("Run the processing first.")
+    options, page = opts.get("options") or {}, opts.get("page") or {}
+    settings = pr["settings"]
+    samples = bool(opts.get("samples", True))
+    mcmc = boot = None
+    notes = []
+    if opts.get("mcmc") and _STATE.get("mcmc") is not None:
+        mcmc = _jsonable(_STATE["mcmc"].result({"fg": "#1a1a1a", "grid": "#bbbbbb"}, 5000 if samples else 0))
+    if opts.get("boot") and _STATE.get("boot") is not None:
+        boot = _jsonable(_STATE["boot"].result())
+    band = mcmc if (mcmc and _STATE.get("mcmc_target", "bulk") == "bulk") else None
+    notes += list((res.get("multiexp") or {}).get("selected", {}).get("warnings", []) or [])
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder = f"processed_{stamp}"
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        files = []
+        if opts.get("csv", True):
+            files += outputs.write_tables(d, res, mcmc, boot, samples=samples)
+        if opts.get("figures", True):
+            files += outputs.write_figures(d, res, mcmc, boot, opts.get("figure_format", "png"), int(opts.get("dpi", 150)), True, band, style=opts.get("style") or {})
+        label = page.get("dataset") or "dataset"
+        (d / "params_used.toml").write_text(P.dump_toml(P.from_settings(settings, options), header=f"Used for: {label}"))
+        files.append("params_used.toml")
+        names = files + ["provenance.json", "summary.md"]
+        rec, _ = _provenance_record({**page, "notes": list(page.get("notes") or []) + notes}, options, outputs=names)
+        (d / "provenance.json").write_text(json.dumps(rec, indent=2, default=str))
+        (d / "summary.md").write_text(outputs.summary_markdown(res, rec, mcmc, boot, names, notes))
+        blobs = {n: (d / n).read_bytes() for n in names}
+    if opts.get("zip"):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, b in blobs.items():
+                z.writestr(f"{folder}/{n}", b)
+        return {"zip_name": f"{folder}.zip", "zip_b64": base64.b64encode(buf.getvalue()).decode("ascii"), "files": names}
+    return {"folder": folder, "files": {n: base64.b64encode(b).decode("ascii") for n, b in blobs.items()}}
