@@ -99,9 +99,12 @@ def trial_seconds(echo_vec, b_vec):
     rng = np.random.default_rng(0)
     data = np.abs(rng.normal(1, 0.1, (len(e), len(bb))))
     nd = min(len(bb), n)
-    t0 = time.perf_counter()
-    run_2dilt(data, e, bb, {"T2minmax": [1e-5, 1.0], "T2_steps": n, "Dminmax": [1e-3, 10.0], "D_steps": nd, "alpha": 1e9})
-    return (time.perf_counter() - t0) / (n * nd) ** EXPONENT_FOR_TIME
+    best = float("inf")
+    for _ in range(3):                          # the fastest of a few, so one slow outlier (first call, a busy machine) does not inflate the estimate
+        t0 = time.perf_counter()
+        run_2dilt(data, e, bb, {"T2minmax": [1e-5, 1.0], "T2_steps": n, "Dminmax": [1e-3, 10.0], "D_steps": nd, "alpha": 1e9})
+        best = min(best, time.perf_counter() - t0)
+    return best / (n * nd) ** EXPONENT_FOR_TIME
 
 
 def sensitive_d_window(b_vec):
