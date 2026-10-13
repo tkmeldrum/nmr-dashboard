@@ -98,9 +98,13 @@ const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { numeric: t
 // ── loading ───────────────────────────────────────────────────────────────
 let datasets = [];
 
-async function openFolder(dir) {
+function resetSections() {
   hideMessage();
   $("params-section").hidden = $("raw-section").hidden = $("process-section").hidden = true;
+}
+
+async function openFolder(dir) {
+  resetSections();
   state.dirHandle = dir.handle || null;
   try {
     datasets = (await findDatasets(dir)).sort(byLabel);
@@ -136,6 +140,54 @@ async function openDataset(i) {
 }
 
 $("dataset-select").addEventListener("change", (e) => openDataset(+e.target.value));
+
+// ── bundled sample data ("Explore test data") ─────────────────────────────
+let samples = [];
+
+async function initSamples() {
+  try {
+    const r = await fetch("test_data/manifest.json", { cache: "no-store" });
+    if (!r.ok) return;
+    samples = await r.json();
+  } catch { return; }
+  if (!samples.length) return;
+  const sel = $("sample-select");
+  sel.replaceChildren(
+    Object.assign(document.createElement("option"), { value: "", textContent: "Choose…" }),
+    ...samples.map((s, i) => Object.assign(document.createElement("option"), { value: i, textContent: s.label }))
+  );
+  $("sample-btn").hidden = false;
+}
+
+$("sample-btn").addEventListener("click", () => {
+  const p = $("sample-picker");
+  p.hidden = !p.hidden;
+  if (!p.hidden) $("sample-select").focus();
+});
+
+$("sample-select").addEventListener("change", async (e) => {
+  if (e.target.value === "") return;
+  const s = samples[+e.target.value];
+  resetSections();
+  $("chooser").hidden = true;
+  datasets = [];
+  state.dirHandle = null;
+  try {
+    const files = {};
+    for (const name of s.files.filter((f) => f !== "data.1d")) {
+      const r = await fetch(`${s.path}/${name}`);
+      if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+      files[name] = await r.arrayBuffer();
+    }
+    $("folder-name").textContent = "sample: " + s.label;
+    const payload = { files, timestampMs: null };
+    if (state.ready) sendLoad(payload);
+    else { state.pending = payload; $("status").textContent = "Python is still loading; the sample will open as soon as it's ready."; }
+  } catch (err) {
+    showMessage("Could not load the sample data: " + err.message, "error");
+  }
+});
+initSamples();
 
 // ── drop zone ─────────────────────────────────────────────────────────────
 const drop = $("drop");

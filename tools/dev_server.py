@@ -1,10 +1,12 @@
 """Local dev server: python tools/dev_server.py  ->  http://localhost:8000
 
-Serves the repo root and generates /nmrdash-files.json on the fly (CI does this at deploy).
+Serves the repo root and generates /nmrdash-files.json and /test_data/manifest.json on the fly (CI does this at deploy).
 """
 import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from build_site import sample_manifest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -14,8 +16,12 @@ class H(SimpleHTTPRequestHandler):
         super().__init__(*a, directory=str(ROOT), **k)
 
     def do_GET(self):
-        if self.path.split("?")[0] == "/nmrdash-files.json":
-            body = json.dumps(sorted(p.name for p in (ROOT / "nmrdash").glob("*.py"))).encode()
+        route = self.path.split("?")[0]
+        if route in ("/nmrdash-files.json", "/test_data/manifest.json"):
+            if route == "/nmrdash-files.json":
+                body = json.dumps(sorted(p.name for p in (ROOT / "nmrdash").glob("*.py"))).encode()
+            else:
+                body = json.dumps(sample_manifest()).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

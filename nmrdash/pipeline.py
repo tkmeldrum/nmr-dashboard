@@ -38,11 +38,13 @@ def check_cpmg(params, header):
     return True, ""
 
 
-def load(dirpath, timestamp_ms=None):
+def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
     """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
 
     timestamp_ms : file modification time in ms since epoch (from the browser's
-        File.lastModified); falls back to the data file's mtime on disk.
+        File.lastModified). If None: with fallback_to_mtime the data file's mtime
+        on disk is used (desktop use); otherwise no timestamp is shown (the browser's
+        in-memory files have no meaningful mtime, e.g. for bundled sample data).
     """
     d = Path(dirpath)
     par_path = d / "acqu.par"
@@ -57,6 +59,8 @@ def load(dirpath, timestamp_ms=None):
 
     if timestamp_ms is not None:
         ts = datetime.fromtimestamp(timestamp_ms / 1000)
+    elif not fallback_to_mtime:
+        ts = None
     elif data_path.is_file():
         ts = datetime.fromtimestamp(data_path.stat().st_mtime)
     else:

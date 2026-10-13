@@ -33,9 +33,9 @@ function loadDataset({ files, timestampMs }) {
   for (const [name, buf] of Object.entries(files)) {
     pyodide.FS.writeFile("/data/" + name, new Uint8Array(buf));
   }
-  pyodide.globals.set("_ts_ms", timestampMs);
+  pyodide.globals.set("_ts_ms", timestampMs ?? undefined);   // JS null would arrive as jsnull, not None
   const json = pyodide.runPython(
-    "import json\nfrom nmrdash.pipeline import load\njson.dumps(load('/data', _ts_ms))"
+    "import json\nfrom nmrdash.pipeline import load\njson.dumps(load('/data', _ts_ms, fallback_to_mtime=False))"
   );
   postMessage({ type: "loaded", result: JSON.parse(json) });
 }
