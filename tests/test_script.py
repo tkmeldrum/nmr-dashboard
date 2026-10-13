@@ -153,13 +153,13 @@ def test_mcmc_and_bootstrap_outputs_and_seeds_in_provenance(ds):
     assert len(read_csv(out / "mcmc_samples.csv")) > 100
 
 
-def test_non_cpmg_data_is_skipped_not_crashed(tmp_path):
-    d = tmp_path / "t1"
+def test_unsupported_sequences_are_skipped_not_crashed(tmp_path):
+    d = tmp_path / "t2d"
     d.mkdir()
     for f in ("acqu.par", "data.1d"):
-        shutil.copy(DATA / "T1SAT" / "1" / f, d / f)
+        shutil.copy(DATA / "M1115_rt_30phr" / "1" / f, d / f)
     row = runner.run_dataset(d, fast())
-    assert row["status"] == "skipped" and "not CPMG" in row["reason"] and row["output_dir"] is None
+    assert row["status"] == "skipped" and "not available yet" in row["reason"] and row["output_dir"] is None
 
 
 # ── batch ────────────────────────────────────────────────────────────────────
@@ -176,8 +176,8 @@ def series(tmp_path):
         os.utime(d / "data.2d", (base + 60 * minutes,) * 2)
     t1 = root / "other"
     t1.mkdir()
-    for f in ("acqu.par", "data.1d"):
-        shutil.copy(DATA / "T1SAT" / "1" / f, t1 / f)
+    for f in ("acqu.par", "data.1d"):                                    # a T2-D dataset: recognised but not processable yet
+        shutil.copy(DATA / "M1115_rt_30phr" / "1" / f, t1 / f)
     return root
 
 
@@ -189,7 +189,7 @@ def test_batch_orders_by_timestamp_and_computes_elapsed_time(series):
     assert [float(r["elapsed_min"]) for r in done] == [0.0, 30.0, 90.0]
     assert done[0]["timestamp_utc"] == "2026-10-01T09:00:00+00:00"
     skipped = [r for r in table if r["status"] == "skipped"]
-    assert len(skipped) == 1 and skipped[0]["elapsed_min"] == "" and "not CPMG" in skipped[0]["reason"]
+    assert len(skipped) == 1 and skipped[0]["elapsed_min"] == "" and "not available yet" in skipped[0]["reason"]
     assert float(done[0]["T2_2_s"]) > float(done[0]["T2_1_s"]) > 0
     assert {"params_used.toml", "provenance.json", "batch_summary.csv"} <= {p.name for p in bdir.iterdir()}
     prov = json.loads((bdir / "provenance.json").read_text())

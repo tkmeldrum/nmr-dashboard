@@ -13,6 +13,10 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
 
 ## Workflow (the tabs run left to right)
 
+0. **The sequence decides the analysis.** The `experiment` entry in `acqu.par` is read (spelling variants tolerated): **CPMG**
+   → exponential decay (T₂), with FT, ILT and per-position fits; **T1Sat** → saturation recovery (T₁); **SSE-T2** → T₂–D
+   correlation (recognised, not implemented yet). The page shows the detected analysis on the Load tab and offers only the
+   controls that apply.
 1. **Load**: drag a folder in or click to browse. A parent folder with several experiments gets a dropdown.
    Shows the curated parameters (sequence, `data.2d` timestamp, pulse length with 90°/180° amplitudes in dB, echo
    time, echoes, points, dwell, repetition time, scans, data directory); everything else is under "Show all parameters".
@@ -28,6 +32,17 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
 5. **Results**: spatial profile and echo map (FT mode), spatially resolved fits (T₂(z) with error bars, amplitude(z),
    reduced χ²(z), a linked ILT cross-section viewer, per-peak ILT T₂ and signal fraction vs z), the decay with fits and
    residuals, fit tables, fit-quality statistics and the ILT spectrum.
+
+## Saturation recovery (T1Sat)
+
+Kea writes the recovery curve to `data.dat` (delay in s, amplitude); `nmrdash` reads that, not `data.2d`. The model is
+M(t) = c + Σᵢ Aᵢ(1 − e^(−t/T₁,ᵢ)) with **one component by default and two on request** (a second component is rare and
+needs good data); the constant offset c is **on by default** because Kea recovery curves rarely start at zero (on the sample
+data leaving it out raises the residual from 38 to 305). There is no ILT: recovery curves are too sparse (11–15 points) for it.
+The same fit statistics, confidence intervals (68/95/99%), model comparison (ΔAIC/ΔBIC for 1 vs 2 components), **MCMC and
+bootstrap**, params file, batch, provenance and exports apply. These data have **no imaginary channel**, so there is no
+measured noise σ: reduced χ² is not available, MCMC samples σ, and the bootstrap resamples residuals. Params file section: `[t1]`.
+Batch tables keep `T2_*` (CPMG) and `T1_*` (T1Sat) columns apart, with a `kind` column and `timeseries_T1.png`.
 
 ## What it computes
 
@@ -95,7 +110,7 @@ Deploys: every push to `main` runs the tests, builds the site and publishes it t
 
 ## Status and roadmap
 
-**Done:** load and raw display; MCMC and bootstrap (branch `uncertainty`, not yet merged); command-line tool, params file, batch/time-series and provenance (branch `script-export`, built on top of it); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
+**Done:** load and raw display; saturation recovery (T1Sat); MCMC and bootstrap (branch `uncertainty`, not yet merged); command-line tool, params file, batch/time-series and provenance (branch `script-export`, built on top of it); integrate and FT; multi-exponential fit with intervals and model comparison; ILT with peak
 tables and α sweep; spatially resolved fits with a linked cross-section viewer; fit-quality statistics; tabbed workflow;
 sample-data explorer; CI and Pages deploy.
 
@@ -113,8 +128,9 @@ sample-data explorer; CI and Pages deploy.
    every setting plus the `nmrdash` version for reproducibility. *Needs testing in a real Chrome.*
 4. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
    import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.
-5. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
-6. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
+5. **T₂–D (SSE-T2)**: next. The 2D ILT exists in `MeldrumLabCode/pythonic/` (`run_2dilt.py`, `kea_t2d_io.py`, MATLAB-matched); the sample folders in `test_data/` hold `data2D_Cp/Re/Im.2d`. MCMC applies to a parametric few-component T₂–D model, not to the full 2D ILT map (the bootstrap does).
+6. **Tecmag data** (second magnet, own Python reader exists): add a reader beside `kea_io.py` and check the Larmor frequency.
+7. Smaller items: an option to skip or down-weight a distorted first echo; non-CPMG data (T1 saturation recovery and
    others) and the NN-decays / T2-D formats from `pythonic/`; make `pythonic/` import from `nmrdash`; slim CI time.
 
 ## Run it on your own computer (command line, params file, batch)

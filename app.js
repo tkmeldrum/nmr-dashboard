@@ -2,6 +2,7 @@
 import { $, state } from "./state.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { setBusy, withBusy } from "./busy.js";
+import { applyKind } from "./kinds.js";
 import { initRaw, renderRaw } from "./raw.js";
 import { initProcess, initProcessDefaults, processFailed, setProgress, setRunning } from "./process.js";
 import { initResults, renderResults } from "./results.js";
@@ -163,7 +164,7 @@ async function openDataset(i) {
   const ds = datasets[i];
   hideMessage();
   setBusy("Reading the files from disk…");
-  const want = ["acqu.par", "data.2d"];
+  const want = ["acqu.par", "data.2d", "data.dat"];
   const files = {};
   let timestampMs = null;
   for (const name of want) {
@@ -171,7 +172,7 @@ async function openDataset(i) {
     if (!entry) continue;
     const file = await entry.getFile();
     files[name] = await file.arrayBuffer();
-    if (name === "data.2d") timestampMs = file.lastModified;   // when the data was written
+    if (name === "data.2d" || (name === "data.dat" && timestampMs === null)) timestampMs = file.lastModified;   // when the data was written
   }
   $("folder-name").textContent = ds.label;
   const payload = { files, timestampMs };
@@ -285,9 +286,18 @@ function showResult(r) {
   fillTable($("params"), r.display.map((x) => [x.label, x.value]));
   fillTable($("params-all"), Object.entries(r.params_all).sort().map(([k, v]) => [k, Array.isArray(v) ? `[${v.join(", ")}]` : String(v)]));
   $("params-section").hidden = false;
+  const seq = r.params_all.experiment;
+  $("analysis-line").textContent = r.analysis ? `Sequence “${seq}” → ${r.analysis} analysis${r.supported ? "" : " (not available yet)"}` : (seq ? `Sequence “${seq}”: no analysis available` : "");
 
-  if (!r.is_cpmg) {
-    return showMessage("Non-CPMG data: not yet supported (" + r.reason + "). Parameters are shown above.", "warn");
+  if (!r.supported) {
+    return showMessage("This dataset cannot be analysed: " + r.reason + ". Its parameters are shown above.", "warn");
+  }
+  applyKind(r.kind);                                  // the sequence name decides which analysis the page offers
+  if (r.kind === "t1") {
+    setTabEnabled("raw", true);
+    setTabEnabled("process", true);
+    setTabEnabled("uncertainty", true);
+    return;
   }
   const idx = $("echo-idx");
   idx.max = r.raw.n_echoes - 1;

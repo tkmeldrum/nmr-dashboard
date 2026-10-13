@@ -42,7 +42,8 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
     t, y = res["decay"]["t"], res["decay"]["y"]
     me = (res.get("multiexp") or {}).get("selected")
     il = res.get("ilt")
-    cols, head = [t, y], ["echo_time_s", "signal"]
+    lab = "T1" if res.get("mode") == "t1" else "T2"                  # name of the time constant in the file headers
+    cols, head = [t, y], ["delay_s" if lab == "T1" else "echo_time_s", "signal"]
     if me:
         cols += [me["fit"], me["resid"]]
         head += [f"exp{me['n']}_fit", f"exp{me['n']}_residual"]
@@ -54,11 +55,11 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
     if me:
         lvl = round(100 * me["ci_level"])
         out("multiexp_components.csv",
-            ["component", "T2_s", "T2_se", f"T2_ci{lvl}_lo", f"T2_ci{lvl}_hi", "amplitude", "amplitude_se", f"amplitude_ci{lvl}_lo", f"amplitude_ci{lvl}_hi", "fraction", "fraction_se"],
+            ["component", f"{lab}_s", f"{lab}_se", f"{lab}_ci{lvl}_lo", f"{lab}_ci{lvl}_hi", "amplitude", "amplitude_se", f"amplitude_ci{lvl}_lo", f"amplitude_ci{lvl}_hi", "fraction", "fraction_se"],
             [[i + 1, c["T2"], c["T2_se"], c["T2_ci"][0], c["T2_ci"][1], c["A"], c["A_se"], c["A_ci"][0], c["A_ci"][1], c["fraction"], c["fraction_se"]]
              for i, c in enumerate(me["components"])])
         q = [("n_components", me["n"]), ("offset_fitted", int(me["offset"])), ("offset", me["offset_value"]), ("offset_se", me["offset_se"]),
-             ("total_amplitude", me["total_amplitude"]), ("total_amplitude_se", me["total_amplitude_se"]), ("mean_T2_s", me["mean_T2"]), ("mean_T2_se", me["mean_T2_se"]),
+             ("total_amplitude", me["total_amplitude"]), ("total_amplitude_se", me["total_amplitude_se"]), (f"mean_{lab}_s", me["mean_T2"]), (f"mean_{lab}_se", me["mean_T2_se"]),
              ("rss", me["rss"]), ("mse", me["mse"]), ("rmse", me["rmse"]), ("residual_sd", me["resid_sd"]), ("signal_range", me["signal_range"]),
              ("residual_sd_over_signal_range", me["resid_sd_over_amp"]), ("noise_sigma", me["noise_sigma"]), ("reduced_chi2", me["chi2_red"]),
              ("r2", me["r2"]), ("aic", me["aic"]), ("bic", me["bic"]), ("degrees_of_freedom", me["dof"]), ("ci_level", me["ci_level"])]
@@ -158,10 +159,16 @@ def _md_table(header, rows):
 def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
     L = [f"# nmrdash results: {prov['dataset']}", ""]
     acq = prov.get("acquisition", {})
-    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] == "data.2d"), None)
-    L += [f"- Sequence: {acq.get('experiment', '?')}, echo time {acq.get('echoTime', '?')} µs, {acq.get('nrEchoes', '?')} echoes, {acq.get('nrPnts', '?')} points per echo",
-          f"- data.2d written: {when or 'unknown'}", f"- Echo processing: {'FT of each echo (signal vs z)' if res.get('mode') == 'ft' else 'integrate each echo'}; "
-          f"autophase rotation {F.fmt(res['decay']['phase_deg'], 4)}°; noise σ from the imaginary channel: {F.fmt(res['decay'].get('noise_sigma'))}", ""]
+    t1 = res.get("mode") == "t1"
+    sym = "T1" if t1 else "T2"
+    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data.dat")), None)
+    if t1:
+        L += [f"- Sequence: {acq.get('experiment', '?')} (saturation recovery), {len(res['decay']['t'])} delays", f"- data.dat written: {when or 'unknown'}",
+              "- No imaginary channel in these data, so there is no measured noise σ (reduced χ² is not available; MCMC samples σ, the bootstrap resamples residuals).", ""]
+    else:
+        L += [f"- Sequence: {acq.get('experiment', '?')}, echo time {acq.get('echoTime', '?')} µs, {acq.get('nrEchoes', '?')} echoes, {acq.get('nrPnts', '?')} points per echo",
+              f"- data.2d written: {when or 'unknown'}", f"- Echo processing: {'FT of each echo (signal vs z)' if res.get('mode') == 'ft' else 'integrate each echo'}; "
+              f"autophase rotation {F.fmt(res['decay']['phase_deg'], 4)}°; noise σ from the imaginary channel: {F.fmt(res['decay'].get('noise_sigma'))}", ""]
     for w in warnings:
         L.append(f"> **Warning:** {w}")
     if warnings:
@@ -169,13 +176,14 @@ def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
     me = (res.get("multiexp") or {}).get("selected")
     if me:
         lvl = round(100 * me["ci_level"])
-        L += ["## Multi-exponential fit" + (" (window-summed decay)" if res.get("mode") == "ft" else ""), "",
-              "S(t) = " + " + ".join(f"A{'' if me['n'] == 1 else i} exp(−t/T2{'' if me['n'] == 1 else ',' + str(i)})" for i in range(1, me["n"] + 1)) + (" + c" if me["offset"] else ""), ""]
+        shape = (lambda a, tt: f"{a} (1 − exp(−t/{tt}))") if t1 else (lambda a, tt: f"{a} exp(−t/{tt})")
+        L += [("## Saturation-recovery fit" if t1 else "## Multi-exponential fit") + (" (window-summed decay)" if res.get("mode") == "ft" else ""), "",
+              "S(t) = " + " + ".join(shape(f"A{'' if me['n'] == 1 else i}", f"{sym}{'' if me['n'] == 1 else ',' + str(i)}") for i in range(1, me["n"] + 1)) + (" + c" if me["offset"] else ""), ""]
         rows = []
         for i, c in enumerate(me["components"], 1):
             rows.append([i, F.pair(c["T2"], c["T2_se"], sci=True), F.interval(c["T2"], *c["T2_ci"], se=c["T2_se"], sci=True) if F.ok_unc(c["T2"], c["T2_se"]) else "undetermined",
                          F.fmt(c["A"]), F.pct(c["fraction"]) + (f" ± {F.pct(c['fraction_se'])}" if F.ok_unc(c["fraction"], c["fraction_se"]) else "")])
-        L += _md_table(["#", "T2 (s) ± SE", f"{lvl}% interval", "amplitude", "fraction"], rows) + [""]
+        L += _md_table(["#", f"{sym} (s) ± SE", f"{lvl}% interval", "amplitude", "fraction"], rows) + [""]
         stats = [("RSS", F.fmt_sci(me["rss"])), ("MSE", F.fmt_sci(me["mse"])), ("residual SD / signal range", F.pct(me["resid_sd_over_amp"], 2)),
                  ("noise σ (imaginary channel)", F.fmt(me["noise_sigma"])), ("reduced χ²", F.fmt(me["chi2_red"])), ("R²", F.fmt(me["r2"], 5)), ("degrees of freedom", me["dof"])]
         L += _md_table(["statistic", "value"], stats) + [""]

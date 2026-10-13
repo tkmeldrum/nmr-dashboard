@@ -105,8 +105,8 @@ def test_process_all_samples_json_safe(d):
 
 
 def test_process_requires_loaded_dataset():
-    load(DATA / "T1SAT" / "1")                # non-CPMG clears the state
-    with pytest.raises(RuntimeError):
+    load(DATA / "M1115_rt_30phr" / "1")       # a sequence that cannot be processed yet clears the state
+    with pytest.raises(RuntimeError, match="No supported dataset"):
         process({"echo": "integrate"})
 
 

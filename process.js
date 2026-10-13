@@ -1,6 +1,7 @@
 // Processing tab: form defaults, validation, and starting a run.
 import { $, state } from "./state.js";
-import { ILT_EQUATION, meEquation } from "./equations.js";
+import { ILT_EQUATION } from "./equations.js";
+import { applyKind, updateEquation } from "./kinds.js";
 import { rpc } from "./rpc.js";
 import { setBusy } from "./busy.js";
 import { download } from "./provenance.js";
@@ -43,6 +44,11 @@ function num(id, label) {
 }
 
 export function readSettings() {
+  if (state.result.kind === "t1") {                           // saturation recovery: one or two components, no echo processing, no ILT
+    const n = +$("me-n").value, offset = $("me-offset").checked;
+    if (2 * n + offset + 2 > state.result.raw.n_points) throw new Error(`${n} component${n > 1 ? "s" : ""} need more delays than this dataset has (${state.result.raw.n_points}).`);
+    return { kind: "t1", multiexp: { enabled: true, n, offset, ci_level: +$("me-ci").value, compare: $("me-compare").checked } };
+  }
   const settings = { echo: document.querySelector('input[name="echo"]:checked').value };
   if (settings.echo === "ft") {
     const G = num("ft-G", "G"), zf = Math.round(num("ft-zf", "Zero-fill"));
@@ -109,10 +115,9 @@ export function processFailed(text) {
   showMsg("Processing failed: " + text);
 }
 
-const updateEquation = () => { $("me-eq-form").innerHTML = meEquation(+$("me-n").value, $("me-offset").checked); };
-
 export function initProcess() {
   $("ilt-eq-form").innerHTML = ILT_EQUATION;
+  applyKind("cpmg");
   $("me-n").addEventListener("change", updateEquation);
   $("me-offset").addEventListener("change", updateEquation);
   updateEquation();
@@ -140,7 +145,7 @@ export function initProcess() {
   });
   $("process-form").addEventListener("submit", (e) => e.preventDefault());   // Enter in a field must not reload the page
   $("run-btn").addEventListener("click", () => {
-    if (state.running || !state.result || !state.result.is_cpmg) return;
+    if (state.running || !state.result || !state.result.supported) return;
     let settings;
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
     showMsg("");
