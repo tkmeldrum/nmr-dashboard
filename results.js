@@ -236,8 +236,13 @@ function renderViewer(il, tracks, window) {
 
 // ── decay + fits (integrated decay, or the FT window sum) ────────────────
 function renderFit(r) {
-  const { t, y } = r.decay;
+  const skip = r.decay.skip || 0;
+  const t = r.decay.t.slice(skip), y = r.decay.y.slice(skip);                            // the points the fits used
   const traces = [{ x: t, y, name: "Data", mode: "markers", marker: { size: 4, color: COLORS.grey }, xaxis: "x", yaxis: "y" }];
+  if (skip) {
+    traces.push({ x: r.decay.t.slice(0, skip), y: r.decay.y.slice(0, skip), name: `Excluded (${skip})`, mode: "markers",
+                  marker: { size: 7, symbol: "circle-open", color: COLORS.grey, line: { width: 1.5, color: COLORS.grey } } });
+  }
   const me = r.multiexp && r.multiexp.selected;
   if (me) {
     traces.push({ x: me.t_dense, y: me.fit_dense, name: `${me.n}-exp ${r.mode === "t1" ? "recovery " : ""}fit`, mode: "lines", line: { color: COLORS.orange, width: 2 } });
