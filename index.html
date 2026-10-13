@@ -116,7 +116,7 @@
             <label>D min (m²/s) <input type="number" id="t2d-dmin" step="any" min="0"></label>
             <label>D max (m²/s) <input type="number" id="t2d-dmax" step="any" min="0"></label>
             <label>D points <input type="number" id="t2d-dsteps" step="1" min="5" max="200"></label>
-            <label>α <input type="number" id="t2d-alpha" step="any" min="0"></label>
+            <label>log<sub>10</sub> α <input type="number" id="t2d-alpha" step="1"></label>
             <label>Region threshold (% of max) <input type="number" id="t2d-peakthr" step="any" min="0" max="100"></label>
             <p id="t2d-window-hint" class="note t2d-hint"></p>
             <button type="button" id="t2d-use-window" class="secondary">Use the range the b-values can resolve</button>
@@ -155,13 +155,13 @@
             <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
             <label>T₂ max (s) <input type="number" id="ilt-t2max" step="any" min="0"></label>
             <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
-            <label>α <input type="number" id="ilt-alpha" step="any" min="0" value="1e8"></label>
+            <label>log<sub>10</sub> α <input type="number" id="ilt-alpha" step="1" value="8"></label>
             <label>Peak threshold (% of tallest) <input type="number" id="ilt-peakthr" step="any" min="0" max="100" value="5"></label>
             <label><input type="checkbox" id="ilt-sweep"> α sweep (L-curve) from 10^<input type="number" id="ilt-sweep-lo" step="1" value="4"> to 10^<input type="number" id="ilt-sweep-hi" step="1" value="12"></label>
             <details class="more"><summary>Show more</summary><div class="more-body"><p>The inverse Laplace transform finds the <em>distribution</em> of T<sub>2</sub> values that reproduces the decay, without assuming how many components there are.
               The solution is regularised (smoothed) so it is stable against noise.</p>
               <p class="equation" id="ilt-eq-form"></p>
-              <p>Larger α = less smoothing (noisier spectrum); the typical range is 1e6–1e10. The grid never has more points than echoes. Peaks below the threshold are ignored in the peak table.
+              <p>Larger α = less smoothing (noisier spectrum); the typical range is log₁₀ α = 6 to 10 (the arrows step by one decade). The grid never has more points than echoes. Peaks below the threshold are ignored in the peak table.
               Peak areas (the sum over a peak) are the signal amounts, which is how they compare with the exponential components.</p></div></details>
           </div>
         </div>
