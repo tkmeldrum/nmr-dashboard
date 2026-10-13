@@ -131,7 +131,7 @@ async function openDataset(i) {
     if (!entry) continue;
     const file = await entry.getFile();
     files[name] = await file.arrayBuffer();
-    if (name === "data.2d" || timestampMs === null) timestampMs = file.lastModified;
+    if (name === "data.2d") timestampMs = file.lastModified;   // when the data was written
   }
   $("folder-name").textContent = ds.label;
   const payload = { files, timestampMs };
@@ -292,11 +292,18 @@ function renderRaw() {
   const e = +$("echo-idx").value;
   $("echo-idx-out").textContent = `${e + 1} of ${raw.n_echoes} (t = ${+t[e].toPrecision(4)} s)`;
   const pts = raw.real.map((_, i) => i + 1);
+  // y-range fixed from the second echo (the first can be distorted) plus 10% headroom, so the
+  // echo shape is comparable across the slider.
+  const ref = Math.min(1, raw.n_echoes - 1);
+  const refVals = raw.real.flatMap((r, p) => [r[ref], raw.imag[p][ref], mag[p][ref]]);
+  const pad = 0.1 * Math.max(...refVals.map(Math.abs));
+  const echoRange = [Math.min(...refVals) - pad, Math.max(...refVals) + pad];
   Plotly.react("plot-echo", [
     { x: pts, y: raw.real.map((r) => r[e]), name: "Real", mode: "lines+markers", line: { color: COLORS.re } },
     { x: pts, y: raw.imag.map((r) => r[e]), name: "Imaginary", mode: "lines+markers", line: { color: COLORS.im } },
     { x: pts, y: mag.map((r) => r[e]), name: "Magnitude", mode: "lines+markers", line: { color: COLORS.mag } },
-  ], baseLayout("Single echo", "Point within echo", "Signal (arb.)"), CFG);
+  ], baseLayout("Single echo", "Point within echo", "Signal (arb.)",
+     { yaxis: { ...baseLayout("", "", "").yaxis, title: "Signal (arb.)", range: echoRange } }), CFG);
 
   Plotly.react("plot-decay", [
     { x: t, y: raw.summed, mode: "lines+markers", name: "Summed", line: { color: COLORS.re }, marker: { size: 4 } },

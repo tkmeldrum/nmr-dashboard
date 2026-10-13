@@ -29,4 +29,16 @@ def test_non_cpmg_flagged(d):
 def test_display_pulse_row():
     r = load(DATA / "CPMG_EtGly" / "1")
     row = next(x for x in r["display"] if x["label"] == "Pulse length")
-    assert row["value"] == "2.25 µs (90°/180° amp: -10 / -4)"
+    assert row["value"] == "2.25 µs (90°/180° amp: -10/-4 dB)"
+
+
+def test_sequence_and_timestamp_are_base_rows():
+    r = load(DATA / "CPMG_EtGly" / "1", 1760000000000)
+    assert [x["label"] for x in r["display"]][:2] == ["Sequence", "File timestamp"]
+    assert r["display"][0]["value"] == "CPMG"
+    assert r["display"][1]["value"].startswith("2025-")
+
+
+def test_sequence_shown_for_non_cpmg():
+    r = load(DATA / "T1SAT" / "1")
+    assert r["display"][0] == {"label": "Sequence", "value": "T1Sat"}
