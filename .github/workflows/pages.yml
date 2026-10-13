@@ -33,7 +33,6 @@ jobs:
           find site/nmrdash -name __pycache__ -prune -exec rm -rf {} +
           (cd site/nmrdash && ls *.py | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().split()))") > site/nmrdash-files.json
       - uses: actions/configure-pages@v5
-        with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
       - id: deployment
