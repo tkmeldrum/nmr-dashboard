@@ -1,18 +1,12 @@
 """Turn the (n_points x n_echoes) complex echo train into a decay."""
 import numpy as np
 
+from . import inference, physics
+
 
 def noise_sigma(im):
-    """Noise SD of a decay from the imaginary channel (robust MAD estimate, one value per echo).
-
-    After zero-order phasing the imaginary channel holds only noise, so its scatter measures the
-    noise on the real decay without needing any model. Returns None if it cannot be measured.
-    """
-    im = np.asarray(im, float)
-    if im.size < 8:
-        return None
-    sigma = 1.4826 * float(np.median(np.abs(im - np.median(im))))
-    return sigma if np.isfinite(sigma) and sigma > 0 else None
+    """Noise SD of a decay from the imaginary channel (robust MAD estimate): see inference.noise_sigma_mad."""
+    return inference.noise_sigma_mad(im)
 
 
 def integrate_noise_series(td):
@@ -30,19 +24,8 @@ def integrate_noise(td):
 
 
 def integrate(td):
-    """Phase-correct and integrate each echo.
-
-    Zero-order autophase (rotate so the total signal sits in the real channel),
-    then sum the real part over all points of each echo.
-
-    Returns (decay, phase_deg); decay has one value per echo. Same result as
-    kea_io.prepare_t2_data / pythonic/run_kea_ilt.py.
-    """
-    td = np.asarray(td)
-    if np.iscomplexobj(td):
-        theta = -np.angle(td.sum())
-        return (td * np.exp(1j * theta)).real.sum(axis=0), float(np.degrees(theta))
-    return td.sum(axis=0).astype(float), 0.0
+    """Phase-correct and integrate each echo (inference.phase_and_integrate); same result as kea_io.prepare_t2_data / pythonic/run_kea_ilt.py."""
+    return inference.phase_and_integrate(td)
 
 
 AUTO_WINDOW_FRACTION = 0.10   # default z-window: where the profile exceeds 10% of its maximum
@@ -68,7 +51,7 @@ def ft(td, dwell_us, gamma_mhz_per_t, g_t_per_m, zero_fill=4):
     nfft = nextpow2(n_pts * 2 ** zero_fill)
     arr = np.concatenate([td[center:], np.zeros((nfft - n_pts, n_echo), td.dtype), td[:center]], axis=0)
     S = np.fft.fftshift(np.fft.fft(arr, axis=0), axes=0)
-    z_um = np.fft.fftshift(np.fft.fftfreq(nfft, d=dwell_us * 1e-6)) / (gamma_mhz_per_t * g_t_per_m)
+    z_um = physics.z_um_from_frequency(np.fft.fftshift(np.fft.fftfreq(nfft, d=dwell_us * 1e-6)), gamma_mhz_per_t, g_t_per_m)
     phase_deg = 0.0
     if np.iscomplexobj(S):
         theta = -np.angle(S.sum())
@@ -97,12 +80,8 @@ def window_decay(S, z_um, z_min, z_max):
 
 
 def native_resolution_um(n_pts, dwell_us, gamma_mhz_per_t, g_t_per_m):
-    """Spatial resolution set by the acquisition window: 1/(n_pts*dwell) in Hz, converted to µm.
-
-    Zero-filling interpolates but does not add resolution, so neighbouring z points of the
-    FFT are not independent on scales finer than this.
-    """
-    return 1e6 / (n_pts * dwell_us) / (gamma_mhz_per_t * g_t_per_m)
+    """Spatial resolution set by the acquisition window (physics.native_resolution_um)."""
+    return physics.native_resolution_um(n_pts, dwell_us, gamma_mhz_per_t, g_t_per_m)
 
 
 def position_indices(z_um, z_min, z_max, spacing_um, max_positions=400):

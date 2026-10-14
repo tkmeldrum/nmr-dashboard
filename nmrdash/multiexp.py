@@ -17,19 +17,17 @@ import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
 
+from . import inference, physics
+
 N_STARTS = 12
-KERNELS = {"decay": lambda x: np.exp(-x), "saturation": lambda x: 1.0 - np.exp(-x)}
+KERNELS = {"decay": physics.decay_factor, "saturation": physics.recovery_factor}      # the basic factors live in physics.py
 SYMBOL = {"decay": "T2", "saturation": "T1"}
 
 
 def model(t, p, n, offset, kind="decay"):
-    kernel = KERNELS[kind]
-    y = np.zeros_like(t, dtype=float)
-    for i in range(n):
-        y += p[2 * i] * kernel(t / p[2 * i + 1])
-    if offset:
-        y += p[2 * n]
-    return y
+    A, T = p[0:2 * n:2], p[1:2 * n:2]
+    c = p[2 * n] if offset else 0.0
+    return (physics.multi_exp if kind == "decay" else physics.multi_saturation)(t, A, T, c)
 
 
 def _bounds(t, n, offset):
@@ -115,7 +113,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
 
     dof = N - k
     s2 = rss / dof
-    tcrit = float(stats.t.ppf(0.5 + ci_level / 2, dof))
+    tcrit = inference.student_t_critical(ci_level, dof)
     finite = bool(np.all(np.isfinite(pcov)))
     se = np.sqrt(np.diag(pcov)) if finite else np.full(len(p), np.nan)
 
@@ -173,7 +171,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         "signal_range": amp,
         "resid_sd_over_amp": float(np.sqrt(s2) / amp) if amp > 0 else None,
         "noise_sigma": sigma,
-        "chi2_red": float(rss / (sigma ** 2 * dof)) if sigma else None,
+        "chi2_red": inference.reduced_chi2(rss, sigma, dof),
         "n": n, "offset": offset, "ci_level": ci_level, "t_crit": tcrit, "dof": dof, "kind": kind, "symbol": sym,
         "components": comps,
         "offset_value": p[2 * n] if offset else None,
@@ -182,7 +180,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         "mean_T2": d0[1], "mean_T2_se": d_se[1],
         "rss": rss, "rmse": float(np.sqrt(rss / N)), "resid_sd": float(np.sqrt(s2)),
         "r2": 1 - rss / ss_tot if ss_tot > 0 else None,
-        "aic": N * np.log(rss / N) + 2 * k, "bic": N * np.log(rss / N) + k * np.log(N),
+        "aic": inference.information_criteria(rss, N, k)[0], "bic": inference.information_criteria(rss, N, k)[1],
         "n_params": k,
         "fit": model(t, p, n, offset, kind), "resid": y - model(t, p, n, offset, kind),
         "t_dense": t_dense, "fit_dense": model(t_dense, p, n, offset, kind),

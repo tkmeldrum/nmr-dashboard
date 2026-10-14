@@ -59,6 +59,59 @@ PRIVACY_TEXT = ("Everything the page needs, including the Python runtime and the
                 "the page forbids it from connecting to anywhere else, so it cannot send your data out even by mistake.")
 
 
+def _source_ref():
+    """The git ref the source links point at: the commit being built (so the link shows exactly the running code), or main for an unclean local build."""
+    commit = commit_id()
+    return commit if commit and not tree_is_dirty() else "main"
+
+
+def _code_links(functions, ref):
+    import html
+    import inspect
+    out = []
+    for fn in functions:
+        lines, start = inspect.getsourcelines(fn)
+        path = Path(inspect.getsourcefile(fn)).resolve().relative_to(ROOT)
+        out.append(f'<a href="https://github.com/tkmeldrum/nmr-dashboard/blob/{ref}/{path}#L{start}-L{start + len(lines) - 1}"><code>{html.escape(path.name)}: {html.escape(fn.__name__)}</code></a>')
+    return ", ".join(out)
+
+
+def verified_references():
+    """id -> reference text, for the entries of docs/references.json that have been checked (only those are shown on the page)."""
+    data = json.loads((ROOT / "docs" / "references.json").read_text())
+    return {r["id"]: r["reference"] for r in data["references"] if r.get("verified")}
+
+
+def _model_cards(entries, ref):
+    import html
+    refs = verified_references()
+    cards = []
+    for m in entries:
+        source = f'<p class="note"><strong>Where it comes from:</strong> {html.escape(refs[m["id"]])}</p>' if m["id"] in refs else ""
+        cards.append(
+            f'<div class="model"><h3>{html.escape(m["name"])}</h3>'
+            f'<p class="equation">{html.escape(m["equation"])}</p>'
+            f'<p>{html.escape(m["describes"])}</p>{source}'
+            f'<p class="note"><strong>The code:</strong> {_code_links(m["functions"], ref)}</p></div>')
+    return "\n".join(cards)
+
+
+def physics_html():
+    """The About page's physics section, generated from the registries in nmrdash/physics.py and nmrdash/inference.py."""
+    import html
+    sys.path.insert(0, str(ROOT))
+    from nmrdash import inference, physics
+    ref = _source_ref()
+    not_modelled = "".join(f"<li>{html.escape(t)}</li>" for t in physics.NOT_MODELLED)
+    return (f'<h3 class="sub">The signal models and geometry</h3>'
+            f'<p class="note">All of these are in one short file, <a href="https://github.com/tkmeldrum/nmr-dashboard/blob/{ref}/nmrdash/physics.py"><code>nmrdash/physics.py</code></a>, which uses only NumPy; '
+            f'every other part of the tool calls these functions, so what you read there is what runs.</p>\n{_model_cards(physics.MODELS, ref)}\n'
+            f'<h3 class="sub">What is not modelled</h3><ul>{not_modelled}</ul>\n'
+            f'<h3 class="sub">How numbers are estimated from the models</h3>'
+            f'<p class="note">Noise, goodness of fit, model selection, intervals and the regularisation of the inversions are in '
+            f'<a href="https://github.com/tkmeldrum/nmr-dashboard/blob/{ref}/nmrdash/inference.py"><code>nmrdash/inference.py</code></a>.</p>\n{_model_cards(inference.METHODS, ref)}')
+
+
 def build(out, version, vendor=True):
     out = Path(out)
     if vendor and not (ROOT / "vendor" / "pyodide" / "pyodide.js").is_file():
@@ -75,6 +128,7 @@ def build(out, version, vendor=True):
     about = _sub(about, "{{COMMIT}}", (commit_id() or "unknown")[:10] + ("+local changes" if tree_is_dirty() else ""))
     about = _sub(about, "{{BUILT}}", time.strftime("built %Y-%m-%d", time.gmtime()))
     about = _sub(about, "{{PRIVACY}}", PRIVACY_TEXT)
+    about = _sub(about, "{{PHYSICS}}", physics_html())
     about = _sub(about, 'href="style.css"', f'href="style.css?v={version}"')
     (out / "about.html").write_text(about)
     for src, dst in (("LICENSE", "LICENSE.txt"), ("NOTICE", "NOTICE.txt"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.txt")):

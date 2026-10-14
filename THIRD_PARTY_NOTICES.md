@@ -16,10 +16,6 @@ under its own licence. Versions are the ones the site is tested with.
 Each package carries its own licence text inside its distribution. Where the site serves a package unchanged (for example from
 Pyodide's package set), that notice travels with it.
 
-## Where methods come from
+## Citations
 
-- Regularised inverse Laplace transform (1D and the 2D tensor-product form): L. Venkataramanan, Y.-Q. Song and M. D. Hürlimann,
-  *IEEE Trans. Signal Process.* **50**, 1017 (2002).
-- Affine-invariant ensemble sampler (emcee): D. Foreman-Mackey, D. W. Hogg, D. Lang and J. Goodman, *Publ. Astron. Soc. Pac.* **125**, 306 (2013).
-- NumPy: C. R. Harris et al., *Nature* **585**, 357 (2020). SciPy: P. Virtanen et al., *Nature Methods* **17**, 261 (2020).
-  Matplotlib: J. D. Hunter, *Comput. Sci. Eng.* **9**, 90 (2007).
+Citations for the methods and the software are collected in `docs/REFERENCES.md` and are shown on the About page once checked.
