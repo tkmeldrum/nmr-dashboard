@@ -34,7 +34,7 @@ def exp_decay(t, T2):
 
     t and T2 in the same unit (s). Assumes mono-exponential decay (a single, homogeneous relaxation time).
     In a static gradient, the echo train is also attenuated by diffusion (see MODELS, "not modelled"); T2 here is the apparent T2.
-    Source: Bloch (1946); for the echo train, Carr and Purcell (1954) and Meiboom and Gill (1958).
+    References: docs/REFERENCES.md (exp_decay).
     """
     return decay_factor(np.asarray(t, float) / np.asarray(T2, float))
 
@@ -44,7 +44,7 @@ def multi_exp(t, A, T2, offset=0.0):
 
     A (amplitudes, signal units), T2 (s), offset c (signal units: a baseline). Assumes the populations do not exchange magnetisation
     on the time scale of the measurement (slow exchange), so the decay is a plain sum.
-    Source: standard multi-component relaxation analysis, e.g. Whittall and MacKay (1989).
+    References: docs/REFERENCES.md (multi_exp).
     """
     t = np.asarray(t, float)
     y = np.zeros_like(t, dtype=float)
@@ -57,7 +57,7 @@ def saturation_recovery(t, T1):
     """Recovery of the longitudinal magnetisation after saturation: 1 - exp(-t / T1), zero at t = 0, one at long times.
 
     t and T1 in the same unit (s). Assumes complete saturation by the pulse train and a single T1.
-    Source: standard (e.g. Fukushima and Roeder, Experimental Pulse NMR, 1981).
+    References: docs/REFERENCES.md (saturation).
     """
     return recovery_factor(np.asarray(t, float) / np.asarray(T1, float))
 
@@ -77,7 +77,7 @@ def diffusion_attenuation(b, D):
     """Signal attenuation by free (Gaussian) diffusion: exp(-b D), with b in s/m^2 and D in m^2/s (only the product matters).
 
     Assumes unrestricted diffusion with one coefficient per population (no restriction, no distribution of D within a population).
-    Source: Stejskal and Tanner (1965); Tanner (1970) for the stimulated echo.
+    References: docs/REFERENCES.md (diffusion).
     """
     return np.exp(-np.asarray(b, float) * np.asarray(D, float))
 
@@ -108,8 +108,7 @@ def b_value_stimulated_echo(tau_s, delta_s, gradient_t_per_m_, nucleus="1H"):
     The signal is attenuated by exp(-b D) for a diffusion coefficient D (m^2/s). Assumes: a constant gradient, free (Gaussian)
     diffusion, instantaneous pulses (no correction for their length) and no contribution from the CPMG echo train that follows
     (its own diffusion weighting acts on the apparent T2, not on b).
-    Source: Hahn (1950) and Tanner (1970) for diffusion in a stimulated echo; the form above is the standard static-gradient
-    result (e.g. Callaghan, Principles of Nuclear Magnetic Resonance Microscopy, 1991).
+    References: docs/REFERENCES.md (b_value).
     """
     gamma = 2.0 * np.pi * GAMMA_HZ_PER_T[nucleus]
     tau = np.asarray(tau_s, float)
@@ -144,8 +143,7 @@ def t2d_signal(t, b, A, T2, D):
 
     Each population relaxes with its own T2 (during the echo train) and diffuses with its own D (during the diffusion encoding), and the
     two effects separate because they happen in different parts of the sequence. No offset. Assumes free diffusion and a single T2
-    per population. Source: the stimulated-echo / CPMG combination of Tanner (1970) and Carr and Purcell (1954); the 2D relaxation-diffusion
-    correlation experiment of Hurlimann and Venkataramanan (2002).
+    per population. References: docs/REFERENCES.md (t2d).
     """
     E, G = t2d_factors(t, b, T2, D)
     return (E * np.asarray(A, float)[None, :]) @ G.T
@@ -167,7 +165,7 @@ def diffusion_kernel(b, D_grid):
 
     The 2D (T2-D) inversion inverts the separable kernel K2D = kron(t2_kernel, diffusion_kernel), applied to the data without forming
     the full matrix (ilt2d.run_2dilt compresses each factor with its SVD first; the compression does not change the problem).
-    Source: Venkataramanan, Song and Hurlimann (2002); Song et al. (2002).
+    References: docs/REFERENCES.md (kernels).
     """
     return np.exp(-np.outer(np.asarray(b, float), np.asarray(D_grid, float)))
 
@@ -178,7 +176,7 @@ def z_um_from_frequency(f_hz, gamma_mhz_per_t, gradient_t_per_m_):
     """Position (micrometres) from the offset frequency (Hz) in a static gradient: z = f / (gamma G).
 
     gamma in MHz/T (gamma / 2 pi) and G in T/m give f / (MHz/m) = micrometres directly. Positive z is positive frequency, i.e. toward
-    the magnet. Source: the definition of frequency encoding (Callaghan, 1991).
+    the magnet. References: docs/REFERENCES.md (position).
     """
     return np.asarray(f_hz, float) / (gamma_mhz_per_t * gradient_t_per_m_)
 
@@ -198,37 +196,32 @@ def native_resolution_um(n_points, dwell_us, gamma_mhz_per_t, gradient_t_per_m_)
 MODELS = [
     {"id": "exp_decay", "name": "Exponential T₂ decay", "equation": "S(t) = A · exp(−t / T₂)",
      "describes": "Transverse relaxation of one population, measured as the decay of the echo amplitudes in a CPMG train.",
-     "source": "Carr and Purcell, Phys. Rev. 94, 630 (1954); Meiboom and Gill, Rev. Sci. Instrum. 29, 688 (1958)",
      "functions": [exp_decay, decay_factor]},
     {"id": "multi_exp", "name": "Multi-exponential decay", "equation": "S(t) = Σᵢ Aᵢ · exp(−t / T₂ᵢ) + c",
      "describes": "Several populations relaxing independently (slow exchange), plus a baseline c. The multi-exponential fit.",
-     "source": "Whittall and MacKay, J. Magn. Reson. 84, 134 (1989)", "functions": [multi_exp]},
+     "functions": [multi_exp]},
     {"id": "saturation", "name": "Saturation recovery (T₁)", "equation": "S(t) = Σᵢ Aᵢ · (1 − exp(−t / T₁ᵢ)) + c",
      "describes": "Recovery of the longitudinal magnetisation after saturation, for one or two T₁ populations.",
-     "source": "Fukushima and Roeder, Experimental Pulse NMR: A Nuts and Bolts Approach (Addison-Wesley, 1981)",
      "functions": [saturation_recovery, multi_saturation, recovery_factor]},
     {"id": "diffusion", "name": "Diffusion attenuation", "equation": "exp(−b · D)",
      "describes": "Attenuation of the signal by free diffusion with coefficient D at diffusion weighting b.",
-     "source": "Stejskal and Tanner, J. Chem. Phys. 42, 288 (1965); Tanner, J. Chem. Phys. 52, 2523 (1970)", "functions": [diffusion_attenuation]},
+     "functions": [diffusion_attenuation]},
     {"id": "b_value", "name": "Diffusion weighting b of the stimulated echo", "equation": "b = (γG)² · τ² · (Δ + 2τ/3)",
      "describes": "How strongly each diffusion delay τ weights diffusion, for a stimulated echo with storage time Δ in a static gradient G. "
                   "Calculated from the gradient setting, Δ and τ in acqu.par (the echo time does not enter).",
-     "source": "Hahn, Phys. Rev. 80, 580 (1950); Tanner, J. Chem. Phys. 52, 2523 (1970); Callaghan, Principles of Nuclear Magnetic Resonance Microscopy (Oxford, 1991)",
      "functions": [b_value_stimulated_echo, geometric_grid, gradient_implied_by_kea]},
     {"id": "t2d", "name": "T₂–D signal", "equation": "S(t, b) = Σₖ Aₖ · exp(−t / T₂ₖ) · exp(−b · Dₖ),  Aₖ ≥ 0",
      "describes": "Several populations, each with its own T₂ and D (the few-population T₂–D model; no offset).",
-     "source": "Combines Tanner (1970) and Carr and Purcell (1954); Hürlimann and Venkataramanan, J. Magn. Reson. 157, 31 (2002)",
      "functions": [t2d_signal, t2d_factors]},
     {"id": "kernels", "name": "Inversion kernels", "equation": "K₁D[i, j] = exp(−tᵢ / T₂ⱼ);  K_D[i, j] = exp(−bᵢ Dⱼ);  K₂D = K₁D ⊗ K_D",
      "describes": "The matrices the regularised inversions invert to obtain a T₂ distribution (1D) or a T₂–D map (2D, separable).",
-     "source": "Venkataramanan, Song and Hürlimann, IEEE Trans. Signal Process. 50, 1017 (2002); Song et al., J. Magn. Reson. 154, 261 (2002)",
      "functions": [t2_kernel, diffusion_kernel]},
     {"id": "resolvable", "name": "Range of D the b-values can resolve", "equation": "1 / b_max  ≤  D  ≤  5 / b_min",
      "describes": "A rule of thumb for which diffusion coefficients the measured b-values can tell apart; outside it a regularised map is extrapolation.",
-     "source": "Rule of thumb (exp(−5) < 1 %; exp(−1) = 37 %), not a sharp limit", "functions": [resolvable_diffusion_window]},
+     "functions": [resolvable_diffusion_window]},
     {"id": "position", "name": "Position along the gradient", "equation": "z = f / (γ·G);   Δz = 1 / (N · dwell · γ·G)",
      "describes": "Frequency to position for the static-gradient profile (FT of each echo), and the spatial resolution set by the acquisition window.",
-     "source": "Frequency encoding in a static gradient (Callaghan, 1991)", "functions": [z_um_from_frequency, native_resolution_um]},
+     "functions": [z_um_from_frequency, native_resolution_um]},
 ]
 
 # What is not modelled (stated on the About page).

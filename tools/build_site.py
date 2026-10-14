@@ -76,15 +76,22 @@ def _code_links(functions, ref):
     return ", ".join(out)
 
 
+def verified_references():
+    """id -> reference text, for the entries of docs/references.json that have been checked (only those are shown on the page)."""
+    data = json.loads((ROOT / "docs" / "references.json").read_text())
+    return {r["id"]: r["reference"] for r in data["references"] if r.get("verified")}
+
+
 def _model_cards(entries, ref):
     import html
+    refs = verified_references()
     cards = []
     for m in entries:
+        source = f'<p class="note"><strong>Where it comes from:</strong> {html.escape(refs[m["id"]])}</p>' if m["id"] in refs else ""
         cards.append(
             f'<div class="model"><h3>{html.escape(m["name"])}</h3>'
             f'<p class="equation">{html.escape(m["equation"])}</p>'
-            f'<p>{html.escape(m["describes"])}</p>'
-            f'<p class="note"><strong>Where it comes from:</strong> {html.escape(m["source"])}</p>'
+            f'<p>{html.escape(m["describes"])}</p>{source}'
             f'<p class="note"><strong>The code:</strong> {_code_links(m["functions"], ref)}</p></div>')
     return "\n".join(cards)
 
