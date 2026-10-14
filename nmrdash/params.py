@@ -142,6 +142,19 @@ SPEC = {
         ("titles", True, "Put titles on figures (switch off for publication figures).", _boolean),
         ("samples", True, "Write MCMC / bootstrap samples (large) as CSV.", _boolean),
     ],
+    "style": [
+        ("font_size", 10.0, "Plot settings for the saved figures (the web page has the same ones in its Plot settings panel).\n# Font size in points; every text scales with it.", _number(4, 40)),
+        ("line_scale", 1.0, "Multiplies the line widths.", _number(0.1, 10)),
+        ("marker_scale", 1.0, "Multiplies the marker sizes.", _number(0.1, 10)),
+        ("cmap", "viridis", "Colour map of the heat maps (any matplotlib name, e.g. viridis, plasma, magma, cividis, gray).", _text),
+        ("width", AUTO, "Figure width in inches, or \"auto\" to keep each figure's own size.", _auto_or(_number(1, 40))),
+        ("height", AUTO, "Figure height in inches, or \"auto\".", _auto_or(_number(1, 40))),
+        ("legend", True, "Show legends.", _boolean),
+        ("title", "auto", "Titles: \"auto\" (each figure's own), \"none\" or \"custom\" (title_text on every figure).", _one_of("auto", "none", "custom")),
+        ("title_text", "", "", _text),
+        ("time_unit", "s", "Time unit of tick and axis labels: \"s\" or \"ms\" (tables stay in seconds).", _one_of("s", "ms")),
+        ("decay_logy", False, "Log y-axis on the decay figure.", _boolean),
+    ],
     "batch": [
         ("t0", "first", "Zero of the elapsed-time column: \"first\" (the earliest dataset), \"none\" (no elapsed time) or an ISO date-time.", _t0),
         ("jobs", 1, "Datasets processed in parallel.", _integer(1, 256)),
@@ -149,19 +162,53 @@ SPEC = {
     ],
 }
 
+# one-figure overrides: [figures.decay_fit] and so on. Limits and scales apply to the single-plot figures; the title to any figure.
+FIGURE_NAMES = ("decay_fit", "ilt_spectrum", "spatial", "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+FIGURE_KEYS = {
+    "title": _text,
+    "xmin": _auto_or(_number()), "xmax": _auto_or(_number()), "ymin": _auto_or(_number()), "ymax": _auto_or(_number()),
+    "xscale": _one_of("auto", "linear", "log"), "yscale": _one_of("auto", "linear", "log"),
+}
+FIGURE_DEFAULTS = {"title": "", "xmin": AUTO, "xmax": AUTO, "ymin": AUTO, "ymax": AUTO, "xscale": AUTO, "yscale": AUTO}
+
 DEFAULTS = {sec: {k: d for k, d, _doc, _chk in rows} for sec, rows in SPEC.items()}
 
 
 def defaults():
-    return {sec: dict(vals) for sec, vals in DEFAULTS.items()}
+    return {**{sec: dict(vals) for sec, vals in DEFAULTS.items()}, "figures": {}}
 
 
 # ── reading ─────────────────────────────────────────────────────────────────
+
+def _validate_figures(vals):
+    if not isinstance(vals, dict):
+        raise ValueError("[figures] must hold one table per figure, e.g. [figures.decay_fit]")
+    out = {}
+    for name, o in vals.items():
+        if name not in FIGURE_NAMES:
+            raise ValueError(f"unknown figure [figures.{name}]; the figures are: " + ", ".join(FIGURE_NAMES))
+        if not isinstance(o, dict):
+            raise ValueError(f"[figures.{name}] must be a table")
+        f = dict(FIGURE_DEFAULTS)
+        for k, v in o.items():
+            if k not in FIGURE_KEYS:
+                raise ValueError(f"unknown setting figures.{name}.{k}; the settings are: " + ", ".join(FIGURE_KEYS))
+            try:
+                FIGURE_KEYS[k](v)
+            except ValueError as exc:
+                raise ValueError(f"figures.{name}.{k} = {v!r}: {exc}") from None
+            f[k] = v
+        out[name] = f
+    return out
+
 
 def validate(params):
     """Fill defaults and check every value; raises ValueError naming the section.key at fault."""
     out = defaults()
     for sec, vals in (params or {}).items():
+        if sec == "figures":
+            out["figures"] = _validate_figures(vals)
+            continue
         if sec not in SPEC:
             raise ValueError(f"unknown section [{sec}]; the sections are: " + ", ".join(SPEC))
         if not isinstance(vals, dict):
@@ -323,6 +370,41 @@ def from_settings(settings, options=None, base=None):
     return validate(p)
 
 
+def style_dict(params, titles=True):
+    """The plot settings in the form figures.style_from takes. `titles` is the older output.titles switch (False = no titles)."""
+    st = dict(params["style"])
+    for k in ("width", "height"):
+        st[k] = None if st[k] == AUTO else st[k]
+    if st["title"] == "auto" and not titles:
+        st["title"] = "none"
+    figs = {}
+    for name, o in (params.get("figures") or {}).items():
+        figs[name] = {"title": o["title"], "xlim": [None if o["xmin"] == AUTO else o["xmin"], None if o["xmax"] == AUTO else o["xmax"]],
+                      "ylim": [None if o["ymin"] == AUTO else o["ymin"], None if o["ymax"] == AUTO else o["ymax"]],
+                      "xscale": None if o["xscale"] == AUTO else o["xscale"], "yscale": None if o["yscale"] == AUTO else o["yscale"]}
+    st["figures"] = figs
+    return st
+
+
+def with_style(params, style):
+    """params with the page's plot settings (the dict the page sends to figures.style_from) written into [style] and [figures.*]."""
+    p = validate(params)
+    s = style or {}
+    for k in ("font_size", "line_scale", "marker_scale", "cmap", "legend", "title", "title_text", "time_unit", "decay_logy"):
+        if s.get(k) is not None:
+            p["style"][k] = s[k]
+    for k in ("width", "height"):
+        p["style"][k] = AUTO if s.get(k) in (None, "") else s[k]
+    figs = {}
+    for name, o in (s.get("figures") or {}).items():
+        xl, yl = o.get("xlim") or [None, None], o.get("ylim") or [None, None]
+        figs[name] = {"title": o.get("title") or "", "xmin": AUTO if xl[0] is None else xl[0], "xmax": AUTO if xl[1] is None else xl[1],
+                      "ymin": AUTO if yl[0] is None else yl[0], "ymax": AUTO if yl[1] is None else yl[1],
+                      "xscale": o.get("xscale") or AUTO, "yscale": o.get("yscale") or AUTO}
+    p["figures"] = figs
+    return validate(p)
+
+
 # ── writing a commented TOML file ───────────────────────────────────────────
 
 def _toml_value(v):
@@ -347,4 +429,11 @@ def dump_toml(params=None, header=None):
             if doc:
                 lines += [f"# {d}" if not d.startswith("#") else d for d in doc.split("\n")]
             lines.append(f"{k} = {_toml_value(p[sec][k])}")
+    figs = p.get("figures") or {}
+    if not figs:
+        lines += ["", "[figures]", "# One-figure overrides go in tables named after the figure (decay_fit, ilt_spectrum, spatial, bootstrap_ilt,",
+                  "# bootstrap_distributions, t2d_spectrum, t2d_fit); limits and scales apply to the single-plot figures, in plotted units (s):",
+                  "# [figures.decay_fit]", "# title = \"My sample\"", "# xmin = 0.002", "# xmax = 0.01", "# yscale = \"log\"   # \"auto\", \"linear\" or \"log\""]
+    for name, o in figs.items():
+        lines += ["", f"[figures.{name}]"] + [f"{k} = {_toml_value(o[k])}" for k in FIGURE_DEFAULTS if o[k] != FIGURE_DEFAULTS[k]]
     return "\n".join(lines) + "\n"

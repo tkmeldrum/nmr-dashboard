@@ -6,6 +6,7 @@ import { rpc } from "./rpc.js";
 import { setBusy, setStoppable } from "./busy.js";
 import { download } from "./provenance.js";
 import { ask, duration, exportOptions } from "./uncertainty.js";
+import { figureStyle } from "./plotstyle.js";
 
 const DEFAULT_MAX_STEPS = 100;   // user-editable; Python also caps at the echo count
 const STEPS_LIMIT = 1000;        // keep in step with nmrdash/ilt_tools.py
@@ -178,7 +179,7 @@ export function initProcess() {
     try {
       showMsg("");
       const settings = readSettings();
-      const toml = await rpc("export_params", settings, exportOptions(), $("folder-name").textContent);
+      const toml = await rpc("export_params", settings, exportOptions(), $("folder-name").textContent, { ...figureStyle(), decay_logy: $("fit-log").checked });
       download("params.toml", toml);
       download("process_nmr.py", await rpc("export_script"));
       $("run-status").textContent = "Downloaded params.toml and process_nmr.py (your browser may ask to allow two downloads).";
