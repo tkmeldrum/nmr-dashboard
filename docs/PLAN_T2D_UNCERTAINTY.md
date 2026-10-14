@@ -1,6 +1,6 @@
 # Plan: uncertainty for T₂–D (a few-population model, fitted and sampled)
 
-**Status:** plan, for review. Nothing here is built yet.
+**Status:** decisions made (no offset; K automatic with override; D restricted to the resolvable window; free diffusion). Step (a), the model and fit, is built and merged. Step (b), MCMC and bootstrap (`nmrdash/t2d_uncertainty.py`), is built. Step (c), the page, figures, saving, params file and batch, is next.
 
 ## Why a second model
 
