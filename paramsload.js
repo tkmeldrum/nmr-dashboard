@@ -2,7 +2,6 @@
 import { $, state } from "./state.js";
 import { rpc } from "./rpc.js";
 import { withBusy } from "./busy.js";
-import { resolvableD } from "./process.js";
 import { setStyle } from "./plotstyle.js";
 
 function set(id, value) {
@@ -23,14 +22,18 @@ function applyDecay(s) {
   return option ? null : `The confidence level ${ci} is not one of the page's choices (68, 95, 99%); it was left as it was.`;
 }
 
-function apply(out) {
+async function apply(out) {
   const s = out.settings, o = out.options || {}, notes = [...(out.notes || [])];
   set("exclude-first", s.exclude_first || 0);
   if (out.kind === "t2d") {
     const t = s.t2d;
+    set("t2d-gradient", t.gradient);
     set("t2d-t2min", t.t2_min); set("t2d-t2max", t.t2_max); set("t2d-t2steps", t.t2_steps); set("t2d-dsteps", Math.min(t.d_steps, state.result.raw.n_tau));
     let dmin = t.d_min, dmax = t.d_max;
-    if (dmin === "auto" || dmax === "auto") [dmin, dmax] = resolvableD(state.result.raw.b_vec);
+    if (dmin === "auto" || dmax === "auto") {
+      const ax = await rpc("t2d_axes", { t2d: { gradient: t.gradient } });
+      [dmin, dmax] = ax.d_window.map((v) => +v.toPrecision(2));
+    }
     set("t2d-dmin", dmin); set("t2d-dmax", dmax); set("t2d-alpha", log10(t.alpha)); set("t2d-peakthr", t.peak_threshold_pct);
     const tm = s.t2d_model || {};
     set("t2d-model-enabled", tm.enabled !== false); set("t2d-model-k", tm.k ? String(tm.k) : "auto"); set("t2d-model-window", tm.d_window || "resolvable");
@@ -74,7 +77,7 @@ export function initParamsLoad() {
     try {
       if (!state.result || !state.result.supported) throw new Error("Load a dataset first.");
       const out = await withBusy("Reading the params file…", async () => rpc("params_for_page", await file.text(), file.name));
-      const notes = apply(out);
+      const notes = await apply(out);
       msg.hidden = true;
       $("run-status").textContent = `Settings filled in from ${file.name}.` + (notes.length ? " " + notes.join(" ") : "") + " Check them, then Run processing.";
     } catch (err) {
