@@ -97,3 +97,19 @@ def test_the_new_figure_has_per_figure_settings(tmp_path):
     row = runner.run_dataset(d, P.validate(p))
     svg = (Path(row["output_dir"]) / "t2d_populations.svg").read_text()
     assert "Populations of my sample" in svg
+
+
+def test_the_populations_figure_tells_the_two_sampling_methods_apart(tmp_path):
+    """Bootstrap and MCMC clouds use different markers, and the legend shows one neutral symbol for each."""
+    from nmrdash import figures
+    from nmrdash.pipeline import boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process, _STATE
+    load(S3115)
+    res = process({"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}, "t2d_model": {"enabled": True}})
+    mcmc_start({"steps": 300, "burn": 100, "nwalkers": 24}); mcmc_step(300); mc = mcmc_finish({"fg": "#222", "grid": "#aaa"}, 0)
+    boot_start({"replicates": 20}); boot_step(20); bs = boot_finish()
+    fig = figures.t2d_populations_figure(res, mc, bs)
+    leg = fig.axes[0].get_legend()
+    assert [t.get_text() for t in leg.get_texts()] == ["bootstrap", "MCMC"]
+    markers = [h.get_marker() for h in leg.legend_handles]
+    assert markers[0] != markers[1] and markers[0] == "x"
+    assert {l.get_marker() for l in fig.axes[0].lines} >= {"x", "."}
