@@ -89,11 +89,24 @@ def _model_cards(entries, ref):
     for m in entries:
         source = f'<p class="note"><strong>Where it comes from:</strong> {html.escape(refs[m["id"]])}</p>' if m["id"] in refs else ""
         cards.append(
-            f'<div class="model"><h3>{html.escape(m["name"])}</h3>'
+            f'<div class="model" id="{html.escape(m["id"])}"><h3>{html.escape(m["name"])}</h3>'
             f'<p class="equation">{html.escape(m["equation"])}</p>'
             f'<p>{html.escape(m["describes"])}</p>{source}'
             f'<p class="note"><strong>The code:</strong> {_code_links(m["functions"], ref)}</p></div>')
     return "\n".join(cards)
+
+
+def _lower_first(name):
+    """Lower-case the first letter for use in a sentence, unless the name starts with a symbol or an acronym (T₂–D, b-value)."""
+    return name[0].lower() + name[1:] if len(name) > 1 and name[1].islower() else name
+
+
+def physics_index_html():
+    """A one-line index of the models for the About page, each linking to its card on the physics page."""
+    import html
+    sys.path.insert(0, str(ROOT))
+    from nmrdash import inference, physics
+    return "; ".join(f'<a href="physics.html#{html.escape(m["id"])}">{html.escape(_lower_first(m["name"]))}</a>' for m in physics.MODELS + inference.METHODS)
 
 
 def physics_html():
@@ -128,9 +141,15 @@ def build(out, version, vendor=True):
     about = _sub(about, "{{COMMIT}}", (commit_id() or "unknown")[:10] + ("+local changes" if tree_is_dirty() else ""))
     about = _sub(about, "{{BUILT}}", time.strftime("built %Y-%m-%d", time.gmtime()))
     about = _sub(about, "{{PRIVACY}}", PRIVACY_TEXT)
-    about = _sub(about, "{{PHYSICS}}", physics_html())
+    about = _sub(about, "{{PHYSICS_INDEX}}", physics_index_html())
     about = _sub(about, 'href="style.css"', f'href="style.css?v={version}"')
     (out / "about.html").write_text(about)
+    page = (ROOT / "physics.html").read_text()                                        # the physics models, on their own page
+    page = _sub(page, "{{COMMIT}}", (commit_id() or "unknown")[:10] + ("+local changes" if tree_is_dirty() else ""))
+    page = _sub(page, "{{BUILT}}", time.strftime("built %Y-%m-%d", time.gmtime()))
+    page = _sub(page, "{{PHYSICS}}", physics_html())
+    page = _sub(page, 'href="style.css"', f'href="style.css?v={version}"')
+    (out / "physics.html").write_text(page)
     for src, dst in (("LICENSE", "LICENSE.txt"), ("NOTICE", "NOTICE.txt"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.txt")):
         shutil.copy(ROOT / src, out / dst)
     shutil.copy(ROOT / "worker.js", out / "worker.js")

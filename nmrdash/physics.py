@@ -5,7 +5,7 @@ profile. Only NumPy; nothing here fits, loads, plots or knows about the rest of 
 models (noise, least squares, information criteria, regularisation) is in inference.py.
 
 Each function says what it models, in what units, under which assumptions, and where the relation comes from. MODELS at the bottom
-lists them; the About page is generated from that list, with links to these lines.
+lists them; the physics page (a subpage of About) is generated from that list, with links to these lines.
 """
 import numpy as np
 
@@ -190,7 +190,7 @@ def native_resolution_um(n_points, dwell_us, gamma_mhz_per_t, gradient_t_per_m_)
     return 1e6 / (n_points * dwell_us) / (gamma_mhz_per_t * gradient_t_per_m_)
 
 
-# ── the list the About page is generated from ────────────────────────────────
+# ── the list the physics page is generated from ────────────────────────────────
 
 # Each entry: the model, its equation (plain text), what it describes, where it comes from, and the functions that implement it.
 MODELS = [
@@ -224,7 +224,7 @@ MODELS = [
      "functions": [z_um_from_frequency, native_resolution_um]},
 ]
 
-# What is not modelled (stated on the About page).
+# What is not modelled (stated on the physics page).
 NOT_MODELLED = [
     "Restricted diffusion, or a distribution of D within a population (each population has one free-diffusion coefficient).",
     "Non-exponential relaxation within a population, and exchange of magnetisation between populations (the populations are independent).",
