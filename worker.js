@@ -59,7 +59,7 @@ function processDataset({ settings }) {
 
 // Calls the page makes while a long job runs: small functions in nmrdash.pipeline, plus the one-off emcee install.
 const RPC_FUNCTIONS = new Set(["mcmc_start", "mcmc_step", "mcmc_finish", "boot_start", "boot_step", "boot_finish",
-                               "get_provenance", "export_params", "export_script", "t2d_estimate", "save_bundle"]);
+                               "get_provenance", "export_params", "export_script", "t2d_estimate", "save_bundle", "params_for_page"]);
 
 async function installEmcee() {
   try { pyodide.runPython("import emcee"); return { already: true }; } catch (_) { /* not installed yet */ }

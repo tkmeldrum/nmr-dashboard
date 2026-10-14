@@ -533,3 +533,30 @@ def save_bundle(opts):
                 z.writestr(f"{folder}/{n}", b)
         return {"zip_name": f"{folder}.zip", "zip_b64": base64.b64encode(buf.getvalue()).decode("ascii"), "files": names}
     return {"folder": folder, "files": {n: base64.b64encode(b).decode("ascii") for n, b in blobs.items()}}
+
+
+def params_for_page(text, name="params.toml"):
+    """Read a params file (TOML or JSON text) and return what the page needs to fill its controls for the loaded dataset.
+
+    {kind, settings, options, style, notes}. Values left "auto" in the file come back as None (ft.nucleus, z-window, spacing) or
+    resolved from the loaded data (the ILT T2 range); the page keeps its own value where the file has none.
+    """
+    import tomllib
+    from . import params as P
+    try:
+        raw = json.loads(text) if str(name).lower().endswith(".json") else tomllib.loads(text)
+    except Exception as exc:
+        raise ValueError(f"could not read {name}: {exc}") from None
+    p = P.validate(raw)
+    if "t1" in _STATE:
+        kind, (settings, options) = "t1", P.to_settings_t1(p)
+    elif "t2d" in _STATE:
+        kind, (settings, options) = "t2d", P.to_settings_t2d(p)
+    elif "echo_s" in _STATE:
+        kind, (settings, options) = "cpmg", P.to_settings(p, np.asarray(_STATE["echo_s"], float), default_nucleus=None)
+    else:
+        raise RuntimeError("Load a dataset first.")
+    notes = []
+    if p["output"] != P.DEFAULTS["output"] or p["batch"] != P.DEFAULTS["batch"]:
+        notes.append("The [output] and [batch] settings only matter to the command-line script, so they were not used here.")
+    return _jsonable({"kind": kind, "settings": settings, "options": options, "style": P.style_dict(p), "notes": notes})

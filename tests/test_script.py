@@ -339,3 +339,21 @@ def test_the_script_applies_the_style_to_its_figures(tmp_path):
     assert row["status"] == "ok", row
     svg = (Path(row["output_dir"]) / "decay_fit.svg").read_text()
     assert "(ms)" in svg and "From the params file" in svg
+
+def test_params_for_page_fills_settings_for_the_loaded_dataset():
+    from nmrdash.pipeline import load, params_for_page
+    load(DATA / "CPMG_EtGly" / "1")
+    p = P.defaults()
+    p["processing"]["exclude_first"] = 2
+    p["multiexp"].update({"enabled": True, "n": 3}); p["style"]["font_size"] = 13
+    p["figures"] = {"ilt_spectrum": {"title": "T", "xmax": 5.0}}
+    out = params_for_page(P.dump_toml(p), "my.toml")
+    assert out["kind"] == "cpmg" and out["settings"]["exclude_first"] == 2 and out["settings"]["multiexp"]["n"] == 3
+    assert out["settings"]["ilt"]["t2_min"] > 0 and out["style"]["font_size"] == 13 and out["style"]["figures"]["ilt_spectrum"]["xlim"] == [None, 5.0]
+    json.dumps(out, allow_nan=False)
+    load(DATA / "T1SAT" / "1")
+    assert params_for_page(P.dump_toml(p), "my.toml")["kind"] == "t1"
+    with pytest.raises(ValueError, match="my.toml"):
+        params_for_page("this is = not [toml", "my.toml")
+    with pytest.raises(ValueError, match="multiexp.n"):
+        params_for_page("[multiexp]\nn = 9\n", "x.toml")
