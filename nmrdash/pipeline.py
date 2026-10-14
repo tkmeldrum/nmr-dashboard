@@ -7,7 +7,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, export, ilt2d, ilt_tools, multiexp, provenance, sequences, spatial, t2d, uncertainty
+from . import constants, echoes, export, ilt2d, ilt_tools, multiexp, provenance, sequences, spatial, t2d, t2d_model, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -269,9 +269,19 @@ def _process_t2d(settings):
     sigma = t2d.noise_sigma(L["noise"], skip)
     res = ilt2d.run(L["data"][skip:], L["echo_s"][skip:], L["b_vec"], cfg["t2_min"], cfg["t2_max"], cfg["t2_steps"], cfg["d_min"], cfg["d_max"], cfg["d_steps"],
                     cfg["alpha"], sigma=sigma, peak_min_fraction=float(cfg["peak_threshold_pct"]) / 100)
+    tm = settings.get("t2d_model") or {}
+    keep = None
+    if tm.get("enabled"):                                    # the few-population model: fitted for every K, the BIC-preferred one (or the user's k) chosen
+        k = tm.get("k")
+        if k is not None and not (isinstance(k, int) and 1 <= k <= t2d_model.MAX_K):
+            raise ValueError(f"t2d_model.k must be a whole number from 1 to {t2d_model.MAX_K}, or left out for automatic")
+        d_range = res["d_sensitive"] if tm.get("d_window", "resolvable") == "resolvable" else (cfg["d_min"], cfg["d_max"])
+        t, b, Y = L["echo_s"][skip:], L["b_vec"], L["data"][skip:]
+        res["model"] = t2d_model.fit(t, b, Y, res["peaks"], (cfg["t2_min"], cfg["t2_max"]), d_range, sigma, k=k, max_k=tm.get("max_k"), seed=int(tm.get("seed", 0)))
+        keep = {"t": t, "b": b, "Y": Y, "sigma": sigma, "t2_range": (cfg["t2_min"], cfg["t2_max"]), "d_range": d_range, "regions": res["peaks"], "fit": res["model"]}
     out = {"settings": settings, "version": __version__, "mode": "t2d", "ft": None, "spatial": None, "multiexp": None, "ilt": None, "t2d": res,
            "decay": {"t": L["echo_s"], "y": None, "skip": skip, "phase_deg": None, "noise_sigma": sigma}}
-    _STATE["processed"] = {"settings": settings}
+    _STATE["processed"] = {"settings": settings, "t2d_model": keep}
     return _jsonable(out)
 
 
