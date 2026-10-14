@@ -15,6 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml }
       - run: pip install -e ".[test]"
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: vendor-${{ hashFiles('tools/vendor.lock.json', 'tools/fetch_vendor.py') }}
+      - name: Fetch the libraries the site serves itself (checked against tools/vendor.lock.json)
+        run: python3 tools/fetch_vendor.py
       - run: nproc
       - run: pytest -q -n auto
         env:
@@ -30,6 +36,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: vendor-${{ hashFiles('tools/vendor.lock.json', 'tools/fetch_vendor.py') }}
+      - name: Fetch the libraries the site serves itself (checked against tools/vendor.lock.json)
+        run: python3 tools/fetch_vendor.py
       - name: Assemble site
         run: python3 tools/build_site.py site "$GITHUB_SHA"
       - uses: actions/configure-pages@v5
