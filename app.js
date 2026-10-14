@@ -1,6 +1,7 @@
 // Main thread: worker plumbing, folder loading, tab flow.
 import { $, state } from "./state.js";
 import { initPlotStyle } from "./plotstyle.js";
+import { initBatch, refreshBatch } from "./batch.js";
 import { initParamsLoad } from "./paramsload.js";
 import { initSave } from "./save.js";
 import { initFeedback } from "./feedback.js";
@@ -177,6 +178,7 @@ async function openFolder(dir) {
   setBusy("Looking for datasets in the folder…");
   try {
     datasets = (await findDatasets(dir)).sort(byLabel);
+    state.datasets = datasets;
   } catch (err) {
     setBusy(null);
     return showMessage("Could not read that folder: " + err.message, "error");
@@ -191,24 +193,34 @@ async function openFolder(dir) {
   await openDataset(0);
 }
 
-async function openDataset(i) {
-  const ds = datasets[i];
-  hideMessage();
-  setBusy("Reading the files from disk…");
-  const want = ["acqu.par", "data.2d", "data.dat", "data2D_Cp.2d", "data2D.dat", "DiffAxis.dat", "T2Axis.dat"];
+const DATA_FILES = ["acqu.par", "data.2d", "data.dat", "data2D_Cp.2d", "data2D.dat", "DiffAxis.dat", "T2Axis.dat"];
+
+// The files of one dataset, and when the data were written (the main data file of whichever sequence this is).
+async function readDatasetFiles(ds) {
   const files = {}, written = {};
-  for (const name of want) {
+  for (const name of DATA_FILES) {
     const entry = ds.files.find((f) => f.name === name);
     if (!entry) continue;
     const file = await entry.getFile();
     files[name] = await file.arrayBuffer();
     written[name] = file.lastModified;
   }
-  // when the data were written: the main data file of whichever sequence this is
   const timestampMs = written["data.2d"] ?? written["data2D_Cp.2d"] ?? written["data2D.dat"] ?? written["data.dat"] ?? null;
+  return { files, timestampMs };
+}
+state.readDatasetFiles = readDatasetFiles;
+
+async function openDataset(i) {
+  const ds = datasets[i];
+  if (!ds) return;
+  state.datasetIndex = i;
+  hideMessage();
+  setBusy("Reading the files from disk…");
+  const { files, timestampMs } = await readDatasetFiles(ds);
   $("folder-name").textContent = ds.label;
   state.dataDir = ds.dir.handle || null;                 // where "Save to the data folder" writes (only with a real folder handle)
   document.dispatchEvent(new Event("datasetchange"));
+  refreshBatch();
   const payload = { files, timestampMs };
   if (state.ready) sendLoad(payload);
   else { state.pending = payload; $("status").textContent = "Python is still loading; your data will open as soon as it's ready."; }
@@ -245,7 +257,7 @@ $("sample-select").addEventListener("change", async (e) => {
   const s = samples[+e.target.value];
   resetSections();
   $("chooser").hidden = true;
-  datasets = [];
+  datasets = state.datasets = [];
   state.dirHandle = state.dataDir = null;
   document.dispatchEvent(new Event("datasetchange"));
   try {
@@ -318,6 +330,7 @@ function fillTable(table, rows) {
 }
 
 function showResult(r) {
+  refreshBatch();
   fillTable($("params"), r.display.map((x) => [x.label, x.value]));
   fillTable($("params-all"), Object.entries(r.params_all).sort().map(([k, v]) => [k, Array.isArray(v) ? `[${v.join(", ")}]` : String(v)]));
   $("params-section").hidden = false;
@@ -367,6 +380,7 @@ initResults();
 initUncertainty();
 initSave();
 initParamsLoad();
+initBatch(openDataset);
 initPlotStyle(() => { if (state.result) renderRaw(); if (state.results) { renderResults(); renderUncertainty(); } });
 $("busy-stop").addEventListener("click", restartPython);
 initProvenance();

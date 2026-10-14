@@ -142,6 +142,10 @@ export function readSettings() {
 
 export function setRunning(on, text = "") {
   state.running = on;
+  if (on) state.runT0 = performance.now();
+  else if (text === "Done." && state.runT0) {                 // a finished single run: what Batch compares the current settings with
+    state.lastRun = { label: $("folder-name").textContent, seconds: (performance.now() - state.runT0) / 1000, key: state.runKey };
+  }
   $("run-btn").disabled = on;
   $("run-status").textContent = text;
   $("run-progress").hidden = true;
@@ -197,6 +201,7 @@ export function initProcess() {
     let settings;
     try { settings = readSettings(); } catch (err) { return showMsg(err.message); }
     showMsg("");
+    state.runKey = JSON.stringify(settings);
     state.runOptions = exportOptions();            // what this run used, for the provenance record
     let busyText = "Processing… the 4-component comparison and per-position fits can take a while.", stoppable = false;
     if (settings.kind === "t2d") {                  // one big dense solve with no progress to report: estimate it first, offer to stop it
