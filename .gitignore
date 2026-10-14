@@ -5,3 +5,4 @@ __pycache__/
 site/
 tests/data_private/
 nmrdash/_buildinfo.py
+vendor/
