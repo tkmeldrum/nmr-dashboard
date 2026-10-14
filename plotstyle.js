@@ -74,6 +74,10 @@ function showFigure() {
   for (const [k, id] of Object.entries(FIG_FIELDS)) $(id).value = o[k] ?? "";
 }
 
+// Take plot settings from outside (a params file): the keys of figures.style_from, with figures[name] = {title, xlim, ylim, xscale, yscale}.
+let applyOutside = () => {};
+export const setStyle = (s) => applyOutside(s);
+
 export function initPlotStyle(redraw) {
   try { style = { ...DEFAULTS, figures: {}, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch (_) { style = { ...DEFAULTS, figures: {} }; }
   write(style);
@@ -96,5 +100,15 @@ export function initPlotStyle(redraw) {
     redraw();
   };
   for (const id of [...Object.values(FIELDS), "ps-legend"]) $(id).addEventListener("change", changed);
+  applyOutside = (s) => {
+    const figures = {};
+    for (const [name, o] of Object.entries(s.figures || {})) {
+      figures[name] = { title: o.title || "", xmin: o.xlim[0] ?? "", xmax: o.xlim[1] ?? "", ymin: o.ylim[0] ?? "", ymax: o.ylim[1] ?? "", xscale: o.xscale || "", yscale: o.yscale || "" };
+    }
+    style = { ...DEFAULTS, ...s, width: s.width ?? "", height: s.height ?? "", figures };
+    write(style);
+    showFigure();
+    changed();
+  };
   $("ps-reset").addEventListener("click", () => { style.figures = {}; write(DEFAULTS); showFigure(); changed(); });
 }
