@@ -1,6 +1,6 @@
 # Plan: the physics in one place, listed on the About page, and checkable by a reviewer
 
-**Status:** plan, for review. Nothing here is built yet.
+**Status:** decided and built (physics.py and inference.py, the About page section, the tests; PR #33), after the b-values (PR #31). The decisions below are recorded as made.
 
 ## The goal
 
@@ -93,10 +93,10 @@ In a static gradient, diffusion also attenuates the **CPMG echo train** itself, 
 
 So for solids and slow diffusers (D ≲ 10⁻¹¹) it is negligible, but for a free liquid at long echo times it can shorten the apparent T₂ appreciably. Today T₂ in the fits is the *apparent* T₂. Options: state this on the About page (cheap), or add an optional correction when D is known (e.g. from the T₂–D result).
 
-## Decisions for you
+## Decisions (made)
 
-1. **Two files (physics and inference), or one?** Recommended: two.
-2. **Sources.** For each model, which reference should the About page cite? I can supply standard ones (Carr–Purcell–Meiboom–Gill; Venkataramanan et al. 2002 for the inversion; the static-gradient position relation) but you should confirm each, and tell me the reference for the SSE-T₂ diffusion weighting your Kea sequence uses.
-3. ~~**b-values.**~~ **Decided and done (PR #31):** calculated from the gradient, Δ and τ; the spectrometer's files only cross-check. On the samples the spectrometer's b-values follow exactly τ²(Δ + 2τ/3) (deviation 3×10⁻⁶) and correspond to G = 23.49 T/m (Kea's `gradient = 1000` kHz/mm), 0.8% below the 23.67 T/m now used, so b is 1.5% higher. The echo time does not enter b; it sets the echo axis.
-4. **Browser check button.** Worth it?
-5. **The CPMG-train diffusion term above:** state it only, or offer a correction?
+1. **Two files** (physics and inference).
+2. **Sources:** drafted for the About page; each reference is to be confirmed by the author before the tool is announced beyond the lab.
+3. **b-values:** calculated from the gradient, Δ and τ (PR #31); the spectrometer's files only cross-check. The gradient is a setting, default 23.67 T/m.
+4. **No in-browser self-check button:** the About page shows the formulas and links to the code; the checks live in `tests/`.
+5. **Diffusion during the CPMG echo train:** stated as a footnote on the About page, not corrected by default.
