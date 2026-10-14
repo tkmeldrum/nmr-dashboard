@@ -47,8 +47,6 @@ const onWorkerMessage = (e) => {
     setBusy(null);
     setRunning(false, "Done.");
     setTabEnabled("results", true);
-    $("next-results").disabled = false;
-    $("next-results").textContent = "Results →";
     resetUncertainty();
     refreshProvenance();
     showTab("results");
@@ -167,7 +165,6 @@ function resetSections() {
   $("prov-details").hidden = true;
   resetUncertainty();
   for (const t of ["raw", "process", "uncertainty", "results"]) setTabEnabled(t, false);
-  $("next-results").disabled = true;
   showTab("load");
 }
 
