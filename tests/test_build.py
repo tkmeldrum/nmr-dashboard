@@ -63,3 +63,23 @@ def test_html_ids_are_unique_and_every_js_lookup_exists():
     dynamic = {"tab-", "panel-"}                      # ids built as "tab-" + name in tabs.js
     missing = sorted(i for i in used if i not in ids and not any(i.startswith(p) for p in dynamic))
     assert not missing, f"JS looks up ids that are not in index.html: {missing}"
+
+
+def test_build_ships_the_about_page_and_licence_files(tmp_path):
+    out = build(tmp_path / "site", "abc123")
+    about = (out / "about.html").read_text()
+    assert "{{" not in about and "built 20" in about and "style.css?v=abc123" in about            # placeholders filled, assets versioned
+    assert "Apache License, Version 2.0" in about and "as is" in about and "Pyodide" in about and "NumPy" in about
+    assert "Apache License" in (out / "LICENSE.txt").read_text()[:400] and "Copyright" in (out / "NOTICE.txt").read_text()
+    assert "Venkataramanan" in (out / "THIRD_PARTY_NOTICES.txt").read_text()
+    assert 'href="about.html"' in (out / "index.html").read_text()
+    assert "<script" not in about                       # a static page: no code, nothing to load
+
+
+def test_the_about_page_lists_the_versions_the_site_actually_uses():
+    about = (ROOT / "about.html").read_text()
+    worker = (ROOT / "worker.js").read_text()
+    import re
+    assert re.search(r"v0\.27\.7|0\.27\.7", worker) and "0.27.7" in about
+    assert "plotly.js-dist-min@2.35.2" in (ROOT / "index.html").read_text() and "2.35.2" in about
+    assert "emcee==3.1.6" in worker and "3.1.6" in about

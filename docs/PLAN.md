@@ -3,7 +3,7 @@
 # Plan: Browser-based NMR processing dashboard (GitHub Pages, local-only processing)
 
 ## Context
-The lab's Kea CPMG processing lives in Python scripts and notebooks under `MeldrumLabCode/pythonic/` (plus PED in `MeldrumLabCode/PED/`). Using them means a working Python environment and editing paths in notebooks. The goal is a static site on GitHub Pages: a user drops a Kea data folder into the browser, sees its parameters and raw data, picks processing options, and saves results. **All computation runs in the user's browser. No data ever leaves the machine**, and the repo holds only code.
+The lab's Kea CPMG processing lives in Python scripts and notebooks under `MeldrumLabCode/pythonic/`. Using them means a working Python environment and editing paths in notebooks. The goal is a static site on GitHub Pages: a user drops a Kea data folder into the browser, sees its parameters and raw data, picks processing options, and saves results. **All computation runs in the user's browser. No data ever leaves the machine**, and the repo holds only code.
 
 Decisions made:
 - **Engine: Pyodide.** The existing numpy/scipy code runs in WebAssembly, so the site, notebooks, and CLI share one Python codebase.
@@ -20,7 +20,7 @@ worker.js ── Pyodide + numpy/scipy/matplotlib (+ emcee via micropip)
      └── imports the package  nmrdash/  (plain Python, also testable with CPython/pytest)
 ```
 - **Build-free static site**: plain ES modules, Pyodide and Plotly.js from jsDelivr with pinned versions. Nothing to compile, so it's easy for students to maintain.
-- **Pyodide runs in a Web Worker**, so the UI never freezes during ILT, PED, or MCMC, and progress can stream back.
+- **Pyodide runs in a Web Worker**, so the UI never freezes during ILT or MCMC, and progress can stream back.
 - **Pyodide starts loading on page open**, so it is usually warm by the time a folder is dropped (about 30 MB the first time, then browser-cached).
 - **Two plot layers:** Plotly for interactive on-screen plots, and matplotlib (in Pyodide) for saved publication figures (PNG/SVG/PDF). Both read one shared "plot settings" object, so on-screen and saved figures match.
 - **Privacy guard:** a `<meta http-equiv="Content-Security-Policy">` restricts `connect-src` to the CDN hosts, so the page cannot send data anywhere even by accident. There is no analytics. The README says data stays local.
@@ -33,15 +33,14 @@ nmrdash/                      # Python package loaded into Pyodide
   echoes.py        ← integrate each echo (from prepare_t2_data) + FT each echo (cleaned-up echoFT)
   multiexp.py      ← n-component exp fits (generalizes kea_decay_series_io.fit_decay / exp_decay / biexp_decay)
   ilt.py           ← copy of pythonic/run_1dilt.py (MATLAB-matched; use this, not processing_funcs.rmea1d)
-  ped.py           ← NumPy/SciPy port of PED/t2_analysis_real_data.py PED_LBFGS + T2Analyzer
-  uncertainty.py   ← covariance CIs, emcee MCMC, ILT/PED bootstrap
+  uncertainty.py   ← covariance CIs, emcee MCMC, ILT bootstrap
   figures.py       ← matplotlib figure builders driven by the plot-settings dict
   export.py        ← CSV/JSON writers, processing-settings record
   pipeline.py      ← thin entry points the worker calls (load, process, export)
 tests/             ← pytest on CPython with synthetic decays (no real data committed)
 .github/workflows/ ← pytest + Pages deploy
 ```
-**Canonical code location: `nmrdash/` in the new repo.** It becomes the single home for the CPMG I/O, echo processing, fitting, ILT, PED, and uncertainty code. It is an installable Python package (`pyproject.toml`), so the same code runs in the browser (Pyodide loads it from the site) and on a desktop (`pip install -e path/to/nmr-dashboard`, or `pip install git+https://github.com/tkmeldrum/nmr-dashboard`). Once a module moves into `nmrdash`, the matching `pythonic/` file becomes a thin wrapper that imports from `nmrdash`, keeping its CLI and notebook interface. For example, `pythonic/run_1dilt.py` becomes `from nmrdash.ilt import *`. That leaves one version of the math. Code not yet in the dashboard (T2-D, the decay series, wood/gel) stays in `pythonic/` until it's needed.
+**Canonical code location: `nmrdash/` in the new repo.** It becomes the single home for the CPMG I/O, echo processing, fitting, ILT, and uncertainty code. It is an installable Python package (`pyproject.toml`), so the same code runs in the browser (Pyodide loads it from the site) and on a desktop (`pip install -e path/to/nmr-dashboard`, or `pip install git+https://github.com/tkmeldrum/nmr-dashboard`). Once a module moves into `nmrdash`, the matching `pythonic/` file becomes a thin wrapper that imports from `nmrdash`, keeping its CLI and notebook interface. For example, `pythonic/run_1dilt.py` becomes `from nmrdash.ilt import *`. That leaves one version of the math. Code not yet in the dashboard (T2-D, the decay series, wood/gel) stays in `pythonic/` until it's needed.
 
 ## Features → implementation
 
@@ -63,13 +62,12 @@ tests/             ← pytest on CPython with synthetic decays (no real data com
 - *Decay analysis* (applied to the bulk decay or to each z-bin):
   - **Multi-exponential fit**: 1–4 components, optional offset, bounds and initial guesses (p0) set automatically. Report the amplitudes, T2s, reduced χ², and residuals for each component.
   - **ILT**: `run_1dilt`, with inputs T2 min/max, number of steps, and α. Includes an optional α sweep with an L-curve plot.
-  - **PED**: port `PED_LBFGS` to softplus-parameterized weights with analytic gradients and `scipy.optimize.minimize(method='L-BFGS-B')`. Keep the reg types (None/L1/L2/PED/ElasticNet/SQRLasso). Check it against the PyTorch version on the same input before relying on it.
 
 **5. Uncertainties**
 - **Fit confidence intervals**: from the `curve_fit` covariance, as t-distribution 68/95% CIs, with error propagation for derived values (mean T2, fractions).
 - **MCMC**: `emcee` (pure Python, installed with micropip) on the multi-exponential model. Log-uniform priors on T2 and positive amplitudes, noise σ either estimated from the tail of the decay or sampled. Settings: walkers, steps, burn-in. Outputs: posterior medians with 16/84 percentiles, a corner plot, and a trace plot.
 - **Long-run handling (MCMC and bootstrap):** before starting, show a confirmation dialog warning that the run may take a while, with a rough time estimate from a short timed trial. The run only starts once the user confirms. While it runs, the worker sends progress updates that drive a progress bar (step k of N plus elapsed and remaining time). A Cancel button stops the worker and restarts Pyodide.
-- **ILT/PED**: MCMC doesn't suit a regularized inversion, so offer residual bootstrap instead (refit N resampled decays) and show a median spectrum with a 5–95% band. Say so in the UI.
+- **ILT**: MCMC doesn't suit a regularized inversion, so offer residual bootstrap instead (refit N resampled decays) and show a median spectrum with a 5–95% band. Say so in the UI.
 
 **6. Display and plot controls.** For each figure: axis lin/log, axis limits, time units (**default s**, ms optional), font size, line width, marker size, colormap, figure size/DPI, title text with a **"No title" checkbox** for publication figures, and legend on/off. Settings are saved in `localStorage` as per-user defaults.
 
@@ -89,8 +87,8 @@ tests/             ← pytest on CPython with synthetic decays (no real data com
 1. **Load + params + raw display** (`kea_io`, panels 1–3).
 2. **Integrate → multi-exp fit + ILT**, with Plotly results and covariance CIs.
 3. **FT-each-echo** path, z-binning, T2(z) map.
-4. **PED port** plus a parity test against the PyTorch version.
-5. **MCMC** (emcee) and ILT/PED bootstrap.
+4. (reserved)
+5. **MCMC** (emcee) and ILT bootstrap.
 6. **Plot controls + matplotlib export + save** (FS Access + zip fallback).
 7. **Polish**: error messages, a "how to use" page, cleanup of the `pythonic/` cross-references.
 
@@ -98,7 +96,6 @@ tests/             ← pytest on CPython with synthetic decays (no real data com
 - **pytest on CPython (CI)**:
   - Synthetic mono-, bi-, and tri-exponential decays with noise. Fits recover T2s within their CIs.
   - The ILT peak lands at the true T2.
-  - PED parity with the PyTorch implementation (run locally where torch is installed).
   - FT of a synthetic box profile gives the expected width.
   - Round trip of `read_kea_binary` on a generated file for each dataType.
 - **Regression against existing scripts**: on one real dataset, `nmrdash` output must match `pythonic/run_kea_ilt.py` (spectrum, RMSE) and `kea_decay_series_io.fit_decay` numerically. This runs locally only, with the data path supplied as an argument and nothing committed.
