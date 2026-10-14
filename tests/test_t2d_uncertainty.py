@@ -69,13 +69,13 @@ def test_the_95_percent_credible_intervals_cover_the_truth_about_95_percent_of_t
 
 
 def test_a_population_the_data_cannot_place_gets_a_warning_and_a_one_sided_posterior(axes):
-    truth = [(4000.0, 0.004, 3e-11), (3000.0, 0.02, 4e-9)]                              # the second diffuses too fast for these b-values
+    truth = [(4000.0, 0.004, 3e-11), (3000.0, 0.02, 1e-13)]                             # the second diffuses more slowly than the b-values can tell from zero
     m, f = mcmc(axes, truth, steps=1500)
     m.step(1500)
     r = m.result(THEME)
     assert any("D of population 2" in w and "only a bound" in w for w in r["warnings"])
     d2 = next(p for p in r["params"] if p["name"] == "D2")
-    assert d2["hi"] >= 0.5 * axes[2][1]                                                  # the posterior runs up to the edge of the allowed range
+    assert d2["lo"] <= 1.5 * axes[2][0]                                                  # the posterior sits against the lower edge of the allowed range
 
 
 def test_the_noise_level_can_be_sampled_and_is_found(axes):

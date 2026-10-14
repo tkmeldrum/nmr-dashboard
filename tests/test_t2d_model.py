@@ -65,12 +65,24 @@ def test_the_number_of_populations_is_recovered_by_bic(axes, truth):
     assert not any("not supported" in w for w in out["warnings"])
 
 
-def test_a_population_the_data_cannot_place_is_reported_as_a_bound(axes):
-    truth = [(4000.0, 0.004, 3e-11), (3000.0, 0.02, 4e-9)]               # the second diffuses too fast for these b-values
-    out = M.fit(axes[0], axes[1], synth(axes, truth), regions_near(truth), T2R, axes[2], sigma=SIGMA, k=2, max_k=2)
-    fast = max(out["populations"], key=lambda p: p["D"])
-    assert fast["D_at_limit"] == "high" and np.isnan(fast["D_se"])
-    assert any("only a bound" in w or "give only a bound" in w for w in out["warnings"])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_a_population_slower_than_the_window_is_reported_as_a_bound(axes, seed):
+    """D below what the largest b-value can tell apart from zero: the fit stops at the limit and says the data give only a bound."""
+    truth = [(4000.0, 0.004, 3e-11), (3000.0, 0.02, 1e-13)]
+    out = M.fit(axes[0], axes[1], synth(axes, truth, seed), regions_near(truth), T2R, axes[2], sigma=SIGMA, k=2, max_k=2)
+    slow = out["populations"][1]
+    assert slow["D_at_limit"] == "low" and np.isnan(slow["D_se"]) and slow["D"] == pytest.approx(axes[2][0], rel=0.01)
+    assert any("only a bound" in w for w in out["warnings"])
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_a_population_too_fast_to_leave_any_signal_is_not_invented(axes, seed):
+    """exp(-b D) is already ~e^-25 at the first b-value for D = 4e-9: nothing in the data, so BIC asks for one population, not two."""
+    truth = [(4000.0, 0.004, 3e-11), (3000.0, 0.02, 4e-9)]
+    out = M.fit(axes[0], axes[1], synth(axes, truth, seed), regions_near(truth), T2R, axes[2], sigma=SIGMA, max_k=3)
+    assert out["recommended_k"] == 1 and out["K"] == 1
+    p = out["populations"][0]
+    assert abs(p["D"] - 3e-11) < 3 * p["D_se"] and abs(p["A"] - 4000) < 3 * p["A_se"]
 
 
 def test_asking_for_more_populations_than_exist_is_called_out(axes):
