@@ -20,7 +20,7 @@ from, and link to the exact lines. Tests should check each model against indepen
 | Position from frequency `z = f / (γ G)`; resolution `Δz = 1 / (N Δt γ G)`; nucleus γ | `echoes.py` (`ft`, `native_resolution_um`), `constants.py` |
 | Echo phasing and integration | `echoes.py` (`integrate`) |
 | Which diffusion coefficients the b-values can resolve, `[1/b_max, 5/b_min]` | `ilt2d.py` (`sensitive_d_window`) |
-| **b-values themselves** | **not computed here**: read from the spectrometer's `DiffAxis.dat` / `data.dat` (units 10⁻⁹ s/m²) |
+| b-values `b = (γG)² τ² (Δ + 2τ/3)`, the τ grid, the gradient | **now calculated** from `gradient` (a setting, default 23.67 T/m), `DELTA`, `tauMin`, `tauMax`, `nrPntsTau`: `physics.py` and `t2d.py` (PR #31). The spectrometer's axis files are only a cross-check. |
 
 Several of these are the same relation written more than once (the exponential decay appears in three places).
 
@@ -82,9 +82,21 @@ Optionally the About page gets a **"Run these checks in your browser"** button t
 4. `inference.py` (a second, separate step).
 5. The in-browser check button (optional).
 
+## A physical effect the tool does not model (to decide whether to state or to include)
+
+In a static gradient, diffusion also attenuates the **CPMG echo train** itself, so the decay rate is `1/T₂,app = 1/T₂ + γ²G² D tₑ² / 12` (tₑ the echo time). At G = 23.67 T/m:
+
+| echo time | `γ²G²tₑ²/12` (s⁻¹ per m²/s of D) | for D = 10⁻⁹ m²/s (free water) | for D = 10⁻¹¹ |
+|---|---|---|---|
+| 44 µs (your SSE-T₂ data) | 6.5×10⁹ | 6.5 s⁻¹ | 0.07 s⁻¹ |
+| 200 µs (EtGly CPMG) | 1.3×10¹¹ | 130 s⁻¹ | 1.3 s⁻¹ |
+
+So for solids and slow diffusers (D ≲ 10⁻¹¹) it is negligible, but for a free liquid at long echo times it can shorten the apparent T₂ appreciably. Today T₂ in the fits is the *apparent* T₂. Options: state this on the About page (cheap), or add an optional correction when D is known (e.g. from the T₂–D result).
+
 ## Decisions for you
 
 1. **Two files (physics and inference), or one?** Recommended: two.
 2. **Sources.** For each model, which reference should the About page cite? I can supply standard ones (Carr–Purcell–Meiboom–Gill; Venkataramanan et al. 2002 for the inversion; the static-gradient position relation) but you should confirm each, and tell me the reference for the SSE-T₂ diffusion weighting your Kea sequence uses.
-3. **b-values.** They come from Kea's axis file. Do you want an *independent cross-check* that recomputes b from the acquisition parameters (needs the formula for your sequence), shown as a warning if they disagree?
+3. ~~**b-values.**~~ **Decided and done (PR #31):** calculated from the gradient, Δ and τ; the spectrometer's files only cross-check. On the samples the spectrometer's b-values follow exactly τ²(Δ + 2τ/3) (deviation 3×10⁻⁶) and correspond to G = 23.49 T/m (Kea's `gradient = 1000` kHz/mm), 0.8% below the 23.67 T/m now used, so b is 1.5% higher. The echo time does not enter b; it sets the echo axis.
 4. **Browser check button.** Worth it?
+5. **The CPMG-train diffusion term above:** state it only, or offer a correction?
