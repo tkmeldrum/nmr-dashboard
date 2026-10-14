@@ -148,6 +148,8 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
             "imag": _clean(im),
             "summed": _clean(summed),
         }
+    if out.get("raw") is not None and out.get("supported"):
+        _STATE["raw_out"] = out["raw"]                    # what the Raw data tab shows; the saved raw-data figure uses it
     return out
 
 
@@ -517,7 +519,8 @@ def save_bundle(opts):
         if opts.get("csv", True):
             files += outputs.write_tables(d, res, mcmc, boot, samples=samples)
         if opts.get("figures", True):
-            files += outputs.write_figures(d, res, mcmc, boot, opts.get("figure_format", "png"), int(opts.get("dpi", 150)), True, band, style=opts.get("style") or {})
+            files += outputs.write_figures(d, res, mcmc, boot, opts.get("figure_format", "png"), int(opts.get("dpi", 150)), True, band, style=opts.get("style") or {},
+                                           raw=_STATE.get("raw_out"), kind=("t1" if "t1" in _STATE else "t2d" if "t2d" in _STATE else "cpmg"))
         label = page.get("dataset") or "dataset"
         (d / "params_used.toml").write_text(P.dump_toml(P.with_style(P.from_settings(settings, options), opts.get("style")), header=f"Used for: {label}"))
         files.append("params_used.toml")
