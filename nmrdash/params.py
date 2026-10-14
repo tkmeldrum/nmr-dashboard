@@ -6,6 +6,8 @@ One schema serves three things: reading the file a user edits, turning it into t
 """
 import math
 
+from . import constants
+
 try:
     import tomllib                      # Python 3.11+
 except ImportError:                     # pragma: no cover
@@ -72,7 +74,7 @@ SPEC = {
     ],
     "ft": [
         ("nucleus", AUTO, "\"1H\", \"19F\" or \"auto\" (chosen from b1Freq in acqu.par).", _one_of(AUTO, "1H", "19F")),
-        ("G", 23.7, "Static field gradient, T/m.", _number(0, lo_open=True)),
+        ("G", constants.DEFAULT_G_T_PER_M, "Static field gradient, T/m (the same quantity as t2d.gradient).", _number(0, lo_open=True)),
         ("zero_fill", 4, "FFT length is the next power of two above points x 2^zero_fill.", _integer(0, 6)),
         ("z_min", -200.0, "Sample window, micrometres (+ z = + frequency = closer to the magnet). \"auto\" for both = where the\n# profile exceeds 10% of its maximum.", _auto_or(_number())),
         ("z_max", 200.0, "", _auto_or(_number())),
@@ -108,7 +110,8 @@ SPEC = {
         ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
     ],
     "t2d": [
-        ("t2_min", 1e-5, "T2-D (sequence SSE-T2): T2 grid, seconds.", _number(0, lo_open=True)),
+        ("gradient", constants.DEFAULT_G_T_PER_M, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m. The b-values are calculated from it with the delays in acqu.par:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _number(0, lo_open=True)),
+        ("t2_min", 1e-5, "T2 grid, seconds.", _number(0, lo_open=True)),
         ("t2_max", 1.0, "", _number(0, lo_open=True)),
         ("t2_steps", 50, "T2 grid points (never more than echoes). The solve is a dense problem of T2 x D unknowns: 50 x 25 takes seconds, 100 x 25 about a minute, in the browser several times longer.", _integer(10, 400)),
         ("d_min", 1e-12, "Diffusion coefficient grid, m^2/s (processed internally as D x 1e9, reported in m^2/s). The b-values can only tell apart D from about\n# 1/b_max to 5/b_min; outside that the solution is regularisation, not data. \"auto\" for both = exactly that range for this dataset.", _auto_or(_number(0, lo_open=True))),
@@ -372,7 +375,7 @@ def from_settings(settings, options=None, base=None):
     p["processing"]["echo"] = settings.get("echo", "integrate")
     ft = settings.get("ft") or {}
     if ft:
-        p["ft"].update({"nucleus": ft.get("nucleus", AUTO), "G": ft.get("G", 23.7), "zero_fill": ft.get("zero_fill", 4),
+        p["ft"].update({"nucleus": ft.get("nucleus", AUTO), "G": ft.get("G", constants.DEFAULT_G_T_PER_M), "zero_fill": ft.get("zero_fill", 4),
                         "z_min": AUTO if ft.get("z_min") is None else ft["z_min"], "z_max": AUTO if ft.get("z_max") is None else ft["z_max"],
                         "spacing_um": AUTO if ft.get("spacing_um") is None else ft["spacing_um"],
                         "ilt_spacing_um": AUTO if ft.get("ilt_spacing_um") is None else ft["ilt_spacing_um"],

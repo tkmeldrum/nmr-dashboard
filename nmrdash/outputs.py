@@ -44,6 +44,13 @@ def _t2d_tables(res, out):
         ("D_min_m2s", r["d_min"]), ("D_max_m2s", r["d_max"]), ("excluded_first_echoes", res["decay"].get("skip", 0)), ("D_sensitive_min_m2s", r["d_sensitive"][0]), ("D_sensitive_max_m2s", r["d_sensitive"][1]), ("fraction_of_spectrum_in_sensitive_window", r["fraction_in_sensitive_window"]),
         ("rss", r["rss"]), ("mse", r["mse"]), ("rmse", r["rmse"]),
         ("signal_range", r["signal_range"]), ("rmse_over_signal_range", r["rmse_over_amp"]), ("noise_sigma", r["noise_sigma"]), ("chi2_per_point", r["chi2_per_point"])])
+    bi, bc = r["b_info"], r["b_check"]
+    out("t2d_b_values.csv", ["delay_tau_s", "b_s_per_m2"], [[t_, b_ * 1e9] for t_, b_ in zip(r["tau_s"], r["b_vec"])])
+    out("t2d_b_value_inputs.csv", ["quantity", "value"], [("gradient_G_T_per_m_(used)", bi["gradient_t_per_m"]), ("nucleus", bi["nucleus"]), ("Delta_ms", bi["delta_ms"]),
+        ("tau_min_ms", bi["tau_min_ms"]), ("tau_max_ms", bi["tau_max_ms"]), ("n_tau_(log-spaced)", bi["n_tau"]), ("echo_time_us_(echo axis, not in b)", bi["echo_time_us"]),
+        ("gradient_implied_by_acqu.par_T_per_m_(cross-check only)", bi["kea_gradient_t_per_m"]), ("formula", "b = (2 pi gamma G)^2 tau^2 (Delta + 2 tau / 3)")] +
+        [(f"{c['what']}_vs_{c['file']}_{'max_relative_difference' if c['kind'] == 'match' else 'shape_deviation'}", c["value"]) for c in bc["compared"]] +
+        [(f"gradient_implied_by_{c['file']}_b-values_T_per_m", c["implied_gradient_t_per_m"]) for c in bc["compared"] if c.get("implied_gradient_t_per_m")])
     pred, resid = np.asarray(r["pred"]), np.asarray(r["resid"])                         # (n_b, n_echo)
     rows = [[e, b, pred[i, j] + resid[i, j], pred[i, j], resid[i, j]] for i, b in enumerate(r["b_vec"]) for j, e in enumerate(r["echo_s"])]
     out("t2d_data_fit_residual.csv", ["echo_time_s", "b_value_1e-9_s_per_m2", "data", "fit", "residual"], rows)
@@ -254,10 +261,24 @@ def _t2d_summary(res, prov, files, warnings, mcmc=None, boot=None):
          f"- 2D data written: {when or 'unknown'}"]
     if skip:
         L.append(f"- The first {skip} echoes are excluded from the inversion.")
+    bi, bc = r["b_info"], r["b_check"]
+    L += [f"- b-values calculated from the acquisition parameters, b = (γG)² τ² (Δ + 2τ/3): G = {F.fmt(bi['gradient_t_per_m'], 4)} T/m (your setting), "
+          f"Δ = {F.fmt(bi['delta_ms'])} ms, τ = {F.fmt(bi['tau_min_ms'])}–{F.fmt(bi['tau_max_ms'])} ms ({bi['n_tau']} log-spaced)."]
+    for c in bc["compared"]:
+        if c["kind"] == "shape" and c["value"] is not None:
+            L.append(f"  - The spectrometer's b-values ({c['file']}) have the same τ and Δ dependence as the calculation (deviation {F.fmt_sci(c['value'])}) and correspond to "
+                     f"G = {F.fmt(c['implied_gradient_t_per_m'], 4)} T/m; the b-values used here are {F.fmt((c['b_ratio'] ** -1 - 1) * 100)}% {'higher' if c['b_ratio'] < 1 else 'lower'}.")
+        elif c["kind"] == "match" and c["value"] is not None:
+            L.append(f"  - {c['what'].capitalize()} agree with {c['file']} (largest relative difference {F.fmt_sci(c['value'])}).")
     L += [f"- Grid: {r['n_T2']} T₂ points {F.fmt_sci(r['t2_min'])} – {F.fmt_sci(r['t2_max'])} s × {r['n_D']} D points {F.fmt_sci(r['d_min'])} – {F.fmt_sci(r['d_max'])} m²/s; α = {F.fmt_sci(r['alpha'])}",
           f"- Fit: RMSE / signal range {F.pct(r['rmse_over_amp'], 2)}; noise σ (imaginary channel) {F.fmt(r['noise_sigma'])}; χ² per point {F.fmt(r['chi2_per_point'])}", ""]
     for w in warnings:
         L.append(f"> **Warning:** {w}")
+    if not bc["agrees"]:
+        L += ["", "> **The calculated delays, echo times or b-values do not match the spectrometer's files** (to within "
+              f"{F.pct(bc['tolerance'], 0)}; for b-values, in shape): " + "; ".join(f"{c['what']} vs {c['file']}: " + (F.fmt_sci(c["value"]) if c["value"] is not None else "different lengths")
+                                                                              for c in bc["compared"] if not c["agrees"])
+              + ". The calculated values were used. Check `DELTA`, `tauMin`, `tauMax`, `nrPntsTau` and `echoTime` in acqu.par."]
     lo, hi = r["d_sensitive"]
     if r["fraction_in_sensitive_window"] is not None and r["fraction_in_sensitive_window"] < 0.9:
         L += ["", f"> **Only {F.pct(r['fraction_in_sensitive_window'], 0)} of the spectrum lies where the data can constrain it.** The b-values "

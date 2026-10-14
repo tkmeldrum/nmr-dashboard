@@ -39,24 +39,32 @@ export function initProcessDefaults(raw) {
   $("exclude-first").value = 0;
 }
 
-// The diffusion coefficients these b-values can tell apart (see nmrdash/ilt2d.py: sensitive_d_window), in m²/s.
-export function resolvableD(bVec) {
-  const b = bVec.map((x) => x * 1e9);                                          // the solver's b-values are in units of 1e9 s/m²
-  return [Number((1 / Math.max(...b)).toPrecision(2)), Number((5 / Math.min(...b)).toPrecision(2))];
-}
-
 export function initT2dDefaults(r) {
   const d = r.defaults;
   $("t2d-t2min").value = d.t2_min; $("t2d-t2max").value = d.t2_max; $("t2d-t2steps").value = d.t2_steps;
   $("t2d-dmin").value = d.d_min; $("t2d-dmax").value = d.d_max; $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
   $("t2d-alpha").value = +Math.log10(d.alpha).toFixed(3); $("t2d-peakthr").value = d.peak_threshold_pct;
   $("t2d-equation").innerHTML = T2D_EQUATION;
-  const b = r.raw.b_vec.map((x) => x * 1e9), [lo, hi] = resolvableD(r.raw.b_vec);
-  $("t2d-window-hint").textContent = `Your b-values (${Math.min(...b).toExponential(1)} – ${Math.max(...b).toExponential(1)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
-    "The range above is yours to choose, but outside this one the solution is regularisation, not data." +
-    " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ.";
+  $("t2d-gradient").value = d.gradient;
+  refreshT2dAxes();
   showMsg("");
   $("run-status").textContent = "";
+}
+
+// The b-values follow from the gradient setting (calculated in Python, physics.py): the hint under the T2-D fields and the "resolvable range" button use them.
+export async function refreshT2dAxes() {
+  if (!state.result || state.result.kind !== "t2d") return null;
+  const g = parseFloat($("t2d-gradient").value);
+  if (!(g > 0)) { $("t2d-window-hint").textContent = "Enter the gradient G (T/m) to calculate the b-values."; return null; }
+  const ax = await rpc("t2d_axes", { t2d: { gradient: g } });
+  const b = ax.b_vec.map((x) => x * 1e9), [lo, hi] = ax.d_window;
+  const kea = (ax.b_check.compared.find((c) => c.kind === "shape" && c.implied_gradient_t_per_m) || {}).implied_gradient_t_per_m;
+  state.t2dAxes = ax;
+  $("t2d-window-hint").textContent = `With G = ${g} T/m, Δ and τ from acqu.par, your b-values (${Math.min(...b).toExponential(2)} – ${Math.max(...b).toExponential(2)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
+    "The range above is yours to choose, but outside this one the solution is regularisation, not data." +
+    " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ." +
+    (kea ? ` (For reference, the spectrometer's own b-values correspond to G = ${kea.toFixed(2)} T/m.)` : "");
+  return ax;
 }
 
 function num(id, label) {
@@ -77,9 +85,10 @@ export function readSettings() {
   if (state.result.kind === "t2d") {
     const t = {
       t2_min: num("t2d-t2min", "T₂ min"), t2_max: num("t2d-t2max", "T₂ max"), t2_steps: Math.round(num("t2d-t2steps", "T₂ points")),
-      d_min: num("t2d-dmin", "D min"), d_max: num("t2d-dmax", "D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
+      gradient: num("t2d-gradient", "Gradient G"), d_min: num("t2d-dmin", "D min"), d_max: num("t2d-dmax", "D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
       alpha: 10 ** num("t2d-alpha", "log10 α"), peak_threshold_pct: num("t2d-peakthr", "Region threshold"),
     };
+    if (!(t.gradient > 0)) throw new Error("The gradient G must be a positive number (T/m).");
     if (t.t2_min <= 0 || t.t2_max <= t.t2_min) throw new Error("T₂ min must be positive and smaller than T₂ max.");
     if (t.d_min <= 0 || t.d_max <= t.d_min) throw new Error("D min must be positive and smaller than D max.");
     if (t.t2_steps < 10 || t.t2_steps > 400) throw new Error("T₂ points must be between 10 and 400.");
@@ -194,10 +203,13 @@ export function initProcess() {
     }
   });
   $("process-form").addEventListener("submit", (e) => e.preventDefault());   // Enter in a field must not reload the page
-  $("t2d-use-window").addEventListener("click", () => {
-    const [lo, hi] = resolvableD(state.result.raw.b_vec);
-    $("t2d-dmin").value = lo; $("t2d-dmax").value = hi;
+  $("t2d-use-window").addEventListener("click", async () => {
+    const ax = await refreshT2dAxes();
+    if (!ax) return;
+    const two = (v) => +v.toPrecision(2);
+    $("t2d-dmin").value = two(ax.d_window[0]); $("t2d-dmax").value = two(ax.d_window[1]);
   });
+  $("t2d-gradient").addEventListener("change", () => refreshT2dAxes().catch((err) => showMsg(err.message)));
   $("run-btn").addEventListener("click", async () => {
     if (state.running || !state.result || !state.result.supported) return;
     let settings;
