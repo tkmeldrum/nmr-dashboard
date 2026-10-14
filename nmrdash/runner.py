@@ -109,7 +109,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
             files += outputs.write_tables(out_dir, res, mcmc, boot, samples=out_cfg["samples"])
         if out_cfg["figures"]:
             band = mcmc if (mcmc and mc["target"] == "bulk") else None
-            files += outputs.write_figures(out_dir, res, mcmc, boot, out_cfg["figure_format"], out_cfg["figure_dpi"], out_cfg["titles"], band, style=P.style_dict(p, out_cfg["titles"]))
+            files += outputs.write_figures(out_dir, res, mcmc, boot, out_cfg["figure_format"], out_cfg["figure_dpi"], out_cfg["titles"], band, style=P.style_dict(p, out_cfg["titles"]),
+                                          raw=pipeline._STATE.get("raw_out"), kind=info["kind"])
         text = params_text if params_text is not None else P.dump_toml(p)
         (out_dir / "params_used.toml").write_text(P.dump_toml(p, header=f"Resolved and used for: {row['dataset']}\nOriginal params file: {params_path or '(defaults)'}"))
         files.append("params_used.toml")
