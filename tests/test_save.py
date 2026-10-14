@@ -10,6 +10,7 @@ from nmrdash import figures
 from nmrdash.pipeline import load, process, save_bundle
 
 DATA = Path(__file__).resolve().parent.parent / "test_data"
+ROOT_DIR = Path(__file__).resolve().parent.parent
 ETGLY = DATA / "CPMG_EtGly" / "1"
 
 
@@ -154,3 +155,37 @@ def test_bad_overrides_are_dropped():
     s = figures.style_from({"figures": {"nope": {"title": "x"}, "decay_fit": {"xlim": ["a", 1], "xscale": "sideways", "title": None}, "ilt_spectrum": "junk"}})
     assert list(s["figures"]) == ["decay_fit"]
     assert s["figures"]["decay_fit"] == {"title": "", "xlim": [None, None], "ylim": [None, None], "xscale": None, "yscale": None}
+
+
+def test_every_figure_the_page_shows_is_saved():
+    from nmrdash.pipeline import mcmc_finish, mcmc_start, mcmc_step
+    load(ETGLY)
+    process({"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": True},
+             "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 0.3, "n_steps": 60, "alpha": 1e8, "sweep": True}})
+    mcmc_start({"target": "bulk", "steps": 200, "burn": 50, "nwalkers": 16})
+    mcmc_step(200)
+    mcmc_finish({"fg": "#222", "grid": "#aaa"}, 50)
+    names = set(save_bundle({"dpi": 40, "mcmc": True})["files"])
+    assert {"raw_data.png", "decay_fit.png", "model_comparison.png", "ilt_spectrum.png", "alpha_sweep.png", "mcmc_corner.png", "mcmc_trace.png"} <= names
+
+
+def test_ft_t1_and_t2d_save_their_own_extra_figures():
+    load(DATA / "paperstack_CPMG_40C" / "1")
+    process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 3, "z_min": None, "z_max": None, "spacing_um": None, "ilt_spacing_um": None, "min_signal_pct": 5.0},
+             "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False},
+             "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 0.1, "n_steps": 40, "alpha": 1e8, "sweep": False}})
+    assert {"ft_profile_map.png", "spatial.png", "spatial_extra.png", "raw_data.png"} <= set(save_bundle({"dpi": 40})["files"])
+    load(DATA / "T1SAT" / "1")
+    process({"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": True}})
+    assert {"raw_data.png", "decay_fit.png", "model_comparison.png"} <= set(save_bundle({"dpi": 40})["files"])
+    load(DATA / "M1115_rt_30phr" / "1")
+    process({"kind": "t2d", "t2d": {"t2_steps": 12, "d_steps": 8}})
+    assert {"raw_data.png", "t2d_spectrum.png", "t2d_fit.png"} <= set(save_bundle({"dpi": 40})["files"])
+
+
+def test_figure_names_agree_between_the_figures_and_the_params_file():
+    from nmrdash import params as P
+    assert tuple(figures.FIGURES) == tuple(P.FIGURE_NAMES)
+    import re
+    html = (ROOT_DIR / "index.html").read_text()
+    assert set(re.findall(r'<option value="(\w+)">', html[html.index('id="ps-fig"'):html.index('id="ps-fig-title"')])) == set(figures.FIGURES)
