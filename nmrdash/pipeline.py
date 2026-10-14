@@ -476,8 +476,8 @@ def get_provenance(page=None, options=None):
     return _jsonable({"record": rec, "lines": provenance.describe(rec)})
 
 
-def export_params(settings, options=None, dataset=None):
-    return export.params_text(settings, options, dataset)
+def export_params(settings, options=None, dataset=None, style=None):
+    return export.params_text(settings, options, dataset, style)
 
 
 def export_script():
@@ -519,7 +519,7 @@ def save_bundle(opts):
         if opts.get("figures", True):
             files += outputs.write_figures(d, res, mcmc, boot, opts.get("figure_format", "png"), int(opts.get("dpi", 150)), True, band, style=opts.get("style") or {})
         label = page.get("dataset") or "dataset"
-        (d / "params_used.toml").write_text(P.dump_toml(P.from_settings(settings, options), header=f"Used for: {label}"))
+        (d / "params_used.toml").write_text(P.dump_toml(P.with_style(P.from_settings(settings, options), opts.get("style")), header=f"Used for: {label}"))
         files.append("params_used.toml")
         names = files + ["provenance.json", "summary.md"]
         rec, _ = _provenance_record({**page, "notes": list(page.get("notes") or []) + notes}, options, outputs=names)

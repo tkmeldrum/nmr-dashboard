@@ -307,3 +307,35 @@ def test_exported_script_runs(tmp_path, ds):
     assert json.loads((out / "provenance.json").read_text())["command"].startswith("python ")
     r = subprocess.run([sys.executable, str(script), "--help"], capture_output=True, text=True)
     assert r.returncode == 0 and "--batch" in r.stdout
+
+
+def test_style_and_figure_overrides_round_trip_and_validate():
+    import tomllib
+    p = P.defaults()
+    p["style"].update({"font_size": 14, "time_unit": "ms", "width": 6.0})
+    p["figures"] = {"decay_fit": {"title": "Sample A", "xmin": 0.002, "yscale": "log"}}
+    p = P.validate(p)
+    assert P.validate(tomllib.loads(P.dump_toml(p))) == p
+    assert P.validate(tomllib.loads(P.dump_toml(P.defaults()))) == P.defaults()
+    st = P.style_dict(p)
+    assert st["width"] == 6.0 and st["height"] is None and st["figures"]["decay_fit"]["xlim"] == [0.002, None] and st["figures"]["decay_fit"]["yscale"] == "log"
+    assert P.style_dict(P.defaults(), titles=False)["title"] == "none"
+    for bad, msg in (({"style": {"font_size": 2}}, "style.font_size"), ({"style": {"time_unit": "min"}}, "style.time_unit"),
+                     ({"figures": {"nope": {}}}, "unknown figure"), ({"figures": {"decay_fit": {"xmin": "a"}}}, "figures.decay_fit.xmin"),
+                     ({"figures": {"decay_fit": {"zmin": 1}}}, "unknown setting")):
+        with pytest.raises(ValueError, match=msg):
+            P.validate(bad)
+
+
+def test_the_script_applies_the_style_to_its_figures(tmp_path):
+    import shutil
+    d = tmp_path / "d"
+    shutil.copytree(DATA / "CPMG_EtGly" / "1", d)
+    p = P.defaults()
+    p["multiexp"].update({"enabled": True, "n": 1})
+    p["output"].update({"figure_format": "svg", "samples": False})
+    p["style"].update({"time_unit": "ms", "title": "custom", "title_text": "From the params file"})
+    row = runner.run_dataset(d, p)
+    assert row["status"] == "ok", row
+    svg = (Path(row["output_dir"]) / "decay_fit.svg").read_text()
+    assert "(ms)" in svg and "From the params file" in svg

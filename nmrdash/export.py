@@ -54,8 +54,10 @@ if __name__ == "__main__":
 '''
 
 
-def params_text(settings, options=None, dataset=None):
+def params_text(settings, options=None, dataset=None, style=None):
     """TOML for the settings the page used (and its uncertainty options)."""
     p = P.from_settings(settings, options)
+    if style:
+        p = P.with_style(p, style)
     header = "Exported from the nmrdash web dashboard on " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M") + (f"\nDataset: {dataset}" if dataset else "")
     return P.dump_toml(p, header=header)
