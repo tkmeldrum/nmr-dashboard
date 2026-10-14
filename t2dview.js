@@ -45,6 +45,66 @@ export function renderT2d(r) {
 
   renderViewer(t, [lo, hi]);
   renderMaps(t);
+  renderT2dModel(r);
+}
+
+const POP_COLORS = [COLORS.blue, COLORS.orange, COLORS.green, COLORS.purple];
+const finite = (x) => x !== null && x !== undefined && Number.isFinite(x);
+
+// The few-population model: table, comparison and the populations drawn on the map.
+function renderT2dModel(r) {
+  const m = r.t2d && r.t2d.model;
+  $("t2d-model").hidden = !m;
+  if (!m) return;
+  $("t2d-model-note").textContent = `${m.K} population${m.K > 1 ? "s" : ""} (BIC prefers ${m.recommended_k}); χ² per point ${fmt(m.chi2_per_point)}; ` +
+    `D allowed from ${fmtSci(m.d_window[0])} to ${fmtSci(m.d_window[1])} m²/s; intervals are least-squares 95% intervals.`;
+  $("t2d-model-warnings").replaceChildren(...m.warnings.map((text) => Object.assign(document.createElement("p"), { className: "message warn", textContent: text })));
+  const val = (v, ci, bound) => (bound ? `${fmtSci(v)} (a bound only)` : finite(ci[0]) ? `${fmtSci(v)} [${fmtSci(ci[0])}, ${fmtSci(ci[1])}]` : `${fmtSci(v)} (interval undetermined)`);
+  table($("t2d-model-table"), ["#", "Fraction", "T₂ (s)", "D (m²/s)", "Amplitude", "Note"], m.populations.map((p, i) => [
+    String(i + 1), finite(p.fraction_se) ? `${pct(p.fraction)} ± ${pct(p.fraction_se)}` : pct(p.fraction),
+    val(p.T2, p.T2_ci, p.T2_at_limit), val(p.D, p.D_ci, p.D_at_limit), fmt(p.A),
+    [p.D_at_limit ? `D at the ${p.D_at_limit} limit` : "", p.T2_at_limit ? `T₂ at the ${p.T2_at_limit} limit` : "", !p.supported && !p.D_at_limit && !p.T2_at_limit ? "not supported by the data" : ""].filter(Boolean).join("; ") || "–",
+  ]));
+  table($("t2d-model-compare"), ["Populations", "Parameters", "χ² per point", "ΔAIC", "ΔBIC", ""], m.comparison.map((c) => [
+    String(c.k), String(c.n_params), fmt(c.chi2_per_point), fmt(c.d_aic, 3), fmt(c.d_bic, 3), c.k === m.K ? "chosen" : c.k === m.recommended_k ? "BIC's choice" : "",
+  ]));
+  renderT2dPopulations();
+}
+
+// The populations on the regularised map, with bootstrap / MCMC samples when they exist (redrawn when those finish).
+export function renderT2dPopulations() {
+  const r = state.results, m = r && r.t2d && r.t2d.model;
+  if (!m) return;
+  const t = r.t2d, traces = [{ type: "heatmap", x: t.T2, y: t.D, z: t.spectrum, colorscale: "Greys", reversescale: true, showscale: false, opacity: 0.6, hoverinfo: "skip", zsmooth: false }];
+  const xs = m.populations.flatMap((p) => [p.T2, ...(finite(p.T2_ci[0]) ? p.T2_ci : [])]);
+  const u = state.unc || {};
+  for (const [src, label, size] of [[u.boot, "bootstrap", 3], [u.mcmc, "MCMC", 3]]) {
+    const sc = src && src.scatter;
+    if (!sc) continue;
+    sc.T2.forEach((arr, k) => {
+      xs.push(Math.min(...arr), Math.max(...arr));
+      traces.push({ x: arr, y: sc.D[k], mode: "markers", marker: { size, color: POP_COLORS[k % 4], opacity: 0.3 }, name: label, legendgroup: label, showlegend: k === 0, hoverinfo: "skip" });
+    });
+  }
+  m.populations.forEach((p, i) => {
+    const bound = p.D_at_limit || p.T2_at_limit;
+    traces.push({
+      x: [p.T2], y: [p.D], mode: "markers+text", text: [`${i + 1}: ${Math.round(100 * p.fraction)}%`], textposition: "top right", showlegend: false,
+      marker: { size: 11, color: p.supported && !bound ? POP_COLORS[i % 4] : "rgba(0,0,0,0)", symbol: p.D_at_limit === "low" ? "triangle-down" : p.D_at_limit === "high" ? "triangle-up" : "circle", line: { color: ink(), width: 2 } },
+      error_x: finite(p.T2_ci[0]) ? { type: "data", symmetric: false, array: [p.T2_ci[1] - p.T2], arrayminus: [p.T2 - p.T2_ci[0]], color: ink(), thickness: 1.5 } : undefined,
+      error_y: finite(p.D_ci[0]) ? { type: "data", symmetric: false, array: [p.D_ci[1] - p.D], arrayminus: [p.D - p.D_ci[0]], color: ink(), thickness: 1.5 } : undefined,
+      name: `population ${i + 1}`,
+    });
+  });
+  const [lo, hi] = m.d_window, base = baseLayout("", "T₂ (s)", "D (m²/s)", { margin: { l: 70, r: 15, t: 10, b: 50 } });
+  const band = (y0, y1) => ({ type: "rect", xref: "paper", yref: "y", x0: 0, x1: 1, y0, y1, fillcolor: "rgba(122,130,140,0.25)", line: { width: 0 }, layer: "above" });
+  Plotly.react("plot-t2d-pop", traces, {
+    ...base,
+    xaxis: { ...base.xaxis, ...LOGTICKS, range: [Math.log10(Math.max(t.T2[0], Math.min(...xs) / 4)), Math.log10(Math.min(t.T2[t.T2.length - 1], Math.max(...xs) * 4))] },
+    yaxis: { ...base.yaxis, ...LOGTICKS, range: [Math.log10(t.D[0] / 4), Math.log10(t.D[t.D.length - 1])] },     // room below the lowest D for a population sitting on the limit
+    shapes: [band(t.D[0] / 10, lo), band(hi, t.D[t.D.length - 1] * 10)],
+    legend: { orientation: "h", y: -0.2 },
+  }, CFG);
 }
 
 function renderViewer(t, window) {

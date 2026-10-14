@@ -286,7 +286,7 @@ STYLE_DEFAULTS = {
 }
 
 FIGURES = ("raw_data", "ft_profile_map", "decay_fit", "model_comparison", "ilt_spectrum", "alpha_sweep", "spatial", "spatial_extra", "mcmc_trace",
-           "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+           "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_populations", "t2d_fit")
 LIMIT_FIGURES = ("decay_fit", "ilt_spectrum", "alpha_sweep", "model_comparison", "bootstrap_ilt", "t2d_spectrum")      # one main plot to put limits on
 
 
@@ -503,14 +503,15 @@ def ft_profile_map_figure(res, titles=True):
 def model_comparison_figure(res, titles=True):
     """How many exponentials: the AIC and BIC of each model relative to the best (0 = best)."""
     plt = _plt()
-    rows = res["multiexp"]["comparison"]
-    n = [r["n"] for r in rows]
+    t2d = res.get("mode") == "t2d"
+    rows = res["t2d"]["model"]["comparison"] if t2d else res["multiexp"]["comparison"]
+    n = [r["k"] if t2d else r["n"] for r in rows]
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot(n, [r["d_aic"] for r in rows], "o-", color=_BLUE, label="ΔAIC")
     ax.plot(n, [r["d_bic"] for r in rows], "s-", color=_ORANGE, label="ΔBIC")
     ax.axhline(0, color="#222222", lw=1.2, zorder=1)
     ax.set_xticks(n)
-    ax.set_xlabel("Number of components")
+    ax.set_xlabel("Number of populations" if t2d else "Number of components")
     ax.set_ylabel("Δ relative to the best model")
     ax.legend(frameon=False)
     if titles:
@@ -621,6 +622,40 @@ def timeseries_figure(rows, titles=True, symbol="T2"):
     return fig
 
 
+def timeseries_t2d_figure(rows, titles=True):
+    """Batch of T2-D datasets: each population's T2, D and share against elapsed time (populations are matched by their T2 order)."""
+    plt = _plt()
+    use_t = all(r.get("elapsed_min") is not None for r in rows)
+    x = np.array([r["elapsed_min"] if use_t else i for i, r in enumerate(rows)], float)
+    pops = [r["result"]["t2d"]["model"]["populations"] for r in rows]
+    n = max(len(p) for p in pops)
+    fig, (a1, a2, a3) = plt.subplots(3, 1, figsize=(7.2, 8.4), sharex=True)
+    colours = (_BLUE, _ORANGE, _GREEN, _PURPLE)
+    nan = lambda v: np.nan if v is None else v
+    for k in range(n):
+        get = lambda key: np.array([nan(p[k][key]) if k < len(p) else np.nan for p in pops], float)
+        T, Tse, D, Dse, fr, fse = get("T2"), get("T2_se"), get("D"), get("D_se"), get("fraction"), get("fraction_se")
+        c = colours[k % 4]
+        a1.errorbar(x, T, yerr=np.where(np.isfinite(Tse), Tse, 0), fmt="o-", ms=4, lw=1, color=c, label=f"population {k + 1}")
+        bound = np.array([bool(k < len(p) and p[k]["D_at_limit"]) for p in pops])
+        a2.errorbar(x[~bound], D[~bound], yerr=np.where(np.isfinite(Dse), Dse, 0)[~bound], fmt="o-", ms=4, lw=1, color=c)
+        if bound.any():
+            a2.plot(x[bound], D[bound], "v", ms=7, mfc="none", color=c)                    # only a bound (open triangle)
+        a3.errorbar(x, fr, yerr=np.where(np.isfinite(fse), fse, 0), fmt="o-", ms=4, lw=1, color=c)
+    _log_t2_axis(a1, "y")
+    _log_t2_axis(a2, "y")
+    a1.set_ylabel("T$_2$ (s)")
+    a2.set_ylabel("D (m$^2$/s)")
+    a3.set_ylabel("Fraction")
+    a3.set_ylim(0, 1)
+    a3.set_xlabel("Elapsed time (min)" if use_t else "Dataset number")
+    a1.legend(frameon=False)
+    if titles:
+        a1.set_title("T$_2$–D populations vs time (open triangles: D is only a bound)")
+    fig.tight_layout()
+    return fig
+
+
 def t2d_spectrum_figure(res, titles=True):
     """The T2-D map (T2 across, D up, both log) with its two projections."""
     plt = _plt()
@@ -658,6 +693,47 @@ def t2d_spectrum_figure(res, titles=True):
     fig.colorbar(m, ax=[top, right], location="right", fraction=0.04, pad=0.02).set_label("amplitude")
     if titles:
         fig.suptitle(f"T$_2$–D spectrum (α = {r['alpha']:.0e})".replace("e+0", "e"))
+    return fig
+
+
+def t2d_populations_figure(res, mcmc=None, boot=None, titles=True):
+    """The few-population model on the regularised map: each population with its interval, and the bootstrap / MCMC samples around it."""
+    plt = _plt()
+    r = res["t2d"]
+    m = r["model"]
+    T2, D, S = np.asarray(r["T2"], float), np.asarray(r["D"], float), np.asarray(r["spectrum"], float)
+    fig, ax = plt.subplots(figsize=(7.6, 6))
+    ax.pcolormesh(T2, D, S, shading="auto", cmap="Greys", alpha=0.45)
+    colours = (_BLUE, _ORANGE, _GREEN, _PURPLE)
+    for result, marker, label, alpha in ((boot, ".", "bootstrap", 0.35), (mcmc, ".", "MCMC", 0.25)):
+        sc = (result or {}).get("scatter")
+        if not sc:
+            continue
+        for k, (t_, d_) in enumerate(zip(sc["T2"], sc["D"])):
+            ax.plot(t_, d_, marker, ms=2.5, alpha=alpha, color=colours[k % 4], mec="none", label=f"{label}" if k == 0 else None)
+    lo, hi = m["d_window"]
+    for a_, b_ in ((D[0] / 10, lo), (hi, D[-1] * 10)):
+        if b_ > a_:
+            ax.axhspan(a_, b_, color="white", alpha=0.45, lw=0, hatch="///", zorder=3)
+    for i, p in enumerate(m["populations"]):
+        c = colours[i % 4]
+        xe = None if p["T2_ci"][0] is None else [[p["T2"] - p["T2_ci"][0]], [p["T2_ci"][1] - p["T2"]]]
+        ye = None if p["D_ci"][0] is None else [[p["D"] - p["D_ci"][0]], [p["D_ci"][1] - p["D"]]]
+        bound = p["D_at_limit"] or p["T2_at_limit"]
+        ax.errorbar([p["T2"]], [p["D"]], xerr=xe, yerr=ye, fmt="v" if p["D_at_limit"] == "low" else "^" if p["D_at_limit"] == "high" else "o", ms=8, color=c, mec="black", mfc=c if p["supported"] and not bound else "none", capsize=3, lw=1.4, zorder=5)
+        ax.annotate(f"{i + 1}: {100 * p['fraction']:.0f}%", (p["T2"], p["D"]), textcoords="offset points", xytext=(8, 6), fontsize=8, zorder=6)
+    _log_t2_axis(ax, "x")
+    _log_t2_axis(ax, "y")
+    xs = [p["T2"] for p in m["populations"]] + [v for res_ in (boot, mcmc) if res_ and res_.get("scatter") for arr in res_["scatter"]["T2"] for v in (np.min(arr), np.max(arr))]
+    ax.set_xlim(max(T2[0], min(xs) / 4), min(T2[-1], max(xs) * 4))             # around the populations: most of the grid is empty
+    ax.set_ylim(D[0], D[-1])
+    ax.set_xlabel("T$_2$ (s)")
+    ax.set_ylabel("D (m$^2$/s)")
+    if boot or mcmc:
+        ax.legend(frameon=False, loc="upper left", markerscale=4)
+    if titles:
+        ax.set_title(f"T$_2$–D populations ({m['K']}-population model on the regularised map)")
+    fig.tight_layout()
     return fig
 
 

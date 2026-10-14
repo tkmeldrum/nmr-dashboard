@@ -86,7 +86,9 @@ export function readSettings() {
     if (t.d_steps < 5 || t.d_steps > 200) throw new Error("D points must be between 5 and 200.");
     if (t.alpha <= 0) throw new Error("α must be a finite positive number.");
     if (t.peak_threshold_pct < 0 || t.peak_threshold_pct > 100) throw new Error("The region threshold must be between 0 and 100%.");
-    return { kind: "t2d", exclude_first: excludeFirst(), t2d: t };
+    const k = $("t2d-model-k").value;
+    return { kind: "t2d", exclude_first: excludeFirst(), t2d: t,
+             t2d_model: { enabled: $("t2d-model-enabled").checked, k: k === "auto" ? null : +k, d_window: $("t2d-model-window").value } };
   }
   if (state.result.kind === "t1") {                           // saturation recovery: one or two components, no echo processing, no ILT
     const n = +$("me-n").value, offset = $("me-offset").checked;

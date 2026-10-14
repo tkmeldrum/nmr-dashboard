@@ -32,6 +32,8 @@ function apply(out) {
     let dmin = t.d_min, dmax = t.d_max;
     if (dmin === "auto" || dmax === "auto") [dmin, dmax] = resolvableD(state.result.raw.b_vec);
     set("t2d-dmin", dmin); set("t2d-dmax", dmax); set("t2d-alpha", log10(t.alpha)); set("t2d-peakthr", t.peak_threshold_pct);
+    const tm = s.t2d_model || {};
+    set("t2d-model-enabled", tm.enabled !== false); set("t2d-model-k", tm.k ? String(tm.k) : "auto"); set("t2d-model-window", tm.d_window || "resolvable");
   } else {
     const warn = applyDecay(s);
     if (warn) notes.push(warn);

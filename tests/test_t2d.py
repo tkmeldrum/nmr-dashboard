@@ -172,7 +172,8 @@ def test_params_t2d_section_round_trips():
     p = P.defaults()
     assert p["t2d"]["d_min"] == 1e-12 and p["t2d"]["d_max"] == 1e-8 and p["t2d"]["t2_min"] == 1e-5 and p["t2d"]["t2_max"] == 1.0 and p["t2d"]["alpha"] == 1e9
     s, o = P.to_settings_t2d(p)
-    assert s == {"kind": "t2d", "exclude_first": 0, "t2d": p["t2d"]} and o == {}
+    assert s == {"kind": "t2d", "exclude_first": 0, "t2d": p["t2d"], "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable", "seed": 0}}
+    assert o["mcmc"]["enabled"] is False and o["bootstrap"]["enabled"] is False and o["mcmc"]["target"] == "bulk"
     p["t2d"]["t2_steps"] = 60
     assert P.from_settings(P.to_settings_t2d(p)[0])["t2d"]["t2_steps"] == 60
     import tomllib
@@ -186,7 +187,7 @@ def test_run_dataset_writes_the_t2d_files(tmp_path):
     shutil.copytree(M1115, d)
     p = P.defaults()
     p["t2d"].update(SMALL)
-    p["mcmc"]["enabled"] = True
+    p["mcmc"].update({"enabled": True, "walkers": 16, "steps": 400, "burn": 100})
     row = runner.run_dataset(d, p, command="nmrdash run x")
     assert row["status"] == "ok" and row["kind"] == "t2d", row.get("reason")
     out = Path(row["output_dir"])
@@ -198,7 +199,7 @@ def test_run_dataset_writes_the_t2d_files(tmp_path):
     assert {"constrained_by_data"} <= set(peaks[0])
     spec = list(csv.reader(open(out / "t2d_spectrum.csv")))
     assert len(spec) == 1 + 12 and len(spec[0]) == 1 + 30
-    assert any("not available for T2-D" in w for w in row["warnings"])
+    assert "mcmc_summary.csv" in names and not row["warnings"]                    # MCMC now runs on the few-population model
     md = (out / "summary.md").read_text()
     assert "T₂–D regions" in md and "diffusion delays" in md and "?" not in md.split("## T₂–D regions")[0]
 
