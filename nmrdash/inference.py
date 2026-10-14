@@ -1,7 +1,7 @@
 """How numbers are estimated from the physical models in physics.py: noise, least-squares measures, model selection, intervals, regularisation.
 
 Only NumPy and SciPy's t distribution; nothing here loads data or draws. Each function states what it computes, the assumptions behind it
-and where it comes from. METHODS at the bottom lists them; the About page is generated from that list, with links to these lines.
+and where it comes from. METHODS at the bottom lists them; the physics page (a subpage of About) is generated from that list, with links to these lines.
 """
 import numpy as np
 from scipy import stats
@@ -100,7 +100,7 @@ def tikhonov_weighting(alpha, log10_step_grid, log10_step_data):
     return 1.0 / np.sqrt(log10_step_data ** 2 * log10_step_grid ** 3 * alpha)
 
 
-# ── the list the About page is generated from ────────────────────────────────
+# ── the list the physics page is generated from ────────────────────────────────
 
 METHODS = [
     {"id": "phasing", "name": "Phasing and integrating the echoes", "equation": "θ = −arg(Σ all points);  decay_k = Σ_points Re(e^{iθ} · echo_k)",

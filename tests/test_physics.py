@@ -194,8 +194,11 @@ def test_the_about_page_links_every_listed_function_to_its_lines(tmp_path):
     from build_site import build
     from nmrdash import inference
     out = build(tmp_path / "site", "v1", vendor=False)
-    about = (out / "about.html").read_text()
-    assert "{{" not in about
+    about = (out / "physics.html").read_text()
+    assert "{{" not in about and "{{" not in (out / "about.html").read_text()
+    index = (out / "about.html").read_text()
+    for m in ph.MODELS + inference.METHODS:
+        assert f'href="physics.html#{m["id"]}"' in index and f'id="{m["id"]}"' in about              # About has a short index; each model has a card with that anchor
     for m in ph.MODELS + inference.METHODS:
         assert m["name"] in about.replace("&amp;", "&") or m["name"].replace("&", "&amp;") in about
         for f in m["functions"]:
@@ -225,14 +228,14 @@ def test_the_about_page_shows_only_verified_references(tmp_path, monkeypatch):
     import build_site
     refs = json.loads((ROOT_DIR / "docs" / "references.json").read_text())["references"]
     out = build_site.build(tmp_path / "a", "v1", vendor=False)
-    about = (out / "about.html").read_text()
+    about = (out / "about.html").read_text() + (out / "physics.html").read_text()
     for r in refs:
         if not r.get("verified"):
             assert r["reference"].split(";")[0] not in about, r["id"]                                  # nothing unchecked on the page
     assert "Where it comes from" not in about                                                          # none are verified yet
     monkeypatch.setattr(build_site, "verified_references", lambda: {"exp_decay": "A checked reference (2020)"})
     out2 = build_site.build(tmp_path / "b", "v1", vendor=False)
-    about2 = (out2 / "about.html").read_text()
+    about2 = (out2 / "physics.html").read_text()
     assert about2.count("Where it comes from") == 1 and "A checked reference (2020)" in about2
     docs = [(ROOT_DIR / "nmrdash" / f).read_text() for f in ("physics.py", "inference.py")]
     assert not any("Hahn (1950)" in d or "Carr and Purcell (1954)" in d for d in docs)                  # the code carries a pointer, not the citations
