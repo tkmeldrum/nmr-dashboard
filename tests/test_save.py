@@ -64,7 +64,7 @@ def fig(style, builder="decay"):
     run_cpmg()
     from nmrdash.pipeline import _STATE
     res = _STATE["last_result"]
-    return figures.styled(figures.decay_figure if builder == "decay" else figures.ilt_figure, style, res, name="decay_fit" if builder == "decay" else "ilt")
+    return figures.styled(figures.decay_figure if builder == "decay" else figures.ilt_figure, style, res, name="decay_fit" if builder == "decay" else "ilt_spectrum")
 
 
 def test_style_title_modes():
@@ -132,3 +132,25 @@ def test_saving_does_not_need_modules_the_browser_lacks():
     import sys
     code = "import sys, nmrdash.pipeline as p; sys.modules.pop('_multiprocessing', None); assert 'nmrdash.runner' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_per_figure_limits_scales_and_titles():
+    over = {"decay_fit": {"title": "Only this one", "xlim": [0.001, 0.01], "ylim": ["", 3e4], "yscale": "log"}}
+    f = fig({"title": "none", "figures": over})
+    ax = f.axes[0]
+    assert ax.get_title() == "Only this one" and ax.get_xlim() == pytest.approx((0.001, 0.01)) and ax.get_ylim()[1] == pytest.approx(3e4)
+    assert ax.get_yscale() == "log"
+    g = fig({"figures": {"decay_fit": {"title": "x"}}}, "ilt")                # an override for another figure is ignored here
+    assert g.axes[0].get_title().startswith("T")
+
+
+def test_ilt_axis_can_switch_to_linear_and_back_to_log():
+    lin = fig({"figures": {"ilt_spectrum": {"xscale": "linear"}}}, "ilt")
+    assert lin.axes[0].get_xscale() == "linear"
+    assert fig({}, "ilt").axes[0].get_xscale() == "log"
+
+
+def test_bad_overrides_are_dropped():
+    s = figures.style_from({"figures": {"nope": {"title": "x"}, "decay_fit": {"xlim": ["a", 1], "xscale": "sideways", "title": None}, "ilt_spectrum": "junk"}})
+    assert list(s["figures"]) == ["decay_fit"]
+    assert s["figures"]["decay_fit"] == {"title": "", "xlim": [None, None], "ylim": [None, None], "xscale": None, "yscale": None}

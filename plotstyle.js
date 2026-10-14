@@ -7,17 +7,22 @@ const KEY = "nmrdash.plotstyle";
 const PLOTLY_CMAP = { viridis: "Viridis", plasma: "Plasma", magma: "Magma", cividis: "Cividis", inferno: "Inferno", turbo: "Turbo", gray: "Greys" };
 const FIELDS = { font_size: "ps-font", line_scale: "ps-line", marker_scale: "ps-marker", cmap: "ps-cmap", width: "ps-width", height: "ps-height", title: "ps-title", title_text: "ps-title-text", time_unit: "ps-time" };
 
-let style = { ...DEFAULTS };
+let style = { ...DEFAULTS, figures: {} };
+const FIG_FIELDS = { title: "ps-fig-title", xmin: "ps-fig-xmin", xmax: "ps-fig-xmax", ymin: "ps-fig-ymin", ymax: "ps-fig-ymax", xscale: "ps-fig-xscale", yscale: "ps-fig-yscale" };
 export const plotStyle = () => ({ ...style });
 
 // What the saved figures should use (blank size boxes mean "each figure's own size").
 export function figureStyle() {
   const num = (v) => (v === "" || v === null || !Number.isFinite(+v) ? null : +v);
-  return { ...style, width: num(style.width), height: num(style.height), font_size: +style.font_size || 10, line_scale: +style.line_scale || 1, marker_scale: +style.marker_scale || 1 };
+  const figures = {};
+  for (const [name, o] of Object.entries(style.figures || {})) {
+    figures[name] = { title: o.title || "", xlim: [num(o.xmin), num(o.xmax)], ylim: [num(o.ymin), num(o.ymax)], xscale: o.xscale || null, yscale: o.yscale || null };
+  }
+  return { ...style, figures, width: num(style.width), height: num(style.height), font_size: +style.font_size || 10, line_scale: +style.line_scale || 1, marker_scale: +style.marker_scale || 1 };
 }
 
 function read() {
-  const s = { ...DEFAULTS };
+  const s = { ...DEFAULTS, figures: style.figures || {} };
   for (const [k, id] of Object.entries(FIELDS)) s[k] = $(id).value;
   s.legend = $("ps-legend").checked;
   return s;
@@ -64,18 +69,34 @@ function styleLayout(layout) {
   return L;
 }
 
+function showFigure() {
+  const o = (style.figures || {})[$("ps-fig").value] || {};
+  for (const [k, id] of Object.entries(FIG_FIELDS)) $(id).value = o[k] ?? "";
+}
+
 // Take plot settings from outside (a params file): the keys of figures.style_from, with figures[name] = {title, xlim, ylim, xscale, yscale}.
 let applyOutside = () => {};
 export const setStyle = (s) => applyOutside(s);
 
 export function initPlotStyle(redraw) {
-  try { style = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch (_) { style = { ...DEFAULTS }; }
+  try { style = { ...DEFAULTS, figures: {}, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch (_) { style = { ...DEFAULTS, figures: {} }; }
   write(style);
+  showFigure();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(style)); } catch (_) { /* private window: fine */ } };
+  $("ps-fig").addEventListener("change", showFigure);
+  for (const id of Object.values(FIG_FIELDS)) {            // saved figures only: nothing on the page to redraw
+    $(id).addEventListener("change", () => {
+      const o = {};
+      for (const [k, i] of Object.entries(FIG_FIELDS)) o[k] = $(i).value;
+      style.figures = { ...(style.figures || {}), [$("ps-fig").value]: o };
+      save();
+    });
+  }
   patchPlotly();
   const changed = () => {
     style = read();
     $("ps-title-text").disabled = style.title !== "custom";
-    try { localStorage.setItem(KEY, JSON.stringify(style)); } catch (_) { /* private window: fine */ }
+    save();
     redraw();
   };
   for (const id of [...Object.values(FIELDS), "ps-legend"]) $(id).addEventListener("change", changed);
@@ -89,5 +110,5 @@ export function initPlotStyle(redraw) {
     showFigure();
     changed();
   };
-  $("ps-reset").addEventListener("click", () => { write(DEFAULTS); changed(); });
+  $("ps-reset").addEventListener("click", () => { style.figures = {}; write(DEFAULTS); showFigure(); changed(); });
 }
