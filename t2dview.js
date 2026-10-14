@@ -28,7 +28,17 @@ export function renderT2d(r) {
     `RMSE / signal range ${t.rmse_over_amp === null ? "—" : pct(t.rmse_over_amp, 2)} · noise σ ${t.noise_sigma ? fmt(t.noise_sigma) : "—"} (imaginary channel) · ` +
     `χ² per point ${t.chi2_per_point === null ? "—" : fmt(t.chi2_per_point)}` + (skip ? ` · first ${skip} echoes excluded` : "");
 
+  // how the b-values were obtained, and how they compare with the spectrometer's own files
+  const bi = t.b_info, bc = t.b_check;
+  const shape = bc.compared.find((c) => c.kind === "shape" && c.value !== null);
+  $("t2d-b-note").textContent = `b-values calculated as (γG)² τ² (Δ + 2τ/3) with G = ${bi.gradient_t_per_m} T/m, Δ = ${fmt(bi.delta_ms)} ms, τ = ${fmt(bi.tau_min_ms)}–${fmt(bi.tau_max_ms)} ms (${bi.n_tau}, log-spaced).` +
+    (shape ? ` The spectrometer's own b-values (${shape.file}) have the same τ and Δ dependence (deviation ${fmtSci(shape.value)}) and correspond to G = ${shape.implied_gradient_t_per_m.toFixed(2)} T/m.` : " There is no spectrometer file to compare with.");
+
   const msgs = [];
+  if (!bc.agrees) {
+    msgs.push("The calculated delays, echo times or b-values do not match the spectrometer's files: " + bc.compared.filter((c) => !c.agrees).map((c) => `${c.what} vs ${c.file}` + (c.value === null ? " (different lengths)" : ` (${fmtSci(c.value)})`)).join("; ") +
+      ". The calculated values were used; check DELTA, tauMin, tauMax, nrPntsTau and echoTime in acqu.par.");
+  }
   if (t.fraction_in_sensitive_window !== null && t.fraction_in_sensitive_window < 0.9) {
     msgs.push(`Only ${pct(t.fraction_in_sensitive_window, 0)} of the spectrum lies where the data can constrain it. Your b-values (${fmtSci(bmin)} – ${fmtSci(bmax)} s/m²) can tell apart diffusion ` +
       `coefficients from about ${fmtSci(lo)} to ${fmtSci(hi)} m²/s; signal the regularised solution places outside that range (the hatched band on the map) is extrapolation, not measurement. ` +

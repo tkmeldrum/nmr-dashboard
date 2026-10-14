@@ -22,7 +22,8 @@
     <li><strong>No warranty, no liability.</strong> This software is provided “as is”, without warranty of any kind, and the authors are not liable for any damages arising from its use, as set out in sections 7 and 8 of the Apache License below.</li>
     <li><strong>Check results independently.</strong> Fits, inversions and uncertainty estimates depend on the model, the settings and the noise. They are estimates, not measurements, and the tool can produce a confident-looking answer from data that do not support it. Read the warnings, look at the residuals, and compare with another method before relying on a number.</li>
     <li><strong>Known limits.</strong> The T₂–D inversion is regularised and ill-conditioned: signal outside the range of diffusion coefficients your b-values can resolve is extrapolation, not measurement (the page shades that range). Components that the data cannot determine are flagged but can still appear in a fit.</li>
-    <li><strong>Not for clinical, safety-critical or regulatory use.</strong> It is research software under development.</li>
+    <li><strong>Diffusion weighting.</strong> For T₂–D data the b-values are calculated here from the gradient you set (default 23.67 T/m), the storage time Δ and the delays τ in acqu.par, as b = (γG)² τ² (Δ + 2τ/3), not read from the spectrometer; its own axis files are only used as a cross-check. A wrong gradient rescales every diffusion coefficient by the square of the error.</li>
+        <li><strong>Not for clinical, safety-critical or regulatory use.</strong> It is research software under development.</li>
   </ul>
 
   <h2>Licence</h2>
