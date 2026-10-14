@@ -278,7 +278,8 @@ def _process_t2d(settings):
         d_range = res["d_sensitive"] if tm.get("d_window", "resolvable") == "resolvable" else (cfg["d_min"], cfg["d_max"])
         t, b, Y = L["echo_s"][skip:], L["b_vec"], L["data"][skip:]
         res["model"] = t2d_model.fit(t, b, Y, res["peaks"], (cfg["t2_min"], cfg["t2_max"]), d_range, sigma, k=k, max_k=tm.get("max_k"), seed=int(tm.get("seed", 0)))
-        keep = {"t": t, "b": b, "Y": Y, "sigma": sigma, "t2_range": (cfg["t2_min"], cfg["t2_max"]), "d_range": d_range, "regions": res["peaks"], "fit": res["model"]}
+        keep = {"t": t, "b": b, "Y": Y, "sigma": sigma, "t2_range": (cfg["t2_min"], cfg["t2_max"]), "d_range": d_range, "regions": res["peaks"], "fit": res["model"],
+                "noise": None if L.get("noise") is None else np.asarray(L["noise"])[skip:]}
     out = {"settings": settings, "version": __version__, "mode": "t2d", "ft": None, "spatial": None, "multiexp": None, "ilt": None, "t2d": res,
            "decay": {"t": L["echo_s"], "y": None, "skip": skip, "phase_deg": None, "noise_sigma": sigma}}
     _STATE["processed"] = {"settings": settings, "t2d_model": keep}
@@ -406,8 +407,27 @@ def _me_for(tg, cfg_settings):
     return me, fit
 
 
+def _t2d_model_data():
+    """What MCMC and the bootstrap of a T2-D dataset sample: the few-population model fitted by the last run (the regularised map has no intervals)."""
+    pr = _STATE.get("processed") or {}
+    keep = pr.get("t2d_model")
+    if not keep:
+        raise ValueError("For T2-D data, MCMC and the bootstrap sample the few-population model: switch it on and run the processing first "
+                         "(the regularised map itself has no intervals).")
+    return keep
+
+
 def mcmc_start(cfg):
     """Set up (and time) an MCMC run on the chosen decay. cfg: target, z_um, nwalkers, steps, burn, ci_level, sample_sigma, seed."""
+    if "t2d" in _STATE:
+        from . import t2d_uncertainty
+        k = _t2d_model_data()
+        run = t2d_uncertainty.Mcmc2D(k["t"], k["b"], k["Y"], k["fit"], k["t2_range"], k["d_range"], sigma=None if cfg.get("sample_sigma") else k["sigma"],
+                                     ci_level=float(cfg.get("ci_level", 0.95)), nwalkers=int(cfg.get("nwalkers", 32)), steps=int(cfg.get("steps", 6000)),
+                                     burn=int(cfg.get("burn", 2000)), seed=int(cfg.get("seed", 0)))
+        _STATE["mcmc"], _STATE["mcmc_target"] = run, "bulk"
+        return _jsonable({"ndim": run.ndim, "nwalkers": run.nwalkers, "steps": run.steps, "est_seconds": run.est_seconds,
+                          "target": f"{k['fit']['K']}-population T2-D model", "sigma_sampled": run.sample_sigma, "note": None})
     tg = _target(cfg)
     me, fit = _me_for(tg, _STATE["processed"]["settings"])
     sigma = None if (cfg.get("sample_sigma") or tg["sigma"] is None) else tg["sigma"]
@@ -431,6 +451,13 @@ def mcmc_finish(theme=None, max_samples=0):
 
 def boot_start(cfg):
     """Set up (and time) a bootstrap. cfg: target, z_um, replicates, method, do_multiexp, do_ilt, ci_level, seed."""
+    if "t2d" in _STATE:
+        from . import t2d_uncertainty
+        k = _t2d_model_data()
+        run = t2d_uncertainty.Bootstrap2D(k["t"], k["b"], k["Y"], k["fit"], k["t2_range"], k["d_range"], noise=k["noise"], sigma=k["sigma"], method=cfg.get("method"),
+                                          replicates=int(cfg.get("replicates", 200)), ci_level=float(cfg.get("ci_level", 0.95)), seed=int(cfg.get("seed", 0)))
+        _STATE["boot"] = run
+        return _jsonable({"replicates": run.B, "done": run.done, "est_seconds": run.est_seconds, "method": run.method, "target": f"{k['fit']['K']}-population T2-D model"})
     tg = _target(cfg)
     settings = _STATE["processed"]["settings"]
     me = fit = ilt = None

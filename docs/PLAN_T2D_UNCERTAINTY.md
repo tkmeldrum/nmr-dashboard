@@ -1,6 +1,6 @@
 # Plan: uncertainty for T₂–D (a few-population model, fitted and sampled)
 
-**Status:** plan, for review. Nothing here is built yet.
+**Status:** decisions made (no offset; K automatic with override; D restricted to the resolvable window; free diffusion). Step (a), the model and fit, is built and merged. Step (b), MCMC and bootstrap (`nmrdash/t2d_uncertainty.py`), is built. Step (c), the page, figures, saving, params file and batch, is next.
 
 ## Why a second model
 
@@ -30,9 +30,15 @@ Free diffusion in each population, one T₂ each. Noise σ comes from the imagin
 
 ## Diffusion range
 
-By default D is restricted to the resolvable window (1/b_max … 5/b_min, as on the map). A population that wants to sit outside it is reported as
-**a bound only** ("D above ~8×10⁻¹⁰ m²/s"), not as a value with an interval, and flagged on the map and in the table. The user can widen the window.
-Posteriors that pile up on a limit are flagged, as for T₂ in 1D.
+By default D is restricted to the resolvable window (1/b_max … 5/b_min, as on the map). The two ends behave differently:
+
+- **Slower than the window** (D below ~1/b_max): the signal barely decays over the b range, so the fit stops at the lower limit and reports
+  **a bound only** ("D below ~3×10⁻¹³ m²/s"), not a value with an interval, and flags it in the table. Posteriors that pile up on a limit are flagged too.
+- **Faster than the window** (D above ~5/b_min): the signal is gone before the first b-value, so the data contain **no trace** of the population.
+  It cannot be reported as a bound or anything else; the model simply never asks for it (BIC prefers fewer populations), and the map's weight
+  there is extrapolation. The page says so rather than showing a population the data cannot support.
+
+The user can widen the window.
 
 ## Uncertainty
 
