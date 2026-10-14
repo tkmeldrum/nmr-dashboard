@@ -75,6 +75,8 @@ def test_build_ships_the_about_page_and_licence_files(tmp_path):
     assert "Apache License" in (out / "LICENSE.txt").read_text()[:400] and "Copyright" in (out / "NOTICE.txt").read_text()
     assert "docs/REFERENCES.md" in (out / "THIRD_PARTY_NOTICES.txt").read_text() and "Venkataramanan" not in (out / "THIRD_PARTY_NOTICES.txt").read_text()
     assert 'href="about.html"' in (out / "index.html").read_text()
+    phys = (out / "physics.html").read_text()
+    assert 'href="physics.html"' in about and "{{" not in phys and "style.css?v=abc123" in phys and 'href="about.html"' in phys and "<script" not in phys
     assert "<script" not in about                       # a static page: no code, nothing to load
 
 
@@ -91,7 +93,7 @@ HOSTS = ("cdn.jsdelivr.net", "pypi.org", "pythonhosted.org", "unpkg.com", "cdnjs
 
 def test_the_page_loads_nothing_from_other_sites_and_the_policy_forbids_it():
     import re
-    files = [ROOT / "index.html", ROOT / "about.html", ROOT / "worker.js"] + sorted(ROOT.glob("*.js"))
+    files = [ROOT / "index.html", ROOT / "about.html", ROOT / "physics.html", ROOT / "worker.js"] + sorted(ROOT.glob("*.js"))
     for f in files:
         text = f.read_text()
         assert not [h for h in HOSTS if h in text], f"{f.name} mentions an outside host"
