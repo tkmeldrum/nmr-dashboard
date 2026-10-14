@@ -13,7 +13,7 @@ import time
 
 import numpy as np
 
-from . import figures, t2d_model as M
+from . import figures, physics, t2d_model as M
 from .uncertainty import BOOT_METHODS, MAX_CORNER_SAMPLES, MAX_TRACE_POINTS, MAX_TRACE_WALKERS, TRIAL_STEPS, _interval, _summ
 
 MAX_SCATTER = 3000
@@ -116,8 +116,8 @@ class Mcmc2D:
         else:
             sigma = self.sigma
         with np.errstate(over="ignore", invalid="ignore"):
-            E = np.exp(-self.t[None, None, :] / np.exp(lnT)[:, :, None])               # walkers x K x echoes
-            G = np.exp(-self.bs[None, None, :] * np.exp(lnD)[:, :, None])              # walkers x K x b-values
+            E = physics.exp_decay(self.t[None, None, :], np.exp(lnT)[:, :, None])               # walkers x K x echoes
+            G = physics.diffusion_attenuation(self.bs[None, None, :], np.exp(lnD)[:, :, None])  # walkers x K x b-values
             c = ((E @ self.Y) * G).sum(axis=2)                                          # <e_k, Y g_k>
             quad = np.einsum("wk,wl,wkl->w", A, A, np.einsum("wke,wle->wkl", E, E) * np.einsum("wkb,wlb->wkl", G, G))
             rss = self.yy - 2.0 * (A * c).sum(axis=1) + quad

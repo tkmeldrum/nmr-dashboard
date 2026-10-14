@@ -9,7 +9,7 @@ Units: t in s, b as in the data (the solver's 1e-9 s/m^2 units), D in m^2/s (b *
 import numpy as np
 from scipy import optimize, stats
 
-from . import ilt2d
+from . import ilt2d, inference, physics
 
 D_SCALE = ilt2d.D_SCALE
 MAX_K = 4
@@ -17,13 +17,13 @@ EDGE_TOL = 1e-3            # in ln units: closer than this to a limit means "at 
 
 
 def basis(t, b, T, D):
-    """Echo-time and b-value factors of each population: E (n_t x K), G (n_b x K)."""
-    return np.exp(-np.asarray(t)[:, None] / np.asarray(T)[None, :]), np.exp(-(np.asarray(b)[:, None] * D_SCALE) * np.asarray(D)[None, :])
+    """Echo-time and b-value factors of each population: E (n_t x K), G (n_b x K) (physics.t2d_factors; b in the solver's units, D in m^2/s)."""
+    return physics.t2d_factors(t, np.asarray(b, float) * D_SCALE, T, D)
 
 
 def predict(t, b, A, T, D):
-    E, G = basis(t, b, T, D)
-    return (E * np.asarray(A)[None, :]) @ G.T
+    """The model signal, an (n_t x n_b) matrix (physics.t2d_signal)."""
+    return physics.t2d_signal(t, np.asarray(b, float) * D_SCALE, A, T, D)
 
 
 def _solve_amplitudes(Y, E, G):
@@ -124,7 +124,7 @@ def _summarise(t, b, Y, A, lnT, lnD, lnT_lo, lnT_hi, lnD_lim, sigma):
         except np.linalg.LinAlgError:
             pass
     dof = max(N - p, 1)
-    tcrit = float(stats.t.ppf(0.975, dof))
+    tcrit = inference.student_t_critical(0.95, dof)
     se = np.sqrt(np.clip(np.diag(cov), 0, None))
     se[~np.isfinite(np.diag(cov))] = np.nan
     S = A.sum()
@@ -148,7 +148,7 @@ def _summarise(t, b, Y, A, lnT, lnD, lnT_lo, lnT_hi, lnD_lim, sigma):
         })
     return {"K": K, "populations": pops, "rss": rss, "n_points": N, "n_params": p, "sigma": sigma,
             "chi2_per_point": float(rss / (sigma ** 2 * N)) if sigma else None,
-            "aic": N * np.log(rss / N) + 2 * p, "bic": N * np.log(rss / N) + p * np.log(N), "t_crit": tcrit}
+            "aic": inference.information_criteria(rss, N, p)[0], "bic": inference.information_criteria(rss, N, p)[1], "t_crit": tcrit}
 
 
 def fit(t, b, Y, regions, t2_range, d_range, sigma=None, k=None, max_k=None, seed=0):

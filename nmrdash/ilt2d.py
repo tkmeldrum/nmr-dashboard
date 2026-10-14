@@ -9,6 +9,7 @@ import numpy as np
 from scipy import ndimage
 from scipy.optimize import lsq_linear
 
+from . import inference, physics
 from .ilt import build_kernel, build_tau_grid, second_derivative_matrix
 
 D_SCALE = 1e9                      # processed D = D[m^2/s] * 1e9; converted back for every result
@@ -18,8 +19,8 @@ PEAK_MIN_FRACTION = 0.10           # 2D regions are those above this fraction of
 
 
 def build_kernel_diffusion(b_vec, D_grid):
-    """Eb[i, j] = exp(-b_i * D_j): linear in b, unlike the T2 kernel."""
-    return np.exp(-np.outer(b_vec, D_grid))
+    """Eb[i, j] = exp(-b_i * D_j) (physics.diffusion_kernel): linear in b, unlike the T2 kernel."""
+    return physics.diffusion_kernel(b_vec, D_grid)
 
 
 def run_2dilt(data, echo_vec, b_vec, params, alpha=None):
@@ -48,7 +49,7 @@ def run_2dilt(data, echo_vec, b_vec, params, alpha=None):
 
     pas = (np.log10(T2_max) - np.log10(T2_min)) / (n_T2 - 1)
     pasdata = (np.log10(echo_vec[-1]) - np.log10(echo_vec[0])) / (len(echo_vec) - 1)
-    weighting = 1.0 / np.sqrt(pasdata**2 * pas**3 * alpha)
+    weighting = inference.tikhonov_weighting(alpha, pas, pasdata)
 
     Ea = build_kernel(echo_vec, T2_grid)            # (n_echo, n_T2)
     Eb = build_kernel_diffusion(b_vec, D_grid)       # (n_bval, n_D)
@@ -108,14 +109,8 @@ def trial_seconds(echo_vec, b_vec):
 
 
 def sensitive_d_window(b_vec):
-    """The diffusion coefficients (m^2/s) the b-values can tell apart, as a rule of thumb: [1/b_max, 5/b_min].
-
-    b_vec is in the solver's units (1e-9 s/m^2), so b = b_vec * 1e9 s/m^2. A species with D far above 5/b_min has decayed to
-    nothing before the first b-value, and one far below 1/b_max has barely decayed by the last, so the inversion cannot place
-    either: whatever the regularised solution puts there is extrapolation, not measured signal.
-    """
-    b = np.asarray(b_vec, float) * D_SCALE
-    return 1.0 / b.max(), 5.0 / max(b.min(), 1e-300)
+    """The diffusion coefficients (m^2/s) the b-values can tell apart, [1/b_max, 5/b_min]: see physics.resolvable_diffusion_window (b_vec in 1e9 s/m^2)."""
+    return physics.resolvable_diffusion_window(b_vec)
 
 
 def run(data, echo_vec, b_vec, t2_min, t2_max, t2_steps, d_min, d_max, d_steps, alpha, sigma=None, peak_min_fraction=PEAK_MIN_FRACTION):
