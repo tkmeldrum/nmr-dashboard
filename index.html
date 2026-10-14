@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
 <title>NMR Dashboard</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -509,7 +509,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
     <p><button type="button" id="fb-mail">Email it</button></p>
   </details>
 </footer>
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="vendor/plotly/plotly.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -55,12 +55,14 @@ def _sub(text, old, new):
 
 
 # What the About page says about where the page's own code and libraries come from (kept next to the Content-Security-Policy it describes)
-PRIVACY_TEXT = ("When it starts, the page downloads the Python runtime and the plotting library from public servers (jsDelivr) and, only if you use MCMC, "
-                "one small package from PyPI. A content-security policy built into the page stops it from connecting anywhere else, so it cannot send your data out even by mistake.")
+PRIVACY_TEXT = ("Everything the page needs, including the Python runtime and the plotting library, is served from this site, and a content-security policy built into "
+                "the page forbids it from connecting to anywhere else, so it cannot send your data out even by mistake.")
 
 
-def build(out, version):
+def build(out, version, vendor=True):
     out = Path(out)
+    if vendor and not (ROOT / "vendor" / "pyodide" / "pyodide.js").is_file():
+        raise SystemExit("vendor/ is missing: run  python tools/fetch_vendor.py  first")
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
 
@@ -86,6 +88,9 @@ def build(out, version):
         if js.name == "app.js":
             text = _sub(text, 'new Worker("worker.js")', f'new Worker("worker.js?v={version}")')
         (out / js.name).write_text(text)
+
+    if vendor:
+        shutil.copytree(ROOT / "vendor", out / "vendor")      # Pyodide, its packages, Plotly and emcee (tools/fetch_vendor.py)
 
     pkg = out / "nmrdash"
     pkg.mkdir()

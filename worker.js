@@ -1,5 +1,7 @@
 // Runs Pyodide off the main thread so the UI never freezes during processing.
-const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+// Pyodide 0.27.7 and its packages are served from this site (see tools/fetch_vendor.py), not from a public CDN.
+const PYODIDE = new URL("vendor/pyodide/", self.location.href).href;
+const EMCEE_WHEEL = new URL("vendor/emcee/emcee-3.1.6-py2.py3-none-any.whl", self.location.href).href;
 importScripts(PYODIDE + "pyodide.js");
 
 let pyodide;
@@ -63,12 +65,12 @@ const RPC_FUNCTIONS = new Set(["mcmc_start", "mcmc_step", "mcmc_finish", "boot_s
 
 async function installEmcee() {
   try { pyodide.runPython("import emcee"); return { already: true }; } catch (_) { /* not installed yet */ }
-  status("Fetching the emcee package from PyPI (once, about 100 KB)…");
+  status("Loading the emcee package (about 100 KB)…");
   try {
     await pyodide.loadPackage("micropip");
-    await pyodide.pyimport("micropip").install("emcee==3.1.6");
+    await pyodide.pyimport("micropip").install(EMCEE_WHEEL);
   } catch (err) {
-    throw new Error("Could not download the emcee package from PyPI (are you offline?): " + (err.message || err));
+    throw new Error("Could not load the emcee package: " + (err.message || err));
   }
   return { installed: true };
 }

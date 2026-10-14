@@ -116,6 +116,14 @@ docs/PLAN.md    the original build plan
 `nmrdash/` is the canonical home of this code. It started as copies of `MeldrumLabCode/pythonic/` (`kea_io.py`,
 `run_1dilt.py`); the pythonic scripts have **not** yet been switched to import from `nmrdash`.
 
+## Self-hosted libraries
+
+The site serves everything it needs itself: Pyodide (Python in the browser) with NumPy, SciPy and Matplotlib, Plotly.js and the emcee
+package, about 50 MB in all. They are downloaded at build time by `python tools/fetch_vendor.py` into `vendor/` (not committed) and checked
+against the checksums in `tools/vendor.lock.json`; the page's content-security policy allows connections to this site only. To upgrade a
+library, change its version in `tools/fetch_vendor.py`, run it with `--update`, review the new checksums, commit `vendor.lock.json`, and
+update the version in `about.html` (a test checks they agree). Run `python tools/fetch_vendor.py` once before using `tools/dev_server.py`.
+
 ## Develop
 
 ```bash
