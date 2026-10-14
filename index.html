@@ -304,6 +304,16 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
           <label><input type="checkbox" id="ps-legend" checked> Legends</label>
         </div>
         <p class="note">The decay figure is saved on a log y-axis when “log y-axis” is ticked on the plot. Tables always stay in seconds. The MCMC corner plot is saved as drawn.</p>
+        <h4>One figure at a time (saved figures only)</h4>
+        <div class="ps-grid">
+          <label>Figure <select id="ps-fig"><option value="decay_fit">Decay and fits</option><option value="ilt_spectrum">T₂ spectrum (ILT)</option><option value="spatial">Spatial (FT)</option><option value="bootstrap_ilt">Bootstrap ILT band</option><option value="bootstrap_distributions">Bootstrap distributions</option><option value="t2d_spectrum">T₂–D spectrum</option><option value="t2d_fit">T₂–D data, fit, residual</option></select></label>
+          <label>Title <input type="text" id="ps-fig-title" placeholder="default"></label>
+          <label class="ps-limits">x from <input type="number" id="ps-fig-xmin" step="any" placeholder="auto"> to <input type="number" id="ps-fig-xmax" step="any" placeholder="auto"></label>
+          <label class="ps-limits">y from <input type="number" id="ps-fig-ymin" step="any" placeholder="auto"> to <input type="number" id="ps-fig-ymax" step="any" placeholder="auto"></label>
+          <label>x axis <select id="ps-fig-xscale"><option value="">as drawn</option><option value="linear">linear</option><option value="log">log</option></select></label>
+          <label>y axis <select id="ps-fig-yscale"><option value="">as drawn</option><option value="linear">linear</option><option value="log">log</option></select></label>
+        </div>
+        <p class="note">Limits are in the plotted units (seconds for times) and apply to the main plot of the decay, ILT, bootstrap-band and T₂–D map figures; a title applies to any figure and wins over the global title setting. Empty boxes keep the automatic choice.</p>
         <p><button type="button" id="ps-reset" class="secondary">Reset plot settings</button></p>
       </details>
     </div>
