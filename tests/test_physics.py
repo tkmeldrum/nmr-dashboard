@@ -183,7 +183,7 @@ def test_every_function_in_the_physics_and_inference_modules_is_listed_on_the_ab
         defined = {n for n, f in inspect.getmembers(module, inspect.isfunction) if f.__module__ == module.__name__ and not n.startswith("_")}
         assert defined == listed, (module.__name__, defined ^ listed)
         for m in registry:
-            assert {"id", "name", "equation", "describes", "source", "functions"} <= set(m) and m["functions"] and all(f.__doc__ for f in m["functions"])
+            assert {"id", "name", "equation", "describes", "functions"} <= set(m) and m["functions"] and all(f.__doc__ for f in m["functions"])
         assert len({m["id"] for m in registry}) == len(registry)
 
 
@@ -201,3 +201,38 @@ def test_the_about_page_links_every_listed_function_to_its_lines(tmp_path):
         for f in m["functions"]:
             assert re.search(rf'blob/[^"]+/nmrdash/{f.__module__.split(".")[-1]}\.py#L\d+-L\d+"><code>{f.__module__.split(".")[-1]}\.py: {f.__name__}</code>', about), f.__name__
     assert "Diffusion during the CPMG echo train" in about                                  # the footnote on what is not modelled
+
+
+# ── references: kept in a document to be checked, shown on the page only once verified ──
+
+def test_the_references_document_matches_its_data_and_covers_every_listed_model():
+    import json
+    import sys
+    sys.path.insert(0, str(ROOT_DIR / "tools"))
+    import make_references
+    from nmrdash import inference
+    assert (ROOT_DIR / "docs" / "REFERENCES.md").read_text() == make_references.render()           # regenerate with tools/make_references.py after editing the JSON
+    refs = {r["id"]: r for r in json.loads((ROOT_DIR / "docs" / "references.json").read_text())["references"]}
+    for m in ph.MODELS + inference.METHODS:
+        assert m["id"] in refs and refs[m["id"]]["reference"], m["id"]
+    assert "source" not in {k for m in ph.MODELS + inference.METHODS for k in m}
+
+
+def test_the_about_page_shows_only_verified_references(tmp_path, monkeypatch):
+    import json
+    import sys
+    sys.path.insert(0, str(ROOT_DIR / "tools"))
+    import build_site
+    refs = json.loads((ROOT_DIR / "docs" / "references.json").read_text())["references"]
+    out = build_site.build(tmp_path / "a", "v1", vendor=False)
+    about = (out / "about.html").read_text()
+    for r in refs:
+        if not r.get("verified"):
+            assert r["reference"].split(";")[0] not in about, r["id"]                                  # nothing unchecked on the page
+    assert "Where it comes from" not in about                                                          # none are verified yet
+    monkeypatch.setattr(build_site, "verified_references", lambda: {"exp_decay": "A checked reference (2020)"})
+    out2 = build_site.build(tmp_path / "b", "v1", vendor=False)
+    about2 = (out2 / "about.html").read_text()
+    assert about2.count("Where it comes from") == 1 and "A checked reference (2020)" in about2
+    docs = [(ROOT_DIR / "nmrdash" / f).read_text() for f in ("physics.py", "inference.py")]
+    assert not any("Hahn (1950)" in d or "Carr and Purcell (1954)" in d for d in docs)                  # the code carries a pointer, not the citations

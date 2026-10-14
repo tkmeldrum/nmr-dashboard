@@ -27,7 +27,7 @@ def noise_sigma_mad(values):
 
     The factor 1.4826 makes the MAD equal the standard deviation for Gaussian noise; unlike the plain SD it is insensitive to a few outliers.
     Returns None if it cannot be measured (fewer than 8 values, or zero spread). Assumes the noise is Gaussian, with the same level in both channels.
-    Source: Hampel (1974); Rousseeuw and Croux, J. Am. Stat. Assoc. 88, 1273 (1993).
+    References: docs/REFERENCES.md (noise).
     """
     v = np.asarray(values, float)
     if v.size < 8:
@@ -59,7 +59,7 @@ def information_criteria(rss, n_points, n_params):
         AIC = N ln(RSS/N) + 2 k          BIC = N ln(RSS/N) + k ln N
 
     Only differences between models fitted to the same data mean anything (lower is better); BIC penalises parameters more as N grows.
-    Source: Akaike, IEEE Trans. Autom. Control 19, 716 (1974); Schwarz, Ann. Statist. 6, 461 (1978).
+    References: docs/REFERENCES.md (criteria).
     """
     base = n_points * np.log(rss / n_points)
     return base + 2 * n_params, base + n_params * np.log(n_points)
@@ -71,7 +71,7 @@ def student_t_critical(level, dof):
     """The two-sided Student-t multiplier for a confidence level: an interval is estimate +/- t * standard error (e.g. 2.0 for 95 % at ~60 dof).
 
     Assumes the parameter estimates are approximately Gaussian with the standard errors from the least-squares covariance (linearised
-    around the solution). Source: standard; see Bates and Watts, Nonlinear Regression Analysis and Its Applications (1988).
+    around the solution). References: docs/REFERENCES.md (interval).
     """
     return float(stats.t.ppf(0.5 + level / 2, dof))
 
@@ -95,7 +95,7 @@ def tikhonov_weighting(alpha, log10_step_grid, log10_step_data):
 
     pas is the spacing of the T2 (or D) grid in log10, pasdata that of the echo grid; larger alpha means a smaller w, i.e. less smoothing.
     The inversion solves  min ||K x - y||^2 + w^2 ||D2 x||^2  subject to  x >= 0  (after compressing K and y with the SVD of K).
-    Source: Venkataramanan, Song and Hurlimann, IEEE Trans. Signal Process. 50, 1017 (2002).
+    References: docs/REFERENCES.md (regularisation).
     """
     return 1.0 / np.sqrt(log10_step_data ** 2 * log10_step_grid ** 3 * alpha)
 
@@ -105,21 +105,20 @@ def tikhonov_weighting(alpha, log10_step_grid, log10_step_data):
 METHODS = [
     {"id": "phasing", "name": "Phasing and integrating the echoes", "equation": "θ = −arg(Σ all points);  decay_k = Σ_points Re(e^{iθ} · echo_k)",
      "describes": "One zero-order phase puts the signal in the real channel; each echo is then summed to one number, giving the decay.",
-     "source": "Standard zero-order phase correction", "functions": [phase_and_integrate]},
+     "functions": [phase_and_integrate]},
     {"id": "noise", "name": "Noise level from the imaginary channel", "equation": "σ = 1.4826 · median(|x − median(x)|)",
      "describes": "After phasing the imaginary channel holds only noise, so its robust spread measures the noise on the real decay without any model.",
-     "source": "Hampel (1974); Rousseeuw and Croux, J. Am. Stat. Assoc. 88, 1273 (1993)", "functions": [noise_sigma_mad]},
+     "functions": [noise_sigma_mad]},
     {"id": "fit_quality", "name": "Fit quality", "equation": "RSS = Σ (yᵢ − mᵢ)²;   χ²_red = RSS / (σ² · dof)",
      "describes": "The residual sum of squares and its comparison with the measured noise (about 1 when the model explains everything the noise allows).",
-     "source": "Standard least squares", "functions": [sum_squared_residuals, reduced_chi2, chi2_per_point]},
+     "functions": [sum_squared_residuals, reduced_chi2, chi2_per_point]},
     {"id": "criteria", "name": "Choosing the number of components", "equation": "AIC = N ln(RSS/N) + 2k;   BIC = N ln(RSS/N) + k ln N",
      "describes": "Penalised measures for comparing fits with different numbers of components; only differences between models mean anything.",
-     "source": "Akaike, IEEE Trans. Autom. Control 19, 716 (1974); Schwarz, Ann. Statist. 6, 461 (1978)", "functions": [information_criteria]},
+     "functions": [information_criteria]},
     {"id": "interval", "name": "Confidence intervals from least squares", "equation": "estimate ± t(level, dof) · SE",
      "describes": "Intervals from the least-squares covariance with a Student-t multiplier (derived quantities such as fractions use the delta method).",
-     "source": "Bates and Watts, Nonlinear Regression Analysis and Its Applications (Wiley, 1988)", "functions": [student_t_critical]},
+     "functions": [student_t_critical]},
     {"id": "regularisation", "name": "Regularisation of the inversions", "equation": "min ‖K x − y‖² + w² ‖D₂ x‖²,  x ≥ 0;   w = 1/√(pasdata² · pas³ · α)",
      "describes": "The smoothness-penalised, non-negative least-squares problem the 1D and 2D inversions solve; larger α means less smoothing.",
-     "source": "Venkataramanan, Song and Hürlimann, IEEE Trans. Signal Process. 50, 1017 (2002); matches the Matlab upnnlsmooth1D / nnlsmooth1Dsvd codes",
      "functions": [second_derivative_matrix, tikhonov_weighting]},
 ]
