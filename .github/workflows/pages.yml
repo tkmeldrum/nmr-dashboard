@@ -36,6 +36,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml }
+      - run: pip install -e .        # the About page's physics section is generated from nmrdash/physics.py and inference.py, which need NumPy and SciPy
       - uses: actions/cache@v4
         with:
           path: vendor
