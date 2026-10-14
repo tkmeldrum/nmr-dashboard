@@ -8,7 +8,7 @@ function renderRawT1(raw) {
   const base = baseLayout("Saturation recovery (as measured)", "Delay (s)", "Amplitude (arb.)");
   Plotly.react("plot-decay", [{ x: raw.t, y: raw.y, mode: "lines+markers", name: "Data", line: { color: COLORS.blue }, marker: { size: 6 } }], {
     ...base, showlegend: false,
-    xaxis: { ...base.xaxis, type: $("decay-logx").checked ? "log" : "linear" },
+    xaxis: { ...base.xaxis, ...($("decay-logx").checked ? { type: "log", tickformat: ".0e", dtick: 1 } : { type: "linear" }) },
     yaxis: { ...base.yaxis, type: $("decay-log").checked ? "log" : "linear" },
   }, CFG);
 }
@@ -19,11 +19,11 @@ function renderRawT2D(raw) {
   const b = raw.b_vec.map((x) => x * 1e9), t = raw.echo_time_s, e = +$("echo-idx").value;
   const bAxis = { ...baseLayout("", "", "").xaxis, title: "b (s/m²)" };
   Plotly.react("plot-heat", [{ type: "heatmap", x: t, y: b, z: raw.data, colorscale: "Viridis", colorbar: { title: "signal" }, zsmooth: false }],
-    (() => { const l = baseLayout("Data: echo × diffusion delay", "Echo time (s)", "b (s/m²)"); return { ...l, yaxis: { ...l.yaxis, type: "log", tickformat: ".0e" } }; })(), CFG);
+    (() => { const l = baseLayout("Data: echo × diffusion delay", "Echo time (s)", "b (s/m²)"); return { ...l, yaxis: { ...l.yaxis, type: "log", tickformat: ".0e", dtick: 1 } }; })(), CFG);          // dtick 1: one labelled tick per decade, not 2 to 9
   $("echo-idx-out").textContent = `${e + 1} of ${raw.n_echoes} (t = ${+t[e].toPrecision(4)} s)`;
   const l2 = baseLayout(`Signal vs b at echo ${e + 1}`, "b (s/m²)", "Signal (arb.)");
   Plotly.react("plot-echo", [{ x: b, y: raw.data.map((row) => row[e]), mode: "lines+markers", line: { color: COLORS.blue }, marker: { size: 5 } }],
-    { ...l2, showlegend: false, xaxis: { ...l2.xaxis, type: $("decay-logx").checked ? "log" : "linear" } }, CFG);
+    { ...l2, showlegend: false, xaxis: { ...l2.xaxis, ...($("decay-logx").checked ? { type: "log", tickformat: ".0e", dtick: 1 } : { type: "linear" }) } }, CFG);
   const pick = [0, Math.floor((b.length - 1) / 2), b.length - 1];
   const palette = [COLORS.blue, COLORS.orange, COLORS.green];
   const l3 = baseLayout("Echo decays at three b-values", "Echo time (s)", "Signal (arb.)");
