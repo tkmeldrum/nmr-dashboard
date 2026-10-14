@@ -155,7 +155,7 @@ sample-data explorer; CI and Pages deploy.
    `processed_<timestamp>/` folder (inside the data folder, or another folder, in Chrome/Edge; a `.zip` elsewhere).
    Plot settings (font size, line and marker scale, colour map, figure size, titles none/custom, legends, time units)
    apply to the page's plots and the saved figures; time units and figure size are saved-figure only. Still to do:
-   per-figure limits and titles are in (`[figures.<name>]`), and the params file has `[style]`; the page's Export button writes both, and **Load params…** on the Process tab fills the page's settings from a params file. *The real File System Access path
+   per-figure limits and titles are in (`[figures.<name>]`), and the params file has `[style]`; the page's Export button writes both, and **Load params…** on the Process tab fills the page's settings from a params file. When a folder holds several datasets, a banner says so and the Process tab gets a **Batch** card that runs the same settings on all of them (same sequence), writing per-dataset folders plus a time-series summary, or one zip. *The real File System Access path
    (permission prompt, a real folder) has only been tested against a stand-in directory; try it in Chrome.*
 5. ~~Export a processing script (batch and time series)~~ **done on branch `script-export`** (see the pull request). Still to do:
    import a params file into the page, a time-resolved T₂(z, t) map for FT batches, and a SLURM example.

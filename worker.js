@@ -59,7 +59,7 @@ function processDataset({ settings }) {
 
 // Calls the page makes while a long job runs: small functions in nmrdash.pipeline, plus the one-off emcee install.
 const RPC_FUNCTIONS = new Set(["mcmc_start", "mcmc_step", "mcmc_finish", "boot_start", "boot_step", "boot_finish",
-                               "get_provenance", "export_params", "export_script", "t2d_estimate", "save_bundle", "params_for_page"]);
+                               "get_provenance", "export_params", "export_script", "t2d_estimate", "save_bundle", "params_for_page", "batch_start", "batch_run_one", "batch_finish"]);
 
 async function installEmcee() {
   try { pyodide.runPython("import emcee"); return { already: true }; } catch (_) { /* not installed yet */ }
@@ -73,10 +73,19 @@ async function installEmcee() {
   return { installed: true };
 }
 
+// Batch mode: one dataset's files go to /tmp/nmrdash_batch/<i>/, where nmrdash.webbatch runs them like the script would.
+function stageDataset(i, files) {
+  const dir = "/tmp/nmrdash_batch/" + i;
+  pyodide.FS.mkdirTree(dir);
+  for (const [name, buf] of Object.entries(files)) pyodide.FS.writeFile(dir + "/" + name, new Uint8Array(buf));
+  return { staged: i };
+}
+
 async function handleRpc({ id, fn, args }) {
   try {
     let result;
     if (fn === "install_emcee") result = await installEmcee();
+    else if (fn === "stage_dataset") result = stageDataset(...args);
     else if (RPC_FUNCTIONS.has(fn)) {
       pyodide.globals.set("_rpc_args", JSON.stringify(args));
       result = JSON.parse(pyodide.runPython(

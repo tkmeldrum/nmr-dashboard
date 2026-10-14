@@ -563,3 +563,18 @@ def params_for_page(text, name="params.toml"):
     if p["output"] != P.DEFAULTS["output"] or p["batch"] != P.DEFAULTS["batch"]:
         notes.append("The [output] and [batch] settings only matter to the command-line script, so they were not used here.")
     return _jsonable({"kind": kind, "settings": settings, "options": options, "style": P.style_dict(p), "notes": notes})
+
+
+def batch_start(args):
+    from . import webbatch
+    return webbatch.start(args)
+
+
+def batch_run_one(args):
+    from . import webbatch
+    return webbatch.run_one(args)
+
+
+def batch_finish(args=None):
+    from . import webbatch
+    return webbatch.finish(args)
