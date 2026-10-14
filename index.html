@@ -46,7 +46,6 @@
       <p id="analysis-line" class="note analysis-line"></p>
       <table id="params"></table>
       <details><summary>Show all parameters</summary><table id="params-all"></table></details>
-      <p class="next"><button type="button" data-next="raw">Next: Raw data →</button></p>
     </div>
   </section>
 
@@ -65,7 +64,6 @@
       <div class="plot-card"><div id="plot-heat"></div></div>
     </div>
     </div>
-    <p class="next"><button type="button" data-next="process">Next: Process →</button></p>
   </section>
 
   <!-- 3 · Process -->
@@ -172,7 +170,6 @@
       </fieldset>
 
     </form>
-    <p class="next"><button type="button" data-next="uncertainty">Next: Uncertainty →</button></p>
   </section>
 
   <!-- 4 · Uncertainty -->
@@ -239,7 +236,6 @@
       </div>
     </fieldset>
     <p class="note" data-for="cpmg t1">Both run after the processing, once you have confirmed a time estimate.</p>
-    <p class="next"><button type="button" data-next="results" id="next-results" disabled>Results appear after you run the processing ↓</button></p>
   </section>
 
   <!-- shared by the Process and Uncertainty tabs -->
@@ -409,11 +405,18 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
     <details id="ilt-results" class="section" hidden>
       <summary><h3>T₂ spectrum (ILT)</h3></summary>
       <div class="plot-card wide"><div id="plot-spectrum"></div></div>
+      <details class="more"><summary>Show the model and how to read the spectrum</summary><div class="more-body"><p class="equation" id="ilt-equation"></p><p>Orange diamonds are the exponential components. Each is drawn at the height an ILT peak holding the same <em>amount</em> of signal would have (using the width of the nearest ILT peak), so when the two analyses agree a diamond sits on top of its peak; labels give the fractions. A diamond well above or below a peak means the analyses disagree about how much signal is there.</p></div></details>
+
       <p id="ilt-stats" class="note"></p>
       <div class="table-wrap"><table id="ilt-quality" class="grid"></table></div>
       <div class="table-wrap"><table id="ilt-peaks" class="grid"></table></div>
       <div id="lcurve-card" class="plot-card wide" hidden><div id="plot-lcurve"></div></div>
-      <details class="more"><summary>Show the model and how to read this plot</summary><div class="more-body"><p class="equation" id="ilt-equation"></p><p>Orange diamonds are the exponential components. Each is drawn at the height an ILT peak holding the same <em>amount</em> of signal would have (using the width of the nearest ILT peak), so when the two analyses agree a diamond sits on top of its peak; labels give the fractions. A diamond well above or below a peak means the analyses disagree about how much signal is there.</p></div></details>
+      <details id="lcurve-help" class="more" hidden><summary>How to read the α sweep</summary><div class="more-body">
+        <p>Each point is the ILT of your decay run again with a different smoothing strength α (labelled, from the sweep range you set). The horizontal axis is how badly that spectrum fits the data (RMSE, lower is better); the vertical axis is how rough the spectrum is (its curvature relative to its size, lower is smoother). Both axes are logarithmic.</p>
+        <p>Small α fits the data closely but gives a jagged spectrum with spurious peaks (top left); large α gives a smooth spectrum that no longer fits the data (bottom right). The curve is therefore L-shaped, and a good α sits near the bend, where more smoothing starts to cost fit quickly. A sensible choice also has an RMSE close to the noise level in the table above: fitting below the noise means fitting noise.</p>
+        <p>Not every dataset gives a clean L. If the RMSE hardly changes across the sweep, or the path doubles back on itself, the data are too noisy (or too simple, such as a single exponential) for the curve to pick α. Then judge by the spectra instead: choose an α where the peaks you care about stay put when α changes by a factor of ten either way.</p>
+        <p>Compare with the α you used (in the summary line below the spectrum). If it sits far along either arm of the L, try a value nearer the bend and check that the peaks you care about do not move much; peaks that appear or vanish as α changes are not well determined.</p>
+      </div></details>
     </details>
 
     <details id="unc-results" class="section" hidden>

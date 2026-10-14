@@ -398,7 +398,7 @@ function renderIlt(r) {
   table($("ilt-peaks"), ["Peak T₂ (s)", "Mean T₂ of peak (s)", "Fraction of signal"],
     il.peaks.length ? il.peaks.map((p) => [fmtSci(p.T2_peak), fmtSci(p.T2_mean), pct(p.fraction)]) : [["no resolved peaks", "", ""]]);
 
-  $("lcurve-card").hidden = !il.sweep;
+  $("lcurve-card").hidden = $("lcurve-help").hidden = !il.sweep;
   if (il.sweep) {
     const base2 = baseLayout("α sweep (L-curve)", "Fit RMSE", "Spectrum roughness ‖D₂x‖/‖x‖");
     Plotly.react("plot-lcurve", [{
