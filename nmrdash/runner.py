@@ -10,7 +10,6 @@ import os
 import sys
 import time
 import traceback
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from . import outputs, params as P, pipeline, provenance
@@ -44,7 +43,7 @@ def _log(quiet, *a):
 
 # ── one dataset ──────────────────────────────────────────────────────────────
 
-def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_name=None, command=None, quiet=True):
+def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_name=None, command=None, quiet=True, only_kind=None):
     """Process one data folder (acqu.par + data.2d). Returns a summary dict; never raises for bad data (status says why)."""
     t_start = time.perf_counter()
     folder = Path(folder)
@@ -59,6 +58,9 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
             row["timestamp_local"] = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
         info = pipeline.load(folder, mtime * 1000 if mtime else None, fallback_to_mtime=True)
         row["kind"] = info["kind"]
+        if only_kind and info["kind"] != only_kind:               # a batch uses one sequence's settings; other sequences are left alone
+            row.update(status="skipped", reason=f"a {info['kind']} dataset; this batch is {only_kind}")
+            return row
         if not info["supported"]:
             row.update(status="skipped", reason=info["reason"])
             return row
@@ -228,6 +230,7 @@ def run_batch(root, params=None, *, params_text=None, params_path=None, jobs=Non
             rows.append(r)
             _log(quiet, f"[{i}/{len(tasks)}] {r['dataset']}: {r['status']}{(' — ' + r['reason']) if r['reason'] else ''} ({r['seconds']} s)")
     else:
+        from concurrent.futures import ProcessPoolExecutor          # not at the top: Pyodide (the web page) has no multiprocessing
         with ProcessPoolExecutor(max_workers=jobs) as pool:
             for i, r in enumerate(pool.map(_work, tasks), 1):
                 rows.append(r)
