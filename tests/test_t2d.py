@@ -148,11 +148,12 @@ def test_the_time_estimate_grows_with_the_grid_and_is_the_right_order():
     assert 0.2 < ratios[-1] < 5, ratios
 
 
-def test_mcmc_and_bootstrap_say_they_are_not_available_for_t2d():
+def test_mcmc_and_bootstrap_need_the_few_population_model_for_t2d():
+    """The regularised map has no intervals; they sample the few-population model (see test_t2d_uncertainty.py for the runs themselves)."""
     load(M1115)
     process({"kind": "t2d", "t2d": SMALL})
     for call in (lambda: mcmc_start({}), lambda: boot_start({})):
-        with pytest.raises(ValueError, match="not available for T2-D"):
+        with pytest.raises(ValueError, match="few-population model"):
             call()
 
 
