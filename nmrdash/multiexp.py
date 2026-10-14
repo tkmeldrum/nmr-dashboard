@@ -142,8 +142,13 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         warnings.append(f"A {sym} hit the edge of the allowed range; treat it as unresolved.")
     if n > 1 and np.any(np.diff(T) / T[1:] < 0.1):
         warnings.append(f"Two {sym} components are within 10% of each other; consider fewer components.")
-    if np.any(A < 1e-6 * max(abs(d0[0]), 1e-300)):
-        warnings.append("A component amplitude is ~0; consider fewer components.")
+    total = max(abs(d0[0]), 1e-300)
+    unsupported = [i for i in range(n)
+                   if A[i] < 1e-3 * total or (finite and np.isfinite(se[2 * i]) and A[i] - tcrit * se[2 * i] <= 0 and A[i] < 0.05 * total)]
+    for i in unsupported:
+        why = "its amplitude is essentially zero" if A[i] < 1e-3 * total else "its amplitude is consistent with zero (the confidence interval includes 0)"
+        warnings.append(f"Component {i + 1} ({sym} = {T[i]:.3g} s) is not supported by the data: {why}. "
+                        f"Try {max(n - len(unsupported), 1)} component{'s' if n - len(unsupported) > 1 else ''}.")
 
     if finite:
         for i in range(n):
@@ -181,7 +186,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         "n_params": k,
         "fit": model(t, p, n, offset, kind), "resid": y - model(t, p, n, offset, kind),
         "t_dense": t_dense, "fit_dense": model(t_dense, p, n, offset, kind),
-        "warnings": warnings,
+        "warnings": warnings, "unsupported": [i + 1 for i in unsupported],
     }
 
 
