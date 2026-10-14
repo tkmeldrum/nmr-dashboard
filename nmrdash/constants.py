@@ -1,7 +1,9 @@
 """Instrument and nuclear constants (defaults from MeldrumLabCode/pythonic/constants.py)."""
 
-GAMMA_MHZ_PER_T = {"1H": 42.577, "19F": 40.078}   # gyromagnetic ratio / 2π
-DEFAULT_G_T_PER_M = 23.7                          # static gradient, T/m
+from . import physics
+
+GAMMA_MHZ_PER_T = {n: g / 1e6 for n, g in physics.GAMMA_HZ_PER_T.items()}   # gyromagnetic ratio / 2π, from the physics module
+DEFAULT_G_T_PER_M = physics.DEFAULT_GRADIENT_T_PER_M                          # static gradient, T/m
 DEFAULT_ZERO_FILL = 4                             # FFT length = nextpow2(nrPnts * 2**zf)
 DEFAULT_Z_WINDOW_UM = (-200.0, 200.0)             # sample region; + z = + frequency = closer to the magnet (down)
 
@@ -23,7 +25,7 @@ def guess_nucleus(b1freq_mhz):
     return nuc, f"b1Freq {b1freq_mhz:g} MHz → {label}"
 
 # T2-D (SSE-T2). D is entered and reported in m^2/s; the solver works on D * 1e9 (see ilt2d.py).
-T2D_DEFAULTS = {"t2_min": 1e-5, "t2_max": 1.0, "t2_steps": 50, "d_min": 1e-12, "d_max": 1e-8, "d_steps": 25, "alpha": 1e9, "peak_threshold_pct": 10.0}
+T2D_DEFAULTS = {"gradient": physics.DEFAULT_GRADIENT_T_PER_M, "t2_min": 1e-5, "t2_max": 1.0, "t2_steps": 50, "d_min": 1e-12, "d_max": 1e-8, "d_steps": 25, "alpha": 1e9, "peak_threshold_pct": 10.0}
 
 # Saturation recovery: Kea's recovery curves do not start at zero (an offset of a few % of the plateau is typical),
 # and a fit without it is much worse on the sample data (RMSE 305 vs 38), so the offset is on by default.

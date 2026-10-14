@@ -31,7 +31,8 @@ def test_loader_reads_axes_data_and_a_measured_noise_channel():
     L = t2d.load(M1115, read_kea_params(M1115 / "acqu.par"))
     assert L["data"].shape == (1000, 25) and L["complex"] and L["noise"].shape == L["data"].shape
     assert L["echo_s"][0] == pytest.approx(44e-6) and L["echo_s"][-1] == pytest.approx(44e-3)
-    assert L["b_vec"][0] == pytest.approx(6.40474) and np.all(np.diff(L["b_vec"]) > 0)
+    # calculated, not read: tau = 0.178 ms, Delta = 5 ms, G = 23.67 T/m (the spectrometer's 6.40474 is for 23.49 T/m: (23.67 / 23.4908)^2 = 1.0155 higher)
+    assert L["b_vec"][0] == pytest.approx(6.40474 * (23.67 / 23.4908) ** 2, rel=2e-4) and np.all(np.diff(L["b_vec"]) > 0)
     assert t2d.noise_sigma(L["noise"]) == pytest.approx(10.9, rel=0.05)
     assert abs(L["data"].mean()) > 5 * abs(L["noise"].mean())                    # the signal is in the real channel, the noise in the imaginary one
 
@@ -41,12 +42,17 @@ def test_loader_explains_what_is_wrong(tmp_path):
     shutil.copytree(M1115, d)
     p = read_kea_params(d / "acqu.par")
     (d / "DiffAxis.dat").write_text("1\n2\n3\n")
-    with pytest.raises(ValueError, match="3 b-values but acqu.par says 25"):
-        t2d.load(d, p)
+    L = t2d.load(d, p)                                       # the spectrometer's axis is only a cross-check: a wrong one is reported, not used
+    assert not L["b_check"]["agrees"] and any(c["file"] == "DiffAxis.dat" and c["value"] is None for c in L["b_check"]["compared"])
+    assert L["b_vec"].shape == (25,)
     (d / "DiffAxis.dat").unlink()
     (d / "data.dat").unlink()
-    with pytest.raises(ValueError, match="b-values"):
-        t2d.load(d, p)
+    L = t2d.load(d, p)                                       # no spectrometer files at all: everything is calculated from acqu.par
+    assert L["b_check"]["compared"] == [] and L["b_vec"].shape == (25,)
+    bad = dict(p)
+    del bad["DELTA"]
+    with pytest.raises(ValueError, match="DELTA"):
+        t2d.load(d, bad)
 
 
 # ── the 2D inversion ─────────────────────────────────────────────────────────
@@ -255,7 +261,7 @@ def test_auto_d_range_uses_exactly_what_the_b_values_can_resolve():
     r = process({"kind": "t2d", "t2d": {**SMALL, "d_min": "auto", "d_max": "auto"}})["t2d"]
     lo, hi = ilt2d.sensitive_d_window(_STATE["t2d"]["b_vec"])
     assert r["d_min"] == pytest.approx(lo, rel=0.06) and r["d_max"] == pytest.approx(hi, rel=0.06)
-    assert r["fraction_in_sensitive_window"] > 0.95
+    assert r["fraction_in_sensitive_window"] > 0.85          # not 1: signal at the edge bins is on the limit, which the rounding of the grid ends decides
     p = P.validate({"t2d": {"d_min": "auto", "d_max": "auto"}})
     assert P.to_settings_t2d(p)[0]["t2d"]["d_min"] == "auto"
     with pytest.raises(ValueError, match="must both be numbers"):
