@@ -705,12 +705,15 @@ def t2d_populations_figure(res, mcmc=None, boot=None, titles=True):
     fig, ax = plt.subplots(figsize=(7.6, 6))
     ax.pcolormesh(T2, D, S, shading="auto", cmap="Greys", alpha=0.45)
     colours = (_BLUE, _ORANGE, _GREEN, _PURPLE)
-    for result, marker, label, alpha in ((boot, ".", "bootstrap", 0.35), (mcmc, ".", "MCMC", 0.25)):
+    from matplotlib.lines import Line2D
+    handles = []
+    for result, marker, label, ms, alpha in ((boot, "x", "bootstrap", 4.5, 0.7), (mcmc, ".", "MCMC", 2.5, 0.25)):     # a different marker per method
         sc = (result or {}).get("scatter")
         if not sc:
             continue
         for k, (t_, d_) in enumerate(zip(sc["T2"], sc["D"])):
-            ax.plot(t_, d_, marker, ms=2.5, alpha=alpha, color=colours[k % 4], mec="none", label=f"{label}" if k == 0 else None)
+            ax.plot(t_, d_, marker, ms=ms, alpha=alpha, color=colours[k % 4], mec=None if marker == "x" else "none", mew=0.8)
+        handles.append(Line2D([], [], ls="", marker=marker if marker == "x" else "o", ms=7 if marker == "x" else 6, color="#222222", label=label))
     lo, hi = m["d_window"]
     for a_, b_ in ((D[0] / 10, lo), (hi, D[-1] * 10)):
         if b_ > a_:
@@ -729,8 +732,8 @@ def t2d_populations_figure(res, mcmc=None, boot=None, titles=True):
     ax.set_ylim(D[0], D[-1])
     ax.set_xlabel("T$_2$ (s)")
     ax.set_ylabel("D (m$^2$/s)")
-    if boot or mcmc:
-        ax.legend(frameon=False, loc="upper left", markerscale=4)
+    if handles:
+        ax.legend(handles=handles, frameon=False, loc="upper left")
     if titles:
         ax.set_title(f"T$_2$–D populations ({m['K']}-population model on the regularised map)")
     fig.tight_layout()
