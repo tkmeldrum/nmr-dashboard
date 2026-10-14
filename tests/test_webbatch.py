@@ -15,6 +15,12 @@ SETTINGS = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset":
 OPTIONS = {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}
 
 
+@pytest.fixture(autouse=True)
+def own_folder(tmp_path, monkeypatch):
+    """Each test stages its datasets in its own folder (the page runs one batch at a time, but parallel tests must not share one)."""
+    monkeypatch.setattr(webbatch, "ROOT", str(tmp_path / "nmrdash_batch"))
+
+
 def stage(i, src):
     dest = Path(webbatch.ROOT) / str(i)
     shutil.copytree(src, dest)
