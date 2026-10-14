@@ -116,6 +116,15 @@ docs/PLAN.md    the original build plan
 `nmrdash/` is the canonical home of this code. It started as copies of `MeldrumLabCode/pythonic/` (`kea_io.py`,
 `run_1dilt.py`); the pythonic scripts have **not** yet been switched to import from `nmrdash`.
 
+## Where the physics is
+
+A reviewer who wants to check the models can read two short files, listed with equations, references and links to the lines on the site's About page:
+
+- `nmrdash/physics.py`: the signal models (exponential and multi-exponential decay, saturation recovery, diffusion attenuation, the T₂–D signal and the b-value of the stimulated echo), the inversion kernels, and the position relations of the static-gradient profile. NumPy only.
+- `nmrdash/inference.py`: how numbers are estimated from them (noise from the imaginary channel, least-squares measures, AIC/BIC, Student-*t* intervals, the regularisation of the inversions).
+
+Every other module calls these functions; the formulas are not repeated elsewhere. Adding a function to either file without listing it in its `MODELS` / `METHODS` registry fails a test, and `tests/test_physics.py` / `tests/test_inference.py` check each one against independent calculations.
+
 ## Self-hosted libraries
 
 The site serves everything it needs itself: Pyodide (Python in the browser) with NumPy, SciPy and Matplotlib, Plotly.js and the emcee

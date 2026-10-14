@@ -2,6 +2,8 @@
 import numpy as np
 from scipy.optimize import lsq_linear
 
+from . import inference, physics
+
 
 def build_tau_grid(tau_min, tau_max, n_steps):
     """
@@ -29,61 +31,11 @@ def build_tau_grid(tau_min, tau_max, n_steps):
 
 
 def build_kernel(echo_vec, tau):
-    """
-    Build the exponential decay kernel matrix K.
-
-    Each entry K[i, j] = exp(-echo_vec[i] / tau[j]), giving the contribution
-    of relaxation component j to echo i.
-
-    Matches the kernel construction in nnlsmooth1Dsvd.m:
-        systemmat = exp(-time' ./ tau)
-    where time is a row vector and tau is a row vector, producing a
-    (n_echoes x n_tau) matrix via implicit broadcasting.
-
-    Parameters
-    ----------
-    echo_vec : ndarray of shape (n_echoes,)
-        Echo times (same units as tau).
-    tau : ndarray of shape (n_tau,)
-        Relaxation time grid.
-
-    Returns
-    -------
-    K : ndarray of shape (n_echoes, n_tau)
-        Kernel matrix.
-    """
-    return np.exp(-np.outer(echo_vec, 1.0 / tau))
+    """The exponential decay kernel K[i, j] = exp(-echo_vec[i] / tau[j]) (physics.t2_kernel; matches systemmat = exp(-time' ./ tau) in nnlsmooth1Dsvd.m)."""
+    return physics.t2_kernel(echo_vec, tau)
 
 
-def second_derivative_matrix(n):
-    """
-    Build the second finite-difference (curvature) matrix D2.
-
-    D2 has shape (n-2, n) and implements the second discrete derivative:
-        (D2 @ x)[i] = x[i] - 2*x[i+1] + x[i+2]
-
-    This matches the curvature regularization rows appended to systemmat
-    in nnlsmooth1Dsvd.m:
-        systemmat(i+tailledata, i)   =  weighting(i+1)
-        systemmat(i+tailledata, i+1) = -2 * weighting(i+1)
-        systemmat(i+tailledata, i+2) =  weighting(i+1)
-    The weighting scalar is applied separately in run_1dilt().
-
-    Parameters
-    ----------
-    n : int
-        Length of the spectrum vector (number of tau points).
-
-    Returns
-    -------
-    D2 : ndarray of shape (n-2, n)
-        Second difference matrix.
-    """
-    D2 = np.zeros((n - 2, n))
-    D2[np.arange(n - 2), np.arange(n - 2)] = 1
-    D2[np.arange(n - 2), np.arange(1, n - 1)] = -2
-    D2[np.arange(n - 2), np.arange(2, n)] = 1
-    return D2
+second_derivative_matrix = inference.second_derivative_matrix      # the curvature penalty; defined in inference.py
 
 
 def run_1dilt(data, echo_vec, params, alpha=None):
@@ -192,7 +144,7 @@ def run_1dilt(data, echo_vec, params, alpha=None):
     if len(echo_pos) < 2:
         raise ValueError("echo_vec must contain at least two positive values for pasdata calculation.")
     pasdata = (np.log10(echo_pos[-1]) - np.log10(echo_pos[0])) / (len(echo_pos) - 1)
-    weighting = 1.0 / np.sqrt(pasdata**2 * pas**3 * alpha)
+    weighting = inference.tikhonov_weighting(alpha, pas, pasdata)
 
     K = build_kernel(echo_vec, tau)
 

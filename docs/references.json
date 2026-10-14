@@ -1,0 +1,212 @@
+{
+ "note": "Draft references, written from memory and NOT yet checked. Set verified to true for an entry once its reference has been checked; only verified references are shown on the About page.",
+ "references": [
+  {
+   "id": "exp_decay",
+   "name": "Exponential T₂ decay",
+   "file": "physics.py",
+   "functions": [
+    "exp_decay",
+    "decay_factor"
+   ],
+   "reference": "Carr and Purcell, Phys. Rev. 94, 630 (1954); Meiboom and Gill, Rev. Sci. Instrum. 29, 688 (1958)",
+   "verified": false
+  },
+  {
+   "id": "multi_exp",
+   "name": "Multi-exponential decay",
+   "file": "physics.py",
+   "functions": [
+    "multi_exp"
+   ],
+   "reference": "Whittall and MacKay, J. Magn. Reson. 84, 134 (1989)",
+   "verified": false
+  },
+  {
+   "id": "saturation",
+   "name": "Saturation recovery (T₁)",
+   "file": "physics.py",
+   "functions": [
+    "saturation_recovery",
+    "multi_saturation",
+    "recovery_factor"
+   ],
+   "reference": "Fukushima and Roeder, Experimental Pulse NMR: A Nuts and Bolts Approach (Addison-Wesley, 1981)",
+   "verified": false
+  },
+  {
+   "id": "diffusion",
+   "name": "Diffusion attenuation",
+   "file": "physics.py",
+   "functions": [
+    "diffusion_attenuation"
+   ],
+   "reference": "Stejskal and Tanner, J. Chem. Phys. 42, 288 (1965); Tanner, J. Chem. Phys. 52, 2523 (1970)",
+   "verified": false
+  },
+  {
+   "id": "b_value",
+   "name": "Diffusion weighting b of the stimulated echo",
+   "file": "physics.py",
+   "functions": [
+    "b_value_stimulated_echo",
+    "geometric_grid",
+    "gradient_implied_by_kea"
+   ],
+   "reference": "Hahn, Phys. Rev. 80, 580 (1950); Tanner, J. Chem. Phys. 52, 2523 (1970); Callaghan, Principles of Nuclear Magnetic Resonance Microscopy (Oxford, 1991)",
+   "verified": false
+  },
+  {
+   "id": "t2d",
+   "name": "T₂–D signal",
+   "file": "physics.py",
+   "functions": [
+    "t2d_signal",
+    "t2d_factors"
+   ],
+   "reference": "Combines Tanner (1970) and Carr and Purcell (1954); Hürlimann and Venkataramanan, J. Magn. Reson. 157, 31 (2002)",
+   "verified": false
+  },
+  {
+   "id": "kernels",
+   "name": "Inversion kernels",
+   "file": "physics.py",
+   "functions": [
+    "t2_kernel",
+    "diffusion_kernel"
+   ],
+   "reference": "Venkataramanan, Song and Hürlimann, IEEE Trans. Signal Process. 50, 1017 (2002); Song et al., J. Magn. Reson. 154, 261 (2002)",
+   "verified": false
+  },
+  {
+   "id": "resolvable",
+   "name": "Range of D the b-values can resolve",
+   "file": "physics.py",
+   "functions": [
+    "resolvable_diffusion_window"
+   ],
+   "reference": "Rule of thumb (exp(−5) < 1 %; exp(−1) = 37 %), not a sharp limit",
+   "verified": false
+  },
+  {
+   "id": "position",
+   "name": "Position along the gradient",
+   "file": "physics.py",
+   "functions": [
+    "z_um_from_frequency",
+    "native_resolution_um"
+   ],
+   "reference": "Frequency encoding in a static gradient (Callaghan, 1991)",
+   "verified": false
+  },
+  {
+   "id": "phasing",
+   "name": "Phasing and integrating the echoes",
+   "file": "inference.py",
+   "functions": [
+    "phase_and_integrate"
+   ],
+   "reference": "Standard zero-order phase correction",
+   "verified": false
+  },
+  {
+   "id": "noise",
+   "name": "Noise level from the imaginary channel",
+   "file": "inference.py",
+   "functions": [
+    "noise_sigma_mad"
+   ],
+   "reference": "Hampel (1974); Rousseeuw and Croux, J. Am. Stat. Assoc. 88, 1273 (1993)",
+   "verified": false
+  },
+  {
+   "id": "fit_quality",
+   "name": "Fit quality",
+   "file": "inference.py",
+   "functions": [
+    "sum_squared_residuals",
+    "reduced_chi2",
+    "chi2_per_point"
+   ],
+   "reference": "Standard least squares",
+   "verified": false
+  },
+  {
+   "id": "criteria",
+   "name": "Choosing the number of components",
+   "file": "inference.py",
+   "functions": [
+    "information_criteria"
+   ],
+   "reference": "Akaike, IEEE Trans. Autom. Control 19, 716 (1974); Schwarz, Ann. Statist. 6, 461 (1978)",
+   "verified": false
+  },
+  {
+   "id": "interval",
+   "name": "Confidence intervals from least squares",
+   "file": "inference.py",
+   "functions": [
+    "student_t_critical"
+   ],
+   "reference": "Bates and Watts, Nonlinear Regression Analysis and Its Applications (Wiley, 1988)",
+   "verified": false
+  },
+  {
+   "id": "regularisation",
+   "name": "Regularisation of the inversions",
+   "file": "inference.py",
+   "functions": [
+    "second_derivative_matrix",
+    "tikhonov_weighting"
+   ],
+   "reference": "Venkataramanan, Song and Hürlimann, IEEE Trans. Signal Process. 50, 1017 (2002); matches the Matlab upnnlsmooth1D / nnlsmooth1Dsvd codes",
+   "verified": false
+  },
+  {
+   "id": "ilt_method",
+   "name": "The regularised inversion (1D and 2D) as implemented here",
+   "file": "ilt.py, ilt2d.py",
+   "functions": [
+    "run_1dilt",
+    "run_2dilt"
+   ],
+   "reference": "Venkataramanan, Song and Hürlimann, IEEE Trans. Signal Process. 50, 1017 (2002). (The code is the author's own, iterated from the Matlab codes to Python; this is the method it follows.)",
+   "verified": false
+  },
+  {
+   "id": "emcee",
+   "name": "MCMC sampler",
+   "file": "uncertainty.py, t2d_uncertainty.py",
+   "functions": [
+    "Mcmc",
+    "Mcmc2D"
+   ],
+   "reference": "Foreman-Mackey, Hogg, Lang and Goodman, Publ. Astron. Soc. Pac. 125, 306 (2013) (emcee)",
+   "verified": false
+  },
+  {
+   "id": "numpy",
+   "name": "NumPy",
+   "file": "(software)",
+   "functions": [],
+   "reference": "Harris et al., Nature 585, 357 (2020)",
+   "verified": false
+  },
+  {
+   "id": "scipy",
+   "name": "SciPy",
+   "file": "(software)",
+   "functions": [],
+   "reference": "Virtanen et al., Nature Methods 17, 261 (2020)",
+   "verified": false
+  },
+  {
+   "id": "matplotlib",
+   "name": "Matplotlib",
+   "file": "(software)",
+   "functions": [],
+   "reference": "Hunter, Comput. Sci. Eng. 9, 90 (2007)",
+   "verified": false
+  }
+ ]
+}

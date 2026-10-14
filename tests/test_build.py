@@ -73,7 +73,7 @@ def test_build_ships_the_about_page_and_licence_files(tmp_path):
     assert "{{" not in about and "built 20" in about and "style.css?v=abc123" in about            # placeholders filled, assets versioned
     assert "Apache License, Version 2.0" in about and "as is" in about and "Pyodide" in about and "NumPy" in about
     assert "Apache License" in (out / "LICENSE.txt").read_text()[:400] and "Copyright" in (out / "NOTICE.txt").read_text()
-    assert "Venkataramanan" in (out / "THIRD_PARTY_NOTICES.txt").read_text()
+    assert "docs/REFERENCES.md" in (out / "THIRD_PARTY_NOTICES.txt").read_text() and "Venkataramanan" not in (out / "THIRD_PARTY_NOTICES.txt").read_text()
     assert 'href="about.html"' in (out / "index.html").read_text()
     assert "<script" not in about                       # a static page: no code, nothing to load
 
