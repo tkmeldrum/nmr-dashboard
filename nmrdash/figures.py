@@ -285,8 +285,9 @@ STYLE_DEFAULTS = {
     "figures": {},            # per figure: {"title": str, "xlim": [lo, hi], "ylim": [lo, hi], "xscale": "linear"|"log", "yscale": ...}
 }
 
-FIGURES = ("decay_fit", "ilt_spectrum", "spatial", "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
-LIMIT_FIGURES = ("decay_fit", "ilt_spectrum", "bootstrap_ilt", "t2d_spectrum")      # one main plot to put limits on
+FIGURES = ("raw_data", "ft_profile_map", "decay_fit", "model_comparison", "ilt_spectrum", "alpha_sweep", "spatial", "spatial_extra", "mcmc_trace",
+           "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+LIMIT_FIGURES = ("decay_fit", "ilt_spectrum", "alpha_sweep", "model_comparison", "bootstrap_ilt", "t2d_spectrum")      # one main plot to put limits on
 
 
 def _pair(v):
@@ -412,6 +413,186 @@ def _apply(fig, s, name, retight):
                     axis.set_major_formatter(FuncFormatter(lambda v, _p: _decade(v * 1e3)))
                 else:
                     axis.set_major_formatter(FuncFormatter(lambda v, _p: f"{v * 1e3:.6g}"))
+
+
+# ── the rest of what the page shows: raw data, FT profile and map, model comparison, alpha sweep, spatial fits, MCMC traces ──
+
+def raw_figure(raw, kind="cpmg", titles=True):
+    """The Raw data tab: echo magnitudes, one echo, the summed decay (CPMG); the recovery (T1); the echo x b-value map (T2-D)."""
+    plt = _plt()
+    if kind == "t1":
+        fig, ax = plt.subplots(figsize=(7.2, 4))
+        ax.plot(raw["t"], raw["y"], "o-", color=_BLUE, ms=4, lw=1)
+        ax.set_xlabel("Delay (s)")
+        ax.set_ylabel("Signal (arb.)")
+        _sci_axis(ax)
+        if titles:
+            ax.set_title("Saturation recovery, as measured")
+        fig.tight_layout()
+        return fig
+    if kind == "t2d":
+        e, b, Z = np.asarray(raw["echo_time_s"], float), np.asarray(raw["b_vec"], float), np.asarray(raw["data"], float)
+        fig, ax = plt.subplots(figsize=(7.2, 4.6))
+        m = ax.pcolormesh(e, b, Z, shading="auto", cmap="viridis")
+        fig.colorbar(m, ax=ax, label="signal")
+        ax.set_xlabel("Echo time (s)")
+        ax.set_ylabel("b-value (×10$^{-9}$ s/m$^2$)")
+        if titles:
+            ax.set_title("T$_2$–D data, as measured")
+        fig.tight_layout()
+        return fig
+    t = np.asarray(raw["echo_time_s"], float)
+    re, im = np.asarray(raw["real"], float), np.asarray(raw["imag"], float)
+    mag = np.hypot(re, im)
+    fig = plt.figure(figsize=(10.5, 7))
+    gs = fig.add_gridspec(2, 2)
+    ax = fig.add_subplot(gs[0, :])
+    m = ax.pcolormesh(t, np.arange(1, mag.shape[0] + 1), mag, shading="auto", cmap="viridis")
+    fig.colorbar(m, ax=ax, label="|S|")
+    ax.set_xlabel("Echo time (s)")
+    ax.set_ylabel("Point within echo")
+    ref = min(1, mag.shape[1] - 1)                              # the second echo: the first can be distorted
+    pts = np.arange(1, mag.shape[0] + 1)
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax2.plot(pts, re[:, ref], color=_BLUE, lw=1.2, label="real")
+    ax2.plot(pts, im[:, ref], color=_ORANGE, lw=1.2, label="imaginary")
+    ax2.plot(pts, mag[:, ref], color=_GREEN, lw=1.2, label="magnitude")
+    ax2.set_xlabel("Point within echo")
+    ax2.set_ylabel("Signal (arb.)")
+    ax2.legend(frameon=False)
+    _sci_axis(ax2)
+    ax3 = fig.add_subplot(gs[1, 1])
+    ax3.plot(t, raw["summed"], ".-", color=_BLUE, ms=3, lw=0.8)
+    ax3.set_xlabel("Echo time (s)")
+    ax3.set_ylabel("Signal (arb.)")
+    _sci_axis(ax3)
+    if titles:
+        ax.set_title("Echo magnitude")
+        ax2.set_title(f"Echo {ref + 1}")
+        ax3.set_title("Summed echo decay (phased real part)")
+    fig.tight_layout()
+    return fig
+
+
+def ft_profile_map_figure(res, titles=True):
+    """FT mode: the spatial profile with the analysed window, and the echo magnitude after the transform."""
+    plt = _plt()
+    ft = res["ft"]
+    t = np.asarray(res["decay"]["t"], float)
+    h = ft["heat"]
+    w0, w1 = ft["window"]
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11, 4.6))
+    ax.plot(ft["z_um"], ft["profile"], color=_BLUE)
+    ax.axvspan(w0, w1, color=_ORANGE, alpha=0.15, lw=0)
+    ax.set_xlim(w0, w1)
+    ax.set_xlabel("z (µm)")
+    ax.set_ylabel("|Σ echoes| (arb.)")
+    _sci_axis(ax)
+    m = ax2.pcolormesh(t[np.asarray(h["echo_idx"], int)], np.asarray(h["z_um"], float), np.asarray(h["mag"], float), shading="auto", cmap="viridis")
+    fig.colorbar(m, ax=ax2, label="|S|")
+    ax2.set_ylim(w1, w0)                                         # + z is down, toward the magnet
+    ax2.set_xlabel("Echo time (s)")
+    ax2.set_ylabel("z (µm)")
+    if titles:
+        ax.set_title("Spatial profile")
+        ax2.set_title("Echo magnitude after FT")
+    fig.tight_layout()
+    return fig
+
+
+def model_comparison_figure(res, titles=True):
+    """How many exponentials: the AIC and BIC of each model relative to the best (0 = best)."""
+    plt = _plt()
+    rows = res["multiexp"]["comparison"]
+    n = [r["n"] for r in rows]
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(n, [r["d_aic"] for r in rows], "o-", color=_BLUE, label="ΔAIC")
+    ax.plot(n, [r["d_bic"] for r in rows], "s-", color=_ORANGE, label="ΔBIC")
+    ax.axhline(0, color="#222222", lw=1.2, zorder=1)
+    ax.set_xticks(n)
+    ax.set_xlabel("Number of components")
+    ax.set_ylabel("Δ relative to the best model")
+    ax.legend(frameon=False)
+    if titles:
+        ax.set_title("Model comparison (lower is better)")
+    fig.tight_layout()
+    return fig
+
+
+def alpha_sweep_figure(res, titles=True):
+    """The L-curve: spectrum roughness against fit RMSE for each alpha."""
+    plt = _plt()
+    sw = res["ilt"]["sweep"]
+    fig, ax = plt.subplots(figsize=(6.4, 5))
+    ax.plot([s["rmse"] for s in sw], [s["roughness"] for s in sw], "o-", color=_PURPLE)
+    for s in sw:
+        ax.annotate(f"α={s['alpha']:.0e}".replace("e+0", "e").replace("e+", "e"), (s["rmse"], s["roughness"]), textcoords="offset points", xytext=(5, 4), fontsize=8)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Fit RMSE")
+    ax.set_ylabel("Spectrum roughness ‖D$_2$x‖/‖x‖")
+    if titles:
+        ax.set_title("α sweep (L-curve)")
+    fig.tight_layout()
+    return fig
+
+
+def spatial_extra_figure(res, titles=True):
+    """FT mode: what spatial_figure leaves out: fit quality and the ILT peak tracks and shares along z."""
+    plt = _plt()
+    sp = res.get("spatial") or {}
+    me, il = sp.get("multiexp"), sp.get("ilt")
+    panels = (1 if me else 0) + (2 if il else 0)
+    fig, axes = plt.subplots(1, panels, figsize=(4.6 * panels, 3.8), squeeze=False)
+    axes = list(axes[0])
+    nan = lambda a: np.array([np.nan if v is None else v for v in a], float)
+    if me:
+        ax = axes.pop(0)
+        ax.plot(me["z_um"], nan(me["chi2_red"]), "o-", color=_BLUE, ms=4, lw=1)
+        ax.axhline(1, color=_GREY, ls=":")
+        ax.set_ylim(bottom=0)
+        ax.set_xlabel("z (µm)")
+        ax.set_ylabel("Reduced χ$^2$")
+        if titles:
+            ax.set_title("Fit quality vs position")
+    if il:
+        z = np.asarray(il["z_um"], float)
+        colours = (_BLUE, _ORANGE, _GREEN, _PURPLE, "#56B4E9")
+        a1, a2 = axes
+        for k, b in enumerate(il["bands"]):
+            lab = f"peak {b['t2_peak']:.1e}".replace("e-0", "e-")
+            a1.plot(z, nan(il["band_mean_T2"][k]), "o-", ms=3, lw=1, color=colours[k % 5], label=lab)
+            a2.plot(z, nan(il["band_fraction"][k]), color=colours[k % 5], lw=1.6, label=lab)
+        _log_t2_axis(a1, "y")
+        a1.set_xlabel("z (µm)")
+        a1.set_ylabel("T$_2$ (s)")
+        a1.legend(frameon=False, fontsize=7)
+        a2.set_ylim(0, 1)
+        a2.set_xlabel("z (µm)")
+        a2.set_ylabel("Fraction")
+        if titles:
+            a1.set_title("ILT peak T$_2$ vs position")
+            a2.set_title("Share of the signal in each peak")
+    fig.tight_layout()
+    return fig
+
+
+def mcmc_trace_figure(mcmc, titles=True):
+    """A few walkers per parameter, with the burn-in shaded: a healthy chain looks like stationary noise."""
+    plt = _plt()
+    tr = mcmc["trace"]
+    names, vals, step, burn = tr["names"], np.asarray(tr["values"], float), np.asarray(tr["step"], float), tr["burn"]
+    k = len(names)
+    fig, axes = plt.subplots(k, 1, figsize=(7.2, 1.6 * k + 0.6), sharex=True, squeeze=False)
+    for j, ax in enumerate(axes[:, 0]):
+        ax.plot(step, vals[:, :, j], lw=0.5, color=_BLUE, alpha=0.6)         # steps x walkers x parameters
+        ax.axvspan(0, burn, color=_GREY, alpha=0.2, lw=0)
+        ax.set_ylabel(names[j], fontsize=8)
+    axes[-1, 0].set_xlabel("Step")
+    if titles:
+        axes[0, 0].set_title("MCMC traces (grey = burn-in)")
+    fig.tight_layout()
+    return fig
 
 
 def timeseries_figure(rows, titles=True, symbol="T2"):
