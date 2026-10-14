@@ -120,7 +120,7 @@ docs/PLAN.md    the original build plan
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[test]"        # includes emcee, used by the MCMC tests
+pip install -e ".[test]"        # includes emcee (MCMC tests) and pytest-xdist; run the tests with: pytest -q -n auto
 pytest                          # ~90 s: runs every sample dataset through the pipeline
 python tools/dev_server.py      # http://localhost:8000  (generates the manifests on the fly)
 python tools/build_site.py site # what CI deploys; versions every asset URL so browsers never serve stale code
