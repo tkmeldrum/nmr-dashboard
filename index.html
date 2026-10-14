@@ -245,6 +245,8 @@
   <!-- shared by the Process and Uncertainty tabs -->
   <div id="run-bar" class="run-bar" hidden>
     <button type="button" id="run-btn">Run processing</button>
+    <button type="button" id="params-btn" class="secondary" title="Fill the settings in from a params.toml (or .json), for example one written by this page or used with the script">Load params…</button>
+    <input type="file" id="params-file" accept=".toml,.json" hidden>
     <button type="button" id="export-btn" class="secondary" title="Download a params.toml with these settings and a small script that runs the same analysis on your own computer (single dataset or a batch)">Export params + script</button>
     <progress id="run-progress" max="1" value="0" hidden></progress>
     <span id="run-status" class="status" role="status"></span>

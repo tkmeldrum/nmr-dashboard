@@ -1,6 +1,7 @@
 // Main thread: worker plumbing, folder loading, tab flow.
 import { $, state } from "./state.js";
 import { initPlotStyle } from "./plotstyle.js";
+import { initParamsLoad } from "./paramsload.js";
 import { initSave } from "./save.js";
 import { initFeedback } from "./feedback.js";
 import { initTabs, setTabEnabled, showTab } from "./tabs.js";
@@ -365,6 +366,7 @@ initFeedback();
 initResults();
 initUncertainty();
 initSave();
+initParamsLoad();
 initPlotStyle(() => { if (state.result) renderRaw(); if (state.results) { renderResults(); renderUncertainty(); } });
 $("busy-stop").addEventListener("click", restartPython);
 initProvenance();
