@@ -163,7 +163,8 @@ SPEC = {
 }
 
 # one-figure overrides: [figures.decay_fit] and so on. Limits and scales apply to the single-plot figures; the title to any figure.
-FIGURE_NAMES = ("decay_fit", "ilt_spectrum", "spatial", "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+FIGURE_NAMES = ("raw_data", "ft_profile_map", "decay_fit", "model_comparison", "ilt_spectrum", "alpha_sweep", "spatial", "spatial_extra", "mcmc_trace",
+                "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
 FIGURE_KEYS = {
     "title": _text,
     "xmin": _auto_or(_number()), "xmax": _auto_or(_number()), "ymin": _auto_or(_number()), "ymax": _auto_or(_number()),
@@ -431,8 +432,8 @@ def dump_toml(params=None, header=None):
             lines.append(f"{k} = {_toml_value(p[sec][k])}")
     figs = p.get("figures") or {}
     if not figs:
-        lines += ["", "[figures]", "# One-figure overrides go in tables named after the figure (decay_fit, ilt_spectrum, spatial, bootstrap_ilt,",
-                  "# bootstrap_distributions, t2d_spectrum, t2d_fit); limits and scales apply to the single-plot figures, in plotted units (s):",
+        lines += ["", "[figures]", "# One-figure overrides go in tables named after the figure (see FIGURE_NAMES in params.py; e.g. decay_fit, ilt_spectrum, alpha_sweep,",
+                  "# raw_data, spatial_extra, mcmc_trace); limits and scales apply to the single-plot figures, in plotted units (s):",
                   "# [figures.decay_fit]", "# title = \"My sample\"", "# xmin = 0.002", "# xmax = 0.01", "# yscale = \"log\"   # \"auto\", \"linear\" or \"log\""]
     for name, o in figs.items():
         lines += ["", f"[figures.{name}]"] + [f"{k} = {_toml_value(o[k])}" for k in FIGURE_DEFAULTS if o[k] != FIGURE_DEFAULTS[k]]

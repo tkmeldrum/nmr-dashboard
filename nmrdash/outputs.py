@@ -151,10 +151,12 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
 
 # ── figures ──────────────────────────────────────────────────────────────────
 
-def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True, band=None, style=None):
-    """band: the MCMC result to draw as a band on the decay figure (only when MCMC analysed that same decay).
+def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True, band=None, style=None, raw=None, kind="cpmg"):
+    """Every figure the page can show, for what was run.
 
+    band: the MCMC result to draw as a band on the decay figure (only when MCMC analysed that same decay).
     style: plot settings (see figures.STYLE_DEFAULTS). Without it, `titles` alone decides whether the figures carry titles.
+    raw / kind: the Raw data tab's contents and the sequence kind, for the raw-data figure.
     """
     d = Path(d)
     written = []
@@ -167,18 +169,31 @@ def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True,
         figures.save_figure(fig, d / f"{name}.{fmt}", fmt, dpi)
         written.append(f"{name}.{fmt}")
 
+    if raw:
+        save("raw_data", lambda r, titles: figures.raw_figure(r, kind, titles), raw, retight=kind == "cpmg")
     if res.get("mode") == "t2d":
         save("t2d_spectrum", figures.t2d_spectrum_figure, res, retight=False)
         save("t2d_fit", figures.t2d_fit_figure, res)
         return written
+    if res.get("ft"):
+        save("ft_profile_map", figures.ft_profile_map_figure, res)
     save("decay_fit", lambda r, b, titles: figures.decay_figure(r, b, titles), res, band)
+    if (res.get("multiexp") or {}).get("comparison"):
+        save("model_comparison", figures.model_comparison_figure, res)
     if res.get("ilt"):
         save("ilt_spectrum", figures.ilt_figure, res)
+        if res["ilt"].get("sweep"):
+            save("alpha_sweep", figures.alpha_sweep_figure, res)
     if res.get("ft"):
         save("spatial", figures.spatial_figure, res)
+        sp = res.get("spatial") or {}
+        if sp.get("multiexp") or sp.get("ilt"):
+            save("spatial_extra", figures.spatial_extra_figure, res)
     if mcmc:
         (d / "mcmc_corner.png").write_bytes(base64.b64decode(mcmc["corner_png_b64"]))
         written.append("mcmc_corner.png")
+        if mcmc.get("trace"):
+            save("mcmc_trace", figures.mcmc_trace_figure, mcmc)
     if boot and boot.get("ilt"):
         save("bootstrap_ilt", figures.bootstrap_ilt_figure, boot)
     if boot and boot.get("multiexp"):
