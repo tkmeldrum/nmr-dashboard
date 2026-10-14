@@ -135,3 +135,19 @@ def test_poorly_determined_t2_is_flagged():
     t, y = synth([(1000, 0.02)], noise=20)
     f = multiexp.fit(t, y, 2, offset=True)
     assert any("poorly determined" in w or "within 10%" in w or "unresolved" in w for w in f["warnings"])
+
+
+def test_a_component_the_data_do_not_support_is_named():
+    load(DATA / "green_22" / "1")
+    def fit(n):
+        return process({"echo": "integrate", "multiexp": {"enabled": True, "n": n, "offset": True, "ci_level": 0.95, "compare": False}})["multiexp"]["selected"]
+    three, two = fit(3), fit(2)
+    assert three["unsupported"] == [3] and any("Component 3" in w and "Try 2 components" in w for w in three["warnings"])
+    assert two["unsupported"] == [] and not any("not supported" in w for w in two["warnings"])
+
+
+def test_a_single_exponential_is_never_called_unsupported():
+    for d in CPMG:
+        load(d)
+        r = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}})
+        assert r["multiexp"]["selected"]["unsupported"] == [], d
