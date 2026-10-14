@@ -282,7 +282,19 @@ STYLE_DEFAULTS = {
     "title_text": "",
     "time_unit": "s",         # "s" or "ms": tick labels and axis labels only; the numbers saved to the CSV stay in seconds
     "decay_logy": False,      # log y-axis on the decay figure
+    "figures": {},            # per figure: {"title": str, "xlim": [lo, hi], "ylim": [lo, hi], "xscale": "linear"|"log", "yscale": ...}
 }
+
+FIGURES = ("decay_fit", "ilt_spectrum", "spatial", "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+LIMIT_FIGURES = ("decay_fit", "ilt_spectrum", "bootstrap_ilt", "t2d_spectrum")      # one main plot to put limits on
+
+
+def _pair(v):
+    try:
+        lo, hi = (None if x in (None, "") else float(x) for x in v)
+    except (TypeError, ValueError):
+        return [None, None]
+    return [lo, hi]
 
 
 def style_from(d):
@@ -301,10 +313,31 @@ def style_from(d):
     if s["time_unit"] not in ("s", "ms"):
         s["time_unit"] = "s"
     s["legend"], s["decay_logy"] = bool(s["legend"]), bool(s["decay_logy"])
+    figs = {}
+    for name, o in (s["figures"] or {}).items():
+        if name not in FIGURES or not isinstance(o, dict):
+            continue
+        f = {"title": str(o.get("title") or ""), "xlim": _pair(o.get("xlim") or []), "ylim": _pair(o.get("ylim") or [])}
+        for ax in ("xscale", "yscale"):
+            f[ax] = o.get(ax) if o.get(ax) in ("linear", "log") else None
+        figs[name] = f
+    s["figures"] = figs
     import matplotlib
     if s["cmap"] not in matplotlib.colormaps:
         s["cmap"] = "viridis"
     return s
+
+
+def _scale(ax, which, want):
+    """Switch an axis between linear and log (None keeps what the figure has); log axes get the decade tick labels."""
+    from matplotlib.ticker import ScalarFormatter
+    if want is None or getattr(ax, f"get_{which}scale")() == want:
+        return
+    if want == "log":
+        _log_t2_axis(ax, which)
+    else:
+        getattr(ax, f"set_{which}scale")("linear")
+        (ax.xaxis if which == "x" else ax.yaxis).set_major_formatter(ScalarFormatter())
 
 
 def styled(builder, style, *args, name="", retight=True):
@@ -340,13 +373,23 @@ def _apply(fig, s, name, retight):
         for a in fig.axes:
             if a.get_legend():
                 a.get_legend().remove()
+    over = s["figures"].get(name) or {}
     if s["decay_logy"] and name == "decay_fit" and fig.axes:
         fig.axes[0].set_yscale("log")
-    if s["title"] == "custom" and s["title_text"]:
+    main = fig.axes[0] if (name in LIMIT_FIGURES and fig.axes) else None
+    if main is not None:
+        _scale(main, "x", over.get("xscale"))
+        _scale(main, "y", over.get("yscale"))
+        for which, lim in (("x", over.get("xlim")), ("y", over.get("ylim"))):
+            if lim and (lim[0] is not None or lim[1] is not None):
+                cur = getattr(main, f"get_{which}lim")()
+                getattr(main, f"set_{which}lim")(cur[0] if lim[0] is None else lim[0], cur[1] if lim[1] is None else lim[1])
+    title = over.get("title") or (s["title_text"] if s["title"] == "custom" else "")
+    if title:
         if len(fig.axes) > 2:
-            fig.suptitle(s["title_text"])
+            fig.suptitle(title)
         else:
-            fig.axes[0].set_title(s["title_text"])
+            fig.axes[0].set_title(title)
     if s["width"] or s["height"]:
         w0, h0 = fig.get_size_inches()
         fig.set_size_inches(s["width"] or w0, s["height"] or h0)
