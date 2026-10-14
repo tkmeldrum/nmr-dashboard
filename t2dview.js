@@ -88,13 +88,16 @@ export function renderT2dPopulations() {
   const t = r.t2d, traces = [{ type: "heatmap", x: t.T2, y: t.D, z: t.spectrum, colorscale: "Greys", reversescale: true, showscale: false, opacity: 0.6, hoverinfo: "skip", zsmooth: false }];
   const xs = m.populations.flatMap((p) => [p.T2, ...(finite(p.T2_ci[0]) ? p.T2_ci : [])]);
   const u = state.unc || {};
-  for (const [src, label, size] of [[u.boot, "bootstrap", 3], [u.mcmc, "MCMC", 3]]) {
+  // Each method has its own marker shape (bootstrap: crosses, MCMC: dots) so the clouds can be told apart, and a large neutral marker in the legend.
+  for (const [src, label, symbol, size, opacity] of [[u.boot, "bootstrap", "x", 6, 0.7], [u.mcmc, "MCMC", "circle", 3, 0.3]]) {
     const sc = src && src.scatter;
     if (!sc) continue;
     sc.T2.forEach((arr, k) => {
       xs.push(Math.min(...arr), Math.max(...arr));
-      traces.push({ x: arr, y: sc.D[k], mode: "markers", marker: { size, color: POP_COLORS[k % 4], opacity: 0.3 }, name: label, legendgroup: label, showlegend: k === 0, hoverinfo: "skip" });
+      traces.push({ x: arr, y: sc.D[k], mode: "markers", marker: { symbol, size, color: POP_COLORS[k % 4], opacity, line: { width: symbol === "x" ? 1 : 0, color: POP_COLORS[k % 4] } },
+                    name: label, legendgroup: label, showlegend: false, hoverinfo: "skip" });
     });
+    traces.push({ x: [null], y: [null], mode: "markers", marker: { symbol, size: 10, color: ink(), line: { width: symbol === "x" ? 2 : 0, color: ink() } }, name: label, legendgroup: label, hoverinfo: "skip" });
   }
   m.populations.forEach((p, i) => {
     const bound = p.D_at_limit || p.T2_at_limit;
@@ -113,7 +116,7 @@ export function renderT2dPopulations() {
     xaxis: { ...base.xaxis, ...LOGTICKS, range: [Math.log10(Math.max(t.T2[0], Math.min(...xs) / 4)), Math.log10(Math.min(t.T2[t.T2.length - 1], Math.max(...xs) * 4))] },
     yaxis: { ...base.yaxis, ...LOGTICKS, range: [Math.log10(t.D[0] / 4), Math.log10(t.D[t.D.length - 1])] },     // room below the lowest D for a population sitting on the limit
     shapes: [band(t.D[0] / 10, lo), band(hi, t.D[t.D.length - 1] * 10)],
-    legend: { orientation: "h", y: -0.2 },
+    legend: { orientation: "h", y: -0.2, itemsizing: "constant" },
   }, CFG);
 }
 
