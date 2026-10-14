@@ -1,8 +1,11 @@
 import base64
+
 import json
 import os
 import shutil
 from pathlib import Path
+
+import pytest
 
 from nmrdash import webbatch
 
@@ -47,3 +50,20 @@ def test_the_script_batch_still_works_without_multiprocessing_imported_at_load()
     import subprocess
     import sys
     subprocess.run([sys.executable, "-c", "import nmrdash.runner, sys; assert 'concurrent.futures.process' not in sys.modules"], check=True)
+
+
+def test_a_t2d_batch_from_the_page_carries_the_model_and_the_population_columns():
+    settings = {"kind": "t2d", "t2d": {"t2_min": 1e-5, "t2_max": 1.0, "t2_steps": 20, "d_min": 1e-12, "d_max": 1e-8, "d_steps": 10, "alpha": 1e9, "peak_threshold_pct": 10.0},
+                "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable"}}
+    webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "t2d", "root_name": "demo",
+                    "output": {"figure_format": "png", "dpi": 50, "samples": False}})
+    for i, (label, src, ts) in enumerate([("a", DATA / "S3115_rt_100phr" / "1", 1_700_000_000_000), ("b", DATA / "M1115_rt_30phr" / "1", 1_700_000_900_000)]):
+        stage(i, src)
+        out = webbatch.run_one({"i": i, "label": label, "timestamp_ms": ts})
+        assert out["status"] == "ok" and {"t2d_model_populations.csv", "t2d_populations.png", "t2d_spectrum.png"} <= set(out["files"])
+    fin = webbatch.finish()
+    lines = base64.b64decode(fin["files"]["batch_summary.csv"]).decode().splitlines()
+    head = lines[0].split(",")
+    assert "t2d_pop1_T2_s" in head and "t2d_model_populations" in head and "timeseries_T2D.png" in fin["files"]
+    rows = [dict(zip(head, ln.split(","))) for ln in lines[1:]]
+    assert float(rows[1]["elapsed_min"]) == pytest.approx(15) and int(rows[0]["t2d_model_populations"]) == 3

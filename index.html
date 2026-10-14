@@ -134,6 +134,23 @@
           </div>
         </div>
 
+        <div class="analysis" data-for="t2d">
+          <label class="opt"><input type="checkbox" id="t2d-model-enabled" checked> <strong>Few-population model</strong> <small>(a handful of populations, each with its own T₂ and <i>D</i>, fitted with intervals)</small></label>
+          <div class="fields" id="t2d-model-fields">
+            <label>Populations <select id="t2d-model-k"><option value="auto" selected>automatic (BIC)</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+            <label><i>D</i> allowed in <select id="t2d-model-window"><option value="resolvable" selected>what the b-values can resolve</option><option value="map">the map's D range above</option></select></label>
+            <details class="more"><summary>Show more</summary><div class="more-body">
+              <p><strong>Why a model as well as the map.</strong> The map above is a regularised <em>distribution</em>: it shows where signal is, but it gives no error bars, and it can put weight where the data say nothing.
+                The few-population model fits a small number of discrete populations,</p>
+              <p class="equation">S(t, b) = Σ<sub>k</sub> A<sub>k</sub> exp(−t / T<sub>2,k</sub>) exp(−b D<sub>k</sub>), A<sub>k</sub> ≥ 0 (no offset),</p>
+              <p>each with an amplitude, T<sub>2</sub> and <i>D</i> and a confidence interval. It is fitted for 1 to 4 populations, starting from the regions the map found, and the number the
+                <a href="https://en.wikipedia.org/wiki/Bayesian_information_criterion" target="_blank" rel="noopener noreferrer">BIC</a> prefers is used unless you choose one. MCMC and the bootstrap on the Uncertainty tab sample this model.</p>
+              <p><strong>Limits.</strong> Each population is a single exponential in T<sub>2</sub> and in b (free diffusion). Restricted diffusion or non-exponential relaxation can show up as extra populations. A population
+                slower than the b-values can resolve is reported as a <em>bound</em> (no interval); one faster than that leaves no signal in the data, so it is never found, and the map's weight there is extrapolation.</p>
+            </div></details>
+          </div>
+        </div>
+
         <div class="analysis" data-for="cpmg t1">
           <label class="opt"><input type="checkbox" id="me-enabled" checked> <span data-for="cpmg">Multi-exponential fit</span><span data-for="t1">Recovery fit (T₁)</span></label>
           <div class="fields" id="me-fields">
@@ -191,8 +208,7 @@
   <!-- 4 · Uncertainty -->
   <section role="tabpanel" id="panel-uncertainty" aria-labelledby="tab-uncertainty" hidden>
     <h2>Uncertainty</h2>
-    <p class="message warn" data-for="t2d">MCMC and the bootstrap are not available for T₂–D data yet (each bootstrap replicate is a full 2D inversion, and MCMC needs a parametric
-      few-component model). The inversion itself reports a measured noise level and fit statistics.</p>
+    <p class="note" data-for="t2d">For T₂–D data, MCMC and the bootstrap sample the <strong>few-population model</strong> switched on in the Process tab (intervals are 95%). The regularised map itself has no intervals: each solve takes seconds to minutes, and its regions are summaries, not fitted quantities.</p>
     <fieldset data-for="cpmg t1">
       <legend>Fit confidence intervals</legend>
       <label>Confidence level
@@ -206,14 +222,14 @@
         nearest to <input type="number" id="unc-z" step="any" placeholder="strongest" style="width:8rem"> µm</label>
     </fieldset>
 
-    <fieldset data-for="cpmg t1">
-      <legend>MCMC <small>(Bayesian posterior of the multi-exponential fit)</small></legend>
+    <fieldset data-for="cpmg t1 t2d">
+      <legend>MCMC <small data-for="cpmg t1">(Bayesian posterior of the multi-exponential fit)</small><small data-for="t2d">(Bayesian posterior of the few-population model)</small></legend>
       <label class="opt"><input type="checkbox" id="mcmc-enabled"> Run MCMC</label>
       <div class="fields" id="mcmc-fields">
         <label>Walkers <input type="number" id="mcmc-walkers" value="32" min="8" step="2"></label>
         <label>Steps <input type="number" id="mcmc-steps" value="6000" min="100" step="500"></label>
         <label>Burn-in <input type="number" id="mcmc-burn" value="2000" min="0" step="100"></label>
-        <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small data-for="cpmg">(otherwise fixed from the imaginary channel)</small><small data-for="t1">(always sampled here: recovery data have no imaginary channel)</small></label>
+        <label><input type="checkbox" id="mcmc-sigma"> sample the noise σ <small data-for="cpmg t2d">(otherwise fixed from the imaginary channel)</small><small data-for="t1">(always sampled here: recovery data have no imaginary channel)</small></label>
         <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What MCMC does.</strong> A least-squares fit gives one best answer and a symmetric error bar. MCMC
               (<a href="https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo" target="_blank" rel="noopener noreferrer">Markov chain Monte Carlo</a>) instead explores <em>every</em> set of
               parameter values that is consistent with your data and its noise, and records how plausible each one is. The spread of the visited values is the uncertainty, and unlike an error bar it can be
@@ -221,7 +237,8 @@
               <p><strong>How it is done here.</strong> An ensemble of "walkers" moves through parameter space (the
               <a href="https://emcee.readthedocs.io/en/stable/" target="_blank" rel="noopener noreferrer">emcee</a> sampler; <a href="https://arxiv.org/abs/1202.3665" target="_blank" rel="noopener noreferrer">Foreman-Mackey et al. 2013</a>).
               The first <em>burn-in</em> steps are discarded while the walkers settle. Priors: amplitudes flat and ≥ 0; T<sub>2</sub> log-uniform between a tenth of the first and ten times the last echo time, ordered
-              fast → slow so components cannot swap; offset flat; σ log-uniform if sampled. It uses the model chosen on the Process tab.</p>
+              fast → slow so components cannot swap; offset flat; σ log-uniform if sampled. It uses the model chosen on the Process tab.
+              <span data-for="t2d">For T₂–D, each population has an amplitude, a T<sub>2</sub> and a <i>D</i> (log-uniform inside the range chosen on the Process tab, by default what the b-values can resolve); there is no offset.</span></p>
               <p><strong>Reading the results.</strong> The trace plot should look like stationary noise; the corner plot shows each parameter's distribution and the correlations between pairs; the
               <a href="https://emcee.readthedocs.io/en/stable/tutorials/autocorr/" target="_blank" rel="noopener noreferrer">autocorrelation time</a> says how many steps give one independent sample. The page warns when the chain is
               shorter than ~50 autocorrelation times. The default 6000 steps is about 100 for a typical decay; strongly correlated parameters need more. Intervals are central
@@ -229,8 +246,8 @@
       </div>
     </fieldset>
 
-    <fieldset data-for="cpmg t1">
-      <legend>Bootstrap <small>(refit surrogate decays)</small></legend>
+    <fieldset data-for="cpmg t1 t2d">
+      <legend>Bootstrap <small data-for="cpmg t1">(refit surrogate decays)</small><small data-for="t2d">(refit surrogate data sets with the few-population model)</small></legend>
       <label class="opt"><input type="checkbox" id="boot-enabled"> Run bootstrap</label>
       <div class="fields" id="boot-fields">
         <label>Replicates <input type="number" id="boot-n" value="200" min="20" step="20"></label>
@@ -240,7 +257,7 @@
             <option value="residual">resample the fit residuals</option>
             <option value="parametric">Gaussian, σ from the imaginary channel</option>
           </select></label>
-        <label><input type="checkbox" id="boot-me" checked> multi-exponential fit</label>
+        <label data-for="cpmg t1"><input type="checkbox" id="boot-me" checked> multi-exponential fit</label>
         <label data-for="cpmg"><input type="checkbox" id="boot-ilt" checked> ILT spectrum</label>
         <details class="more"><summary>Show more</summary><div class="more-body"><p><strong>What the bootstrap does.</strong> The
               <a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener noreferrer">bootstrap</a> asks "if I repeated the measurement, how much would the answer move?" by doing exactly that on the computer:
@@ -251,7 +268,7 @@
               <p>Intervals are percentile intervals at the confidence level above. More replicates smooth the intervals but take longer; a few hundred is usual.</p></div></details>
       </div>
     </fieldset>
-    <p class="note" data-for="cpmg t1">Both run after the processing, once you have confirmed a time estimate.</p>
+    <p class="note" data-for="cpmg t1 t2d">Both run after the processing, once you have confirmed a time estimate.</p>
 
 
   </section>
@@ -388,6 +405,18 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       </div>
       <h4>Regions</h4>
       <div class="table-wrap"><table id="t2d-regions" class="grid"></table></div>
+      <div id="t2d-model" hidden>
+        <h4>Few-population model</h4>
+        <p id="t2d-model-note" class="note"></p>
+        <div id="t2d-model-warnings"></div>
+        <div class="table-wrap"><table id="t2d-model-table" class="grid"></table></div>
+        <div class="plot-card wide"><div id="plot-t2d-pop" class="tall"></div></div>
+        <p class="note">Each marker is a population with its 95% interval (open triangles: only a bound on <i>D</i>; open circles: not supported by the data); the grey map is the regularised solution and the shaded bands are diffusion coefficients the b-values cannot resolve. Dots are bootstrap or MCMC samples, when you have run them on the Uncertainty tab.</p>
+        <details class="more"><summary>Model comparison</summary><div class="more-body">
+          <p>Each model is fitted from 1 to 4 populations. ΔBIC is relative to the best; lower is better, and a ΔBIC above about 10 is strong evidence against that model. The chosen model is the one BIC prefers unless you set the number.</p>
+          <div class="table-wrap"><table id="t2d-model-compare" class="grid"></table></div>
+        </div></details>
+      </div>
       <h4>Data, fit and residual</h4>
       <div class="plots t2d-maps">
         <div class="plot-card"><div id="plot-t2d-data"></div></div>

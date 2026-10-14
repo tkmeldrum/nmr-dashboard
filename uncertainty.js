@@ -3,9 +3,11 @@ import { $, state } from "./state.js";
 import { rpc } from "./rpc.js";
 import { baseLayout, CFG, COLORS, fmt, fmtSci, isOdd, okUnc, pct, sciGroup } from "./plotutil.js";
 import { renderResults } from "./results.js";
+import { renderT2dPopulations } from "./t2dview.js";
 import { refreshProvenance } from "./provenance.js";
 
 const run = { stop: false, running: false };
+const SCI_NAME = /T[12]|^D|mean D/;                       // time constants and diffusion coefficients are always shown in scientific notation
 const Z_FOR = { 0.68: 0.994, 0.95: 1.96, 0.99: 2.576 };   // normal quantiles, for least-squares intervals when no t value is at hand
 
 export function resetUncertainty() {
@@ -28,11 +30,11 @@ function readOptions() {
   return {
     target: document.querySelector('input[name="unc-target"]:checked').value,
     z_um: zRaw === "" ? null : +zRaw,
-    level: +$("me-ci").value,
+    level: state.result.kind === "t2d" ? 0.95 : +$("me-ci").value,         // the least-squares intervals of the T2-D model are 95%
     mcmc: { enabled: $("mcmc-enabled").checked, nwalkers: Math.round(+$("mcmc-walkers").value), steps: Math.round(+$("mcmc-steps").value),
             burn: Math.round(+$("mcmc-burn").value), sample_sigma: $("mcmc-sigma").checked },
     boot: { enabled: $("boot-enabled").checked, replicates: Math.round(+$("boot-n").value), method: $("boot-method").value,
-            do_multiexp: $("boot-me").checked, do_ilt: $("boot-ilt").checked && state.result.kind !== "t1" },
+            do_multiexp: state.result.kind === "t2d" ? true : $("boot-me").checked, do_ilt: $("boot-ilt").checked && state.result.kind === "cpmg" },
   };
 }
 
@@ -89,7 +91,9 @@ export async function runUncertainty() {
   const bar = $("unc-bar");
   try {
     validate(o);
-    if (o.mcmc.enabled && !state.results.multiexp) throw new Error("MCMC needs the multi-exponential fit: enable it on the Process tab and run again.");
+    if (state.results.mode === "t2d") {
+      if (!(state.results.t2d && state.results.t2d.model)) throw new Error("MCMC and the bootstrap sample the few-population model: switch it on in the Process tab and run again.");
+    } else if (o.mcmc.enabled && !state.results.multiexp) throw new Error("MCMC needs the multi-exponential fit: enable it on the Process tab and run again.");
     bar.hidden = false; $("unc-stop").hidden = true; $("unc-progress").value = 0;
     $("unc-status").textContent = "Preparing…";
 
@@ -141,6 +145,7 @@ export async function runUncertainty() {
       $("unc-status").textContent = j.kind === "mcmc" ? "Summarising the MCMC (drawing the corner plot)…" : "Summarising the bootstrap…";
       state.unc[j.kind] = await rpc(j.kind === "mcmc" ? "mcmc_finish" : "boot_finish", ...(j.kind === "mcmc" ? [{ fg: css("--plot-fg"), grid: css("--plot-grid") }] : []));
       renderUncertainty();
+      renderT2dPopulations();
     }
     bar.hidden = true;
     renderResults();                 // redraw the decay with the posterior-predictive band
@@ -178,7 +183,23 @@ const interval = (f, v, lo, hi) => `${f(v)} [${f(lo)}, ${f(hi)}]`;
 const warnings = (el, list) => el.replaceChildren(...list.map((text) => Object.assign(document.createElement("p"), { className: "message warn", textContent: text })));
 const lvl = (r) => Math.round(r.level * 100);
 
+// T2-D: the few-population model's least-squares estimates under the names the MCMC and bootstrap use
+function lsRowsT2d() {
+  const m = state.results.t2d && state.results.t2d.model;
+  if (!m) return {};
+  const out = { __z: m.t_crit }, K = m.K, one = K === 1;
+  m.populations.forEach((p, i) => {
+    const nm = (base) => (one ? base : `${base}${base === "T2" ? "," : ""}${i + 1}`);
+    out[nm("A")] = { v: p.A, se: p.A_se };
+    out[nm("T2")] = { v: p.T2, se: p.T2_se, ci: p.T2_ci[0] === null ? null : p.T2_ci };
+    out[nm("D")] = { v: p.D, se: p.D_se, ci: p.D_ci[0] === null ? null : p.D_ci };
+    if (!one) out[`fraction ${i + 1}`] = { v: p.fraction, se: p.fraction_se };
+  });
+  return out;
+}
+
 function lsRows() {
+  if (state.results.mode === "t2d") return lsRowsT2d();
   // least-squares reference values by name, from the fit shown on this page (only valid for the whole-decay target)
   const fit = state.results.multiexp && state.results.multiexp.selected;
   if (!fit || state.unc.targetKind !== "bulk") return {};
@@ -219,20 +240,20 @@ function renderCompare(u) {
   const names = [], ls = lsRows();
   const add = (n) => { if (!names.includes(n)) names.push(n); };
   (u.mcmc ? [...u.mcmc.params, ...u.mcmc.derived] : []).forEach((p) => add(p.name));
-  if (u.boot && u.boot.multiexp) [...u.boot.multiexp.params, ...u.boot.multiexp.derived].forEach((p) => add(p.name));
-  $("unc-compare").hidden = !(u.mcmc || (u.boot && u.boot.multiexp));
+  const bootMe = bootModel(u.boot);
+  if (bootMe) [...bootMe.params, ...bootMe.derived].forEach((p) => add(p.name));
+  $("unc-compare").hidden = !(u.mcmc || bootMe);
   if ($("unc-compare").hidden) return;
   const find = (r, n) => (r ? [...r.params, ...r.derived].find((p) => p.name === n) : null);
-  const bootMe = u.boot && u.boot.multiexp;
   const rows = names.map((n) => {
     const m = find(u.mcmc, n), b = find(bootMe, n), l = ls[n];
     const ref = m || b;
-    const f = rowFormat(ref.median, m ? m.sd : b.sd, /T[12]/.test(n));
+    const f = rowFormat(ref.median, m ? m.sd : b.sd, SCI_NAME.test(n));
     const z = ls.__z || Z_FOR[u.level] || 1.96;
     const lsCell = !l ? (ref.ls !== undefined && ref.ls !== null ? f(ref.ls) : "—")
-      : okUnc(l.v, l.se) ? interval(f, l.v, l.v - z * l.se, l.v + z * l.se) : `${f(l.v)} (uncertainty undetermined)`;
+      : okUnc(l.v, l.se) ? interval(f, l.v, ...(l.ci || [l.v - z * l.se, l.v + z * l.se])) : `${f(l.v)} (uncertainty undetermined)`;
     return { n, cells: [lsCell, b ? interval(f, b.median, b.lo, b.hi) : "—", m ? interval(f, m.median, m.lo, m.hi) : "—"],
-             est: [l && okUnc(l.v, l.se) ? { v: l.v, lo: l.v - z * l.se, hi: l.v + z * l.se } : null,
+             est: [l && okUnc(l.v, l.se) ? { v: l.v, lo: (l.ci || [l.v - z * l.se])[0], hi: (l.ci || [0, l.v + z * l.se])[1] } : null,
                    b ? { v: b.median, lo: b.lo, hi: b.hi } : null, m ? { v: m.median, lo: m.lo, hi: m.hi } : null] };
   }).map(({ n, cells, est }) => [n, ...cells.map((text, i) => flagged(text, i, est))]);
   table($("unc-compare-table"), ["Parameter", `Least squares (±${(Z_FOR[u.level] || 1.96).toFixed(2)} SE)`, `Bootstrap (${Math.round(u.level * 100)}%)`, `MCMC (${Math.round(u.level * 100)}% credible)`], rows);
@@ -247,7 +268,7 @@ function renderMcmc(r) {
     (r.sample_sigma ? "The noise σ was sampled." : `The noise σ was fixed at ${fmt(r.sigma)} (imaginary channel).`);
   warnings($("mcmc-warnings"), r.warnings);
   const rows = [...r.params, ...r.derived].map((p) => {
-    const f = rowFormat(p.median, p.sd, /T[12]/.test(p.name));
+    const f = rowFormat(p.median, p.sd, SCI_NAME.test(p.name));
     return [p.name, p.ls !== undefined && p.ls !== null ? `${f(p.ls)}${p.ls_se !== null && okUnc(p.ls, p.ls_se) ? " ± " + f(p.ls_se) : ""}` : "—",
             f(p.median), `[${f(p.lo)}, ${f(p.hi)}]`, p.sd === null ? "—" : f(p.sd)];
   });
@@ -275,18 +296,20 @@ function renderMcmc(r) {
   $("mcmc-corner").src = "data:image/png;base64," + r.corner_png_b64;
 }
 
+const bootModel = (b) => (b ? b.multiexp || (b.kind === "bootstrap_t2d" ? b : null) : null);    // the parameter-level part of a bootstrap result
+
 function renderBoot(r) {
   $("boot-results").hidden = false;
   const methodText = { noise: "the measured imaginary-channel noise, resampled", residual: "the fit residuals, resampled", parametric: "Gaussian noise with σ from the imaginary channel" }[r.method];
   $("boot-diag").textContent = `${r.replicates} replicates using ${methodText}; ${r.failures} failed to fit. Intervals are percentile intervals at ${lvl(r)}%.`;
   warnings($("boot-warnings"), r.warnings);
 
-  const me = r.multiexp;
+  const me = bootModel(r);
   $("boot-table").hidden = !me;
   $("boot-hists").hidden = !me;
   if (me) {
     const rows = [...me.params, ...me.derived].map((p) => {
-      const f = rowFormat(p.median, p.sd, /T[12]/.test(p.name));
+      const f = rowFormat(p.median, p.sd, SCI_NAME.test(p.name));
       return [p.name, p.ls !== undefined && p.ls !== null ? f(p.ls) : "—", f(p.median), `[${f(p.lo)}, ${f(p.hi)}]`, p.sd === null ? "—" : f(p.sd)];
     });
     table($("boot-table"), ["Parameter", "Least squares", "Bootstrap median", `${lvl(r)}% interval`, "Bootstrap SD"], rows);
