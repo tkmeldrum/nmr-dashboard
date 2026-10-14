@@ -7,7 +7,7 @@ import { figureStyle } from "./plotstyle.js";
 
 const canWrite = typeof window.showDirectoryPicker === "function";
 
-function bytes(b64) {
+export function bytes(b64) {
   const s = atob(b64), a = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
   return a;
@@ -17,7 +17,7 @@ function choices() {
   const u = state.unc || {};
   return {
     csv: $("save-csv").checked, figures: $("save-figs").checked, samples: $("save-samples").checked,
-    figure_format: $("save-format").value, dpi: Math.max(30, Math.min(1200, +$("save-dpi").value || 150)),
+    figure_format: $("save-format").value, dpi: Math.max(50, Math.min(1200, +$("save-dpi").value || 150)),
     style: { ...figureStyle(), decay_logy: $("fit-log").checked },     // what the decay plot on screen shows
     mcmc: !!u.mcmc, boot: !!u.boot, options: exportOptions(),
     page: { dataset: $("folder-name").textContent, uncertainty: [u.mcmc && "mcmc", u.boot && "bootstrap"].filter(Boolean),
@@ -31,7 +31,7 @@ function say(text, bad = false) {
   el.classList.toggle("error-text", bad);
 }
 
-async function writeInto(dir, folder, files) {
+export async function writeInto(dir, folder, files) {
   const sub = await dir.getDirectoryHandle(folder, { create: true });
   for (const [name, b64] of Object.entries(files)) {
     const w = await (await sub.getFileHandle(name, { create: true })).createWritable();

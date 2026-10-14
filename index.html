@@ -39,6 +39,7 @@
     <label id="chooser" hidden>Several datasets found. Open:
       <select id="dataset-select"></select>
     </label>
+    <div id="batch-banner" class="message warn" hidden><strong>Several datasets found.</strong> <span id="batch-banner-text"></span></div>
     <p id="message" class="message" hidden></p>
 
     <div id="params-section" hidden>
@@ -173,6 +174,24 @@
 
     </form>
     <p class="next"><button type="button" data-next="uncertainty">Next: Uncertainty →</button></p>
+    <section id="batch-card" class="batch-card" hidden>
+      <h3>Batch: the same settings on every dataset</h3>
+      <p class="message warn">Batch mode processes every dataset in the folder with the settings on this tab, one after another, here in your browser. It can take a long time (every dataset is a full run), and the page stays busy while it works. Your data still never leave this computer.</p>
+      <p id="batch-readiness" class="note"></p>
+      <p class="note">Only datasets of the same kind as this one are processed (others are listed as skipped). The T₂ range and other numbers above are used as they are for every dataset.</p>
+      <div class="save-opts">
+        <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
+        <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
+      </div>
+      <div class="save-bar">
+        <button type="button" id="batch-run">Run batch…</button>
+        <button type="button" id="batch-stop" class="secondary" hidden>Stop after this dataset</button>
+        <button type="button" id="batch-export" class="secondary" title="Download params.toml and a script that runs the whole batch on your own computer">Export params + script instead</button>
+        <progress id="batch-progress" max="1" value="0" hidden></progress>
+        <span id="batch-status" class="status" role="status"></span>
+      </div>
+      <ul id="batch-log" class="batch-log"></ul>
+    </section>
   </section>
 
   <!-- 4 · Uncertainty -->
@@ -240,6 +259,7 @@
     </fieldset>
     <p class="note" data-for="cpmg t1">Both run after the processing, once you have confirmed a time estimate.</p>
     <p class="next"><button type="button" data-next="results" id="next-results" disabled>Results appear after you run the processing ↓</button></p>
+
   </section>
 
   <!-- shared by the Process and Uncertainty tabs -->
@@ -287,7 +307,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
         <label><input type="checkbox" id="save-samples" checked> MCMC and bootstrap samples</label>
         <label><input type="checkbox" id="save-figs" checked> Figures</label>
         <label>as <select id="save-format"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label>
-        <label id="save-dpi-row">resolution <input type="number" id="save-dpi" value="200" min="30" max="1200" step="50"> dpi</label>
+        <label id="save-dpi-row">resolution <input type="number" id="save-dpi" value="200" min="50" max="1200" step="50"> dpi</label>
       </div>
       <p class="note">Every save also writes params_used.toml, provenance.json (inputs, settings, versions) and a summary.md.</p>
       <details class="plot-settings">
@@ -456,6 +476,16 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
     </details>
   </section>
 
+  <dialog id="batch-dialog" aria-labelledby="batch-dialog-title">
+    <form method="dialog">
+      <h3 id="batch-dialog-title">Run the batch?</h3>
+      <p id="batch-dialog-text"></p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button value="run" id="batch-dialog-run">Run batch</button>
+      </menu>
+    </form>
+  </dialog>
   <dialog id="unc-dialog" aria-labelledby="unc-dialog-title">
     <form method="dialog">
       <h3 id="unc-dialog-title">Run MCMC / bootstrap?</h3>
