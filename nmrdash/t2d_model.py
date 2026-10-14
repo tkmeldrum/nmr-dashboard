@@ -64,8 +64,8 @@ def _starts(regions, K, lo, hi, rng, n):
     return out
 
 
-def fit_k(t, b, Y, K, regions, t2_range, d_range, sigma=None, n_starts=8, seed=0):
-    """Least-squares fit of K populations; returns the best of several starts, with intervals from the covariance."""
+def fit_params(t, b, Y, K, regions, t2_range, d_range, sigma=None, n_starts=8, seed=0):
+    """The best-fit amplitudes and ln T2 / ln D of K populations (ordered by T2), without intervals: what a bootstrap replicate needs."""
     t, b, Y = np.asarray(t, float), np.asarray(b, float), np.asarray(Y, float)
     rng = np.random.default_rng(seed)
     lo, hi = (t2_range[0], d_range[0]), (t2_range[1], d_range[1])
@@ -85,7 +85,13 @@ def fit_k(t, b, Y, K, regions, t2_range, d_range, sigma=None, n_starts=8, seed=0
     order = np.argsort(best.x[:K])                                       # populations ordered by T2 (then D)
     lnT, lnD = best.x[:K][order], best.x[K:][order]
     E, G = basis(t, b, np.exp(lnT), np.exp(lnD))
-    A = _solve_amplitudes(Y, E, G)
+    return _solve_amplitudes(Y, E, G), lnT, lnD, (lb, ub)
+
+
+def fit_k(t, b, Y, K, regions, t2_range, d_range, sigma=None, n_starts=8, seed=0):
+    """Least-squares fit of K populations; returns the best of several starts, with intervals from the covariance."""
+    t, b, Y = np.asarray(t, float), np.asarray(b, float), np.asarray(Y, float)
+    A, lnT, lnD, (lb, ub) = fit_params(t, b, Y, K, regions, t2_range, d_range, sigma, n_starts, seed)
     return _summarise(t, b, Y, A, lnT, lnD, lb[:K][0], ub[:K][0], (lb[K], ub[K]), sigma)
 
 
