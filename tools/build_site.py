@@ -54,6 +54,11 @@ def _sub(text, old, new):
     return text.replace(old, new)
 
 
+# What the About page says about where the page's own code and libraries come from (kept next to the Content-Security-Policy it describes)
+PRIVACY_TEXT = ("When it starts, the page downloads the Python runtime and the plotting library from public servers (jsDelivr) and, only if you use MCMC, "
+                "one small package from PyPI. A content-security policy built into the page stops it from connecting anywhere else, so it cannot send your data out even by mistake.")
+
+
 def build(out, version):
     out = Path(out)
     shutil.rmtree(out, ignore_errors=True)
@@ -64,6 +69,14 @@ def build(out, version):
     html = _sub(html, 'src="app.js"', f'src="app.js?v={version}"')
     (out / "index.html").write_text(html)
     shutil.copy(ROOT / "style.css", out / "style.css")
+    about = (ROOT / "about.html").read_text()
+    about = _sub(about, "{{COMMIT}}", (commit_id() or "unknown")[:10] + ("+local changes" if tree_is_dirty() else ""))
+    about = _sub(about, "{{BUILT}}", time.strftime("built %Y-%m-%d", time.gmtime()))
+    about = _sub(about, "{{PRIVACY}}", PRIVACY_TEXT)
+    about = _sub(about, 'href="style.css"', f'href="style.css?v={version}"')
+    (out / "about.html").write_text(about)
+    for src, dst in (("LICENSE", "LICENSE.txt"), ("NOTICE", "NOTICE.txt"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.txt")):
+        shutil.copy(ROOT / src, out / dst)
     shutil.copy(ROOT / "worker.js", out / "worker.js")
     # ES modules: version every relative import so a deploy never mixes old and new modules
     for js in sorted(ROOT.glob("*.js")):

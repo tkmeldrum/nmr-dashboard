@@ -163,3 +163,10 @@ td.outlier { background:rgba(213, 94, 0, .18); }
 .batch-log { list-style:none; margin:.5rem 0 0; padding:0; max-height:16rem; overflow:auto; font-size:.9rem; }
 .batch-log li { padding:.1rem 0; }
 .batch-log .bad { color:#c0392b; }
+
+.about { max-width:50rem; margin:0 auto; padding:1.5rem 1rem 4rem; line-height:1.55; }
+.about h2 { margin-top:2rem; }
+.about-link { margin:0 0 .5rem; font-size:.9rem; }
+.about table { max-width:100%; table-layout:auto; }
+.about td, .about th { overflow-wrap:anywhere; vertical-align:top; }
+.about table.grid td { white-space:normal; }

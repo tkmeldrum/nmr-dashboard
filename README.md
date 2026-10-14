@@ -114,7 +114,7 @@ docs/PLAN.md    the original build plan
 ```
 
 `nmrdash/` is the canonical home of this code. It started as copies of `MeldrumLabCode/pythonic/` (`kea_io.py`,
-`run_1dilt.py`) and `PED/`; the pythonic scripts have **not** yet been switched to import from `nmrdash`.
+`run_1dilt.py`); the pythonic scripts have **not** yet been switched to import from `nmrdash`.
 
 ## Develop
 
@@ -140,16 +140,11 @@ sample-data explorer; CI and Pages deploy.
 
 **Next (see `docs/PLAN.md` for the original phasing):**
 
-1. **Regularised inversion, replacing the ILT-only option** (flagged by Tyler, 2026-10-13): one "Regularised inversion" analysis
-   with a choice of penalty, each a checkbox so they can be compared on one plot: smoothing (the current MATLAB-matched ILT),
-   **L1**, **L2**, **SqrtLasso**, **ElasticNet** and **PED**. These are the regularisers already in `PED/t2_analysis_real_data.py`
-   (`PED_LBFGS`: softplus-positive weights, L-BFGS). It needs the PED port below as its engine; the page, params file,
-   bootstrap and provenance would then treat every penalty alike.
-2. **PED analysis** (deferred at Tyler's request): port `PED/t2_analysis_real_data.py` (`PED_LBFGS`, `T2Analyzer`) from PyTorch to numpy/scipy L-BFGS,
-   keeping the regularisers (None, L1, L2, PED, ElasticNet, SQRLasso), with a **parity test against the PyTorch
-   original** (needs PyTorch locally; not run in CI).
+1. **Further regularised-inversion options** (planned, details to follow once the underlying methods are published): more than one
+   penalty to choose from and compare on one plot, with the page, params file, bootstrap and provenance treating them alike.
+2. (reserved)
 3. ~~Uncertainty tab: MCMC and bootstrap~~ **done on branch `uncertainty`** (see the pull request); still to do: bootstrap
-   bands for PED spectra once PED exists, and MCMC/bootstrap at *every* z position (today: one position at a time).
+   bands for the planned inversion options, and MCMC/bootstrap at *every* z position (today: one position at a time).
 4. ~~Plot controls and saving~~ **done on branch `save-and-plot-controls`**: a Save card on the Results tab writes tables (CSV),
    figures (PNG/SVG/PDF, matplotlib), `params_used.toml`, `provenance.json` and `summary.md` into a new
    `processed_<timestamp>/` folder (inside the data folder, or another folder, in Chrome/Edge; a `.zip` elsewhere).

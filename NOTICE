@@ -1,0 +1,7 @@
+nmr-dashboard
+Copyright 2026 Tyler Meldrum and the nmr-dashboard contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This software runs in a web browser together with, and on top of, software written by others, listed with their licences in
+THIRD_PARTY_NOTICES.md and on the About page of the site. Their notices are kept as they ship.

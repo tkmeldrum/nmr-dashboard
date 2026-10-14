@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "nmrdash"
 version = "0.0.1"
 description = "Kea CPMG NMR processing, runs in the browser (Pyodide) or on the desktop"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dependencies = ["numpy", "scipy", "matplotlib", "tomli; python_version < '3.11'"]
 
