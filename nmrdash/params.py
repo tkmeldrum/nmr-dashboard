@@ -117,8 +117,14 @@ SPEC = {
         ("alpha", 1e9, "Regularisation strength: larger = less smoothing.", _number(0, lo_open=True)),
         ("peak_threshold_pct", 10.0, "Regions of the spectrum above this % of its maximum are reported as peaks.", _number(0, 100)),
     ],
+    "t2d_model": [
+        ("enabled", True, "T2-D: also fit a few-population model (T2, D and amplitude per population, each with an interval). MCMC and the bootstrap sample this\n# model; the regularised map itself has no intervals.", _boolean),
+        ("populations", "auto", "Number of populations: \"auto\" (the number BIC prefers, from 1 to 4) or a whole number from 1 to 4.", _auto_or(_integer(1, 4))),
+        ("d_window", "resolvable", "Diffusion range the populations may occupy: \"resolvable\" (what the b-values can tell apart) or \"map\" (the map's d_min to d_max).", _one_of("resolvable", "map")),
+        ("seed", 0, "", _integer(0)),
+    ],
     "mcmc": [
-        ("enabled", False, "MCMC (emcee) on the multi-exponential model: needs the emcee package.", _boolean),
+        ("enabled", False, "MCMC (emcee) on the multi-exponential model (T2-D: on the few-population model): needs the emcee package.", _boolean),
         ("walkers", 32, "", _integer(8)),
         ("steps", 6000, "", _integer(100)),
         ("burn", 2000, "Steps discarded as burn-in (must be below steps).", _integer(0)),
@@ -158,13 +164,13 @@ SPEC = {
     "batch": [
         ("t0", "first", "Zero of the elapsed-time column: \"first\" (the earliest dataset), \"none\" (no elapsed time) or an ISO date-time.", _t0),
         ("jobs", 1, "Datasets processed in parallel.", _integer(1, 256)),
-        ("timestamps_file", "", "Optional CSV with columns folder,timestamp (ISO) that overrides the data.2d modification times, e.g. after files were copied.", _text),
+        ("timestamps_file", "", "Optional CSV with columns folder,timestamp (ISO) that overrides the data files' modification times, e.g. after files were copied.", _text),
     ],
 }
 
 # one-figure overrides: [figures.decay_fit] and so on. Limits and scales apply to the single-plot figures; the title to any figure.
 FIGURE_NAMES = ("raw_data", "ft_profile_map", "decay_fit", "model_comparison", "ilt_spectrum", "alpha_sweep", "spatial", "spatial_extra", "mcmc_trace",
-                "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_fit")
+                "bootstrap_ilt", "bootstrap_distributions", "t2d_spectrum", "t2d_populations", "t2d_fit")
 FIGURE_KEYS = {
     "title": _text,
     "xmin": _auto_or(_number()), "xmax": _auto_or(_number()), "ymin": _auto_or(_number()), "ymax": _auto_or(_number()),
@@ -315,9 +321,18 @@ def to_settings_t1(params):
 
 
 def to_settings_t2d(params):
-    """Settings for a T2-D (SSE-T2) dataset. Options are empty: MCMC / bootstrap are not available for the 2D inversion."""
+    """Settings for a T2-D (SSE-T2) dataset, and the uncertainty options (MCMC / bootstrap sample the few-population model)."""
     p = validate(params)
-    return {"kind": "t2d", "exclude_first": p["processing"]["exclude_first"], "t2d": dict(p["t2d"])}, {}
+    tm, un, mc, bs = p["t2d_model"], p["uncertainty"], p["mcmc"], p["bootstrap"]
+    settings = {"kind": "t2d", "exclude_first": p["processing"]["exclude_first"], "t2d": dict(p["t2d"]),
+                "t2d_model": {"enabled": tm["enabled"], "k": None if tm["populations"] == AUTO else tm["populations"], "d_window": tm["d_window"], "seed": tm["seed"]}}
+    target = {"target": "bulk", "z_um": None, "ci_level": un["ci_level"]}
+    options = {
+        "mcmc": {"enabled": mc["enabled"], **target, "nwalkers": mc["walkers"], "steps": mc["steps"], "burn": mc["burn"], "sample_sigma": mc["sample_sigma"], "seed": mc["seed"]},
+        "bootstrap": {"enabled": bs["enabled"], **target, "replicates": bs["replicates"], "method": None if bs["method"] == AUTO else bs["method"],
+                      "do_multiexp": True, "do_ilt": False, "seed": bs["seed"]},
+    }
+    return settings, options
 
 
 def from_settings(settings, options=None, base=None):
@@ -326,6 +341,19 @@ def from_settings(settings, options=None, base=None):
     p["processing"]["exclude_first"] = int(settings.get("exclude_first", 0) or 0)
     if settings.get("kind") == "t2d":
         p["t2d"].update(settings.get("t2d") or {})
+        tm = settings.get("t2d_model") or {}
+        p["t2d_model"].update({"enabled": bool(tm.get("enabled", True)), "populations": AUTO if tm.get("k") in (None, "auto") else tm["k"],
+                               "d_window": tm.get("d_window", "resolvable"), "seed": tm.get("seed", 0)})
+        p["uncertainty"]["ci_level"] = (options or {}).get("mcmc", {}).get("ci_level", 0.95)
+        for name in ("mcmc", "bootstrap"):
+            o = (options or {}).get(name) or {}
+            if o:
+                p[name]["enabled"] = bool(o.get("enabled", False))
+                if name == "mcmc":
+                    p["mcmc"].update({"walkers": o.get("nwalkers", 32), "steps": o.get("steps", 6000), "burn": o.get("burn", 2000),
+                                      "sample_sigma": bool(o.get("sample_sigma", False)), "seed": o.get("seed", 0)})
+                else:
+                    p["bootstrap"].update({"replicates": o.get("replicates", 200), "method": o.get("method") or AUTO, "seed": o.get("seed", 0)})
         return validate(p)
     if settings.get("kind") == "t1":
         me = settings.get("multiexp") or {}

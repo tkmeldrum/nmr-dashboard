@@ -18,6 +18,14 @@ CHUNK_STEPS, CHUNK_REPS = 500, 25
 LIGHT_THEME = {"fg": "#1a1a1a", "grid": "#bbbbbb"}
 
 
+DATA_FILES = ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat")      # the main data file of CPMG, then T2-D, then T1 (the page uses the same order)
+
+
+def _data_file(folder):
+    """The file whose modification time says when the data were written: the first of DATA_FILES that exists."""
+    return next((f for f in (Path(folder) / n for n in DATA_FILES) if f.is_file()), None)
+
+
 def _utc(ts):
     return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
 
@@ -51,8 +59,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
     row = {"dataset": rel_name or folder.name, "folder": str(folder), "status": "failed", "reason": "", "timestamp_utc": None,
            "timestamp_local": None, "mode": p["processing"]["echo"], "output_dir": None, "warnings": []}
     try:
-        data2d = folder / "data.2d"
-        mtime = data2d.stat().st_mtime if data2d.is_file() else None
+        data2d = _data_file(folder)
+        mtime = data2d.stat().st_mtime if data2d else None
         if mtime:
             row["timestamp_utc"] = _utc(mtime).isoformat(timespec="seconds")
             row["timestamp_local"] = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
@@ -81,9 +89,10 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         mcmc = boot = None
         samples_n = 5000 if p["output"]["samples"] else 0
         mc, bs = options.get("mcmc", {"enabled": False}), options.get("bootstrap", {"enabled": False})
-        if info["kind"] == "t2d" and (p["mcmc"]["enabled"] or p["bootstrap"]["enabled"]):
-            warnings.append("MCMC and the bootstrap are not available for T2-D data yet; they were skipped.")
-        if info["kind"] == "t1":
+        if info["kind"] == "t2d" and (p["mcmc"]["enabled"] or p["bootstrap"]["enabled"]) and not p["t2d_model"]["enabled"]:
+            warnings.append("MCMC and the bootstrap for T2-D sample the few-population model, which is switched off ([t2d_model] enabled = false); they were skipped.")
+            mc, bs = {**mc, "enabled": False}, {**bs, "enabled": False}
+        if info["kind"] in ("t1", "t2d"):
             mc = {**mc, "target": "bulk"}
         if mc["enabled"]:
             try:
@@ -154,7 +163,11 @@ def _key_results(res, mcmc, boot):
     out = {"multiexp": None, "ilt": None, "t2d": None, "noise_sigma": res["decay"].get("noise_sigma")}
     if res.get("t2d"):
         r = res["t2d"]
-        out["t2d"] = {"peaks": r["peaks"][:3], "rmse_over_amp": r["rmse_over_amp"], "chi2_per_point": r["chi2_per_point"]}
+        out["t2d"] = {"peaks": r["peaks"][:3], "rmse_over_amp": r["rmse_over_amp"], "chi2_per_point": r["chi2_per_point"], "model": None}
+        m = r.get("model")
+        if m:
+            out["t2d"]["model"] = {"K": m["K"], "recommended_k": m["recommended_k"], "chi2_per_point": m["chi2_per_point"],
+                                   "populations": [{k: p[k] for k in ("T2", "T2_se", "D", "D_se", "A", "fraction", "fraction_se", "supported", "D_at_limit", "T2_at_limit")} for p in m["populations"]]}
     if me:
         out["multiexp"] = {"n": me["n"], "components": [{"T2": c["T2"], "T2_se": c["T2_se"], "A": c["A"], "A_se": c["A_se"], "fraction": c["fraction"]} for c in me["components"]],
                            "offset": me["offset_value"], "mean_T2": me["mean_T2"], "mean_T2_se": me["mean_T2_se"], "total_amplitude": me["total_amplitude"],
@@ -201,8 +214,8 @@ def _timestamp(folder, overrides):
     if key in overrides:
         t = overrides[key]
         return t if t.tzinfo else t.astimezone()
-    f = Path(folder) / "data.2d"
-    return _utc(f.stat().st_mtime) if f.is_file() else None
+    f = _data_file(folder)
+    return _utc(f.stat().st_mtime) if f else None
 
 
 def _work(args):
@@ -261,6 +274,11 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     has_t2d = any(r.get("kind") == "t2d" for r in rows)
     if has_t2d:
         head += [f"t2d_peak{k}_{q}" for k in (1, 2, 3) for q in ("T2_s", "D_m2s", "fraction")] + ["t2d_rmse_over_signal_range", "t2d_chi2_per_point"]
+    maxk = max((len(r["result"]["t2d"]["model"]["populations"]) for r in rows if r.get("kind") == "t2d" and r.get("result") and (r["result"].get("t2d") or {}).get("model")), default=0)
+    if maxk:
+        head += ["t2d_model_populations", "t2d_model_chi2_per_point"]
+        for k in range(1, maxk + 1):
+            head += [f"t2d_pop{k}_T2_s", f"t2d_pop{k}_T2_se", f"t2d_pop{k}_D_m2s", f"t2d_pop{k}_D_se", f"t2d_pop{k}_fraction", f"t2d_pop{k}_fraction_se"]
     head += ["warnings"]
     table = []
     for r in rows:
@@ -287,6 +305,12 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
                 pk = td["peaks"][k] if td and k < len(td["peaks"]) else None
                 line += [pk["T2_mean"], pk["D_mean"], pk["fraction"]] if pk else [None] * 3
             line += [td["rmse_over_amp"], td["chi2_per_point"]] if td else [None, None]
+        if maxk:
+            tm = (res.get("t2d") or {}).get("model")
+            line += [tm["K"], tm["chi2_per_point"]] if tm else [None, None]
+            for k in range(maxk):
+                pp = tm["populations"][k] if tm and k < len(tm["populations"]) else None
+                line += [pp["T2"], pp["T2_se"], pp["D"], pp["D_se"], pp["fraction"], pp["fraction_se"]] if pp else [None] * 6
         line.append("; ".join(r.get("warnings", [])))
         table.append(line)
     outputs.write_csv(bdir / "batch_summary.csv", head, table)
@@ -294,7 +318,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     prov = {"schema": provenance.SCHEMA, "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "kind": "batch",
             "root": str(root), "command": command, "nmrdash": provenance.nmrdash_build(), "environment": provenance.environment(),
             "params_file": {"path": str(params_path) if params_path else None, "text": params_text},
-            "timestamps": {"source": "data.2d modification time" + (f", overridden from {p['batch']['timestamps_file']}" if p["batch"]["timestamps_file"] else ""),
+            "timestamps": {"source": "modification time of the main data file (data.2d, else data2D_Cp.2d, data2D.dat or data.dat)" + (f", overridden from {p['batch']['timestamps_file']}" if p["batch"]["timestamps_file"] else ""),
                            "t0": t0.isoformat() if t0 else None, "t0_rule": p["batch"]["t0"]},
             "datasets": [{"dataset": r["dataset"], "status": r["status"], "reason": r["reason"], "timestamp_utc": r["timestamp_utc"], "elapsed_min": r.get("elapsed_min"),
                           "output_dir": r["output_dir"]} for r in rows]}
@@ -306,3 +330,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
             if len(ok) >= 2:
                 fig = figures.timeseries_figure(ok, p["output"]["titles"], sym)
                 figures.save_figure(fig, bdir / f"{name}.{p['output']['figure_format']}", p["output"]["figure_format"], p["output"]["figure_dpi"])
+        okd = [r for r in rows if r["status"] == "ok" and r.get("kind") == "t2d" and ((r.get("result") or {}).get("t2d") or {}).get("model")]
+        if len(okd) >= 2:
+            fig = figures.timeseries_t2d_figure(okd, p["output"]["titles"])
+            figures.save_figure(fig, bdir / f"timeseries_T2D.{p['output']['figure_format']}", p["output"]["figure_format"], p["output"]["figure_dpi"])

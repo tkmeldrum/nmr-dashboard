@@ -49,6 +49,21 @@ def _t2d_tables(res, out):
     out("t2d_data_fit_residual.csv", ["echo_time_s", "b_value_1e-9_s_per_m2", "data", "fit", "residual"], rows)
 
 
+def _t2d_model_tables(res, out):
+    m = (res.get("t2d") or {}).get("model")
+    if not m:
+        return
+    out("t2d_model_populations.csv", ["population", "T2_s", "T2_se", "T2_ci_lo", "T2_ci_hi", "D_m2s", "D_se", "D_ci_lo", "D_ci_hi", "amplitude", "amplitude_se",
+                                      "fraction", "fraction_se", "supported_by_data", "D_at_limit", "T2_at_limit"],
+        [[i + 1, p["T2"], p["T2_se"], p["T2_ci"][0], p["T2_ci"][1], p["D"], p["D_se"], p["D_ci"][0], p["D_ci"][1], p["A"], p["A_se"], p["fraction"], p["fraction_se"],
+          int(p["supported"]), p["D_at_limit"] or "", p["T2_at_limit"] or ""] for i, p in enumerate(m["populations"])])
+    out("t2d_model_comparison.csv", ["populations", "parameters", "rss", "chi2_per_point", "delta_aic", "delta_bic"],
+        [[c["k"], c["n_params"], c["rss"], c["chi2_per_point"], c["d_aic"], c["d_bic"]] for c in m["comparison"]])
+    out("t2d_model_statistics.csv", ["quantity", "value"], [("populations", m["K"]), ("populations_preferred_by_bic", m["recommended_k"]), ("rss", m["rss"]), ("chi2_per_point", m["chi2_per_point"]),
+        ("noise_sigma", m["sigma"]), ("data_points", m["n_points"]), ("parameters", m["n_params"]), ("D_window_min_m2s", m["d_window"][0]), ("D_window_max_m2s", m["d_window"][1]),
+        ("T2_min_s", m["t2_range"][0]), ("T2_max_s", m["t2_range"][1])])
+
+
 def write_tables(d, res, mcmc=None, boot=None, samples=True):
     """CSV files into directory d; returns the list of file names written."""
     d = Path(d)
@@ -60,8 +75,15 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
 
     if res.get("mode") == "t2d":
         _t2d_tables(res, out)
-        return written
+        _t2d_model_tables(res, out)
+        res = {**res, "_skip_decay": True}
+    else:
+        _decay_tables(d, res, out)
+    _uncertainty_tables(res, mcmc, boot, samples, out)
+    return written
 
+
+def _decay_tables(d, res, out):
     t, y = res["decay"]["t"], res["decay"]["y"]
     me = (res.get("multiexp") or {}).get("selected")
     il = res.get("ilt")
@@ -124,6 +146,10 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
             out("spatial_ilt_peaks.csv", ["z_um", "mean_T2_s", "rmse"] + [f"peak{b['t2_peak']:.2e}_meanT2_s" for b in m["bands"]] + [f"peak{b['t2_peak']:.2e}_fraction" for b in m["bands"]],
                 [[z, m["mean_T2"][i], m["rmse"][i]] + [m["band_mean_T2"][k][i] for k in range(nb)] + [m["band_fraction"][k][i] for k in range(nb)] for i, z in enumerate(m["z_um"])])
 
+    return None
+
+
+def _uncertainty_tables(res, mcmc, boot, samples, out):
     if mcmc:
         out("mcmc_summary.csv", ["parameter", "least_squares", "least_squares_se", "posterior_median", "interval_lo", "interval_hi", "posterior_sd", "posterior_mean"],
             [[p["name"], p.get("ls"), p.get("ls_se"), p["median"], p["lo"], p["hi"], p["sd"], p["mean"]] for p in mcmc["params"] + mcmc["derived"]])
@@ -134,7 +160,12 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
         if samples and mcmc.get("samples"):
             out("mcmc_samples.csv", mcmc["samples"]["names"], mcmc["samples"]["values"])
 
-    if boot:
+    if boot and boot.get("kind") == "bootstrap_t2d":
+        out("bootstrap_summary.csv", ["parameter", "least_squares", "bootstrap_median", "interval_lo", "interval_hi", "bootstrap_sd", "bootstrap_mean"],
+            [[p["name"], p.get("ls"), p["median"], p["lo"], p["hi"], p["sd"], p["mean"]] for p in boot["params"] + boot["derived"]])
+        if samples:
+            out("bootstrap_samples.csv", boot["samples"]["names"], boot["samples"]["values"])
+    elif boot:
         bm = boot.get("multiexp")
         if bm:
             out("bootstrap_summary.csv", ["parameter", "least_squares", "bootstrap_median", "interval_lo", "interval_hi", "bootstrap_sd", "bootstrap_mean"],
@@ -146,7 +177,6 @@ def write_tables(d, res, mcmc=None, boot=None, samples=True):
             out("bootstrap_ilt_band.csv", ["T2_s", "ilt_of_data", "bootstrap_lo", "bootstrap_median", "bootstrap_hi"], zip(bi["tau"], bi["spectrum"], bi["lo"], bi["median"], bi["hi"]))
             out("bootstrap_ilt_peaks.csv", ["peak_T2_s", "T2_of_data_s", "T2_lo", "T2_median", "T2_hi", "fraction_of_data", "fraction_lo", "fraction_median", "fraction_hi"],
                 [[b["t2_peak"], b["base_mean_T2"], b["T2"]["lo"], b["T2"]["median"], b["T2"]["hi"], b["base_fraction"], b["fraction"]["lo"], b["fraction"]["median"], b["fraction"]["hi"]] for b in bi["bands"]])
-    return written
 
 
 # ── figures ──────────────────────────────────────────────────────────────────
@@ -173,7 +203,15 @@ def write_figures(d, res, mcmc=None, boot=None, fmt="png", dpi=150, titles=True,
         save("raw_data", lambda r, titles: figures.raw_figure(r, kind, titles), raw, retight=kind == "cpmg")
     if res.get("mode") == "t2d":
         save("t2d_spectrum", figures.t2d_spectrum_figure, res, retight=False)
+        if res["t2d"].get("model"):
+            save("t2d_populations", figures.t2d_populations_figure, res, mcmc, boot)
+            save("model_comparison", figures.model_comparison_figure, res)
         save("t2d_fit", figures.t2d_fit_figure, res)
+        if mcmc:
+            (d / "mcmc_corner.png").write_bytes(base64.b64decode(mcmc["corner_png_b64"]))
+            written.append("mcmc_corner.png")
+            if mcmc.get("trace"):
+                save("mcmc_trace", figures.mcmc_trace_figure, mcmc)
         return written
     if res.get("ft"):
         save("ft_profile_map", figures.ft_profile_map_figure, res)
@@ -207,7 +245,7 @@ def _md_table(header, rows):
     return ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"] + ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
 
 
-def _t2d_summary(res, prov, files, warnings):
+def _t2d_summary(res, prov, files, warnings, mcmc=None, boot=None):
     r, acq = res["t2d"], prov.get("acquisition", {})
     when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data2D_Cp.2d", "data2D.dat")), None)
     skip = res["decay"].get("skip", 0)
@@ -233,15 +271,63 @@ def _t2d_summary(res, prov, files, warnings):
     L += _md_table(["#", "fraction", "T₂ (s), mean", "D (m²/s), mean", "T₂ at max (s)", "D at max (m²/s)", "constrained by the data"],
                    [[i + 1, F.pct(p["fraction"]), F.fmt_sci(p["T2_mean"]), F.fmt_sci(p["D_mean"]), F.fmt_sci(p["T2_peak"]), F.fmt_sci(p["D_peak"]), "yes" if p["constrained"] else "**no**"]
                     for i, p in enumerate(r["peaks"])] or [["–", "no regions", "", "", "", "", ""]]) + [""]
+    m = r.get("model")
+    if m:
+        L += ["## Few-population model", "",
+              f"{m['K']} population{'s' if m['K'] > 1 else ''} (BIC prefers {m['recommended_k']}), S(t, b) = Σ Aₖ exp(−t/T₂ₖ) exp(−b Dₖ), no offset; χ² per point {F.fmt(m['chi2_per_point'])}; "
+              f"D allowed from {F.fmt_sci(m['d_window'][0])} to {F.fmt_sci(m['d_window'][1])} m²/s (what the b-values can resolve, unless widened). Intervals are least-squares {round(100 * 0.95)}% intervals.", ""]
+        rows = []
+        for i, p in enumerate(m["populations"], 1):
+            notes = []
+            if p["D_at_limit"]:
+                notes.append(f"D at the {p['D_at_limit']} limit: a bound only")
+            if p["T2_at_limit"]:
+                notes.append(f"T₂ at the {p['T2_at_limit']} limit: a bound only")
+            if not p["supported"] and not notes:
+                notes.append("not supported by the data")
+            f2 = lambda v, ci: F.fmt_sci(v) if ci[0] is None else F.interval(v, ci[0], ci[1], None, sci=True)
+            rows.append([i, F.pct(p["fraction"]), f2(p["T2"], p["T2_ci"]), f2(p["D"], p["D_ci"]), "; ".join(notes) or "–"])
+        L += _md_table(["#", "fraction", "T₂ (s)", "D (m²/s)", "note"], rows) + [""]
+        L += _md_table(["populations", "χ² per point", "ΔBIC"], [[c["k"], F.fmt(c["chi2_per_point"]), F.fmt(c["d_bic"])] for c in m["comparison"]]) + [""]
+        for w in m["warnings"]:
+            L.append(f"> {w}")
+        L.append("")
+    L += _uncertainty_md(mcmc, boot)
     L += ["## Provenance", "", *[f"- {line}" for line in provenance.describe(prov)], "- full detail: `provenance.json`; the settings used: `params_used.toml`", ""]
     if files:
         L += ["## Files", "", *[f"- `{f}`" for f in sorted(files)], ""]
     return "\n".join(L)
 
 
+def _uncertainty_md(mcmc, boot):
+    L = []
+    for name, r in (("MCMC", mcmc), ("Bootstrap", boot)):
+        if not r:
+            continue
+        L += [f"## {name}", ""]
+        if name == "MCMC":
+            d = r["diagnostics"]
+            L += [f"{r['nwalkers']} walkers × {r['steps_run']} steps (burn-in {r['burn']}); acceptance {F.fmt(d['acceptance'], 2)}; autocorrelation time {F.fmt(d['tau_max'])} steps; "
+                  f"{F.fmt(d['n_eff'])} effective samples. σ {'sampled' if r['sample_sigma'] else 'fixed from the imaginary channel'}.", ""]
+            rows = [[p["name"], F.interval(p["median"], p["lo"], p["hi"], p["sd"], sci=_sci_name(p["name"]))] for p in r["params"] + r["derived"]]
+        else:
+            L += [f"{r['replicates']} replicates, noise: {r['method']}; {r['failures']} failed.", ""]
+            rows = [[p["name"], F.interval(p["median"], p["lo"], p["hi"], p["sd"], sci=_sci_name(p["name"]))] for p in (r["params"] + r["derived"] if r.get("kind") == "bootstrap_t2d" else (r.get("multiexp") or {}).get("params", []) + (r.get("multiexp") or {}).get("derived", []))]
+        L += _md_table(["parameter", f"median [{round(100 * r['level'])}% interval]"], rows) + [""]
+        for w in r["warnings"]:
+            L.append(f"> {w}")
+        L.append("")
+    return L
+
+
+def _sci_name(name):
+    """Time constants and diffusion coefficients are always shown in scientific notation."""
+    return "T2" in name or "T1" in name or name.startswith("D") or name.startswith("mean D")
+
+
 def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
     if res.get("mode") == "t2d":
-        return _t2d_summary(res, prov, files, warnings)
+        return _t2d_summary(res, prov, files, warnings, mcmc, boot)
     L = [f"# nmrdash results: {prov['dataset']}", ""]
     acq = prov.get("acquisition", {})
     t1 = res.get("mode") == "t1"
@@ -294,22 +380,7 @@ def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
               f"natural resolution {F.fmt(ft['resolution_um'])} µm; window {F.fmt(ft['window'][0])} to {F.fmt(ft['window'][1])} µm; "
               f"+ z = + frequency = closer to the magnet. Positions below {F.fmt(ft['min_signal_pct'])}% of the profile maximum are not fitted. "
               f"Exponential fits: {ft['n_positions_kept']} of {ft['n_positions']} positions; ILT: {ft['n_ilt_positions_kept']} of {ft['n_ilt_positions']}.", ""]
-    for name, r in (("MCMC", mcmc), ("Bootstrap", boot)):
-        if not r:
-            continue
-        L += [f"## {name}", ""]
-        if name == "MCMC":
-            d = r["diagnostics"]
-            L += [f"{r['nwalkers']} walkers × {r['steps_run']} steps (burn-in {r['burn']}); acceptance {F.fmt(d['acceptance'], 2)}; autocorrelation time {F.fmt(d['tau_max'])} steps; "
-                  f"{F.fmt(d['n_eff'])} effective samples. σ {'sampled' if r['sample_sigma'] else 'fixed from the imaginary channel'}.", ""]
-            rows = [[p["name"], F.interval(p["median"], p["lo"], p["hi"], p["sd"], sci=p["name"].startswith("T2") or "T2" in p["name"])] for p in r["params"] + r["derived"]]
-        else:
-            L += [f"{r['replicates']} replicates, noise: {r['method']}; {r['failures']} failed.", ""]
-            rows = [[p["name"], F.interval(p["median"], p["lo"], p["hi"], p["sd"], sci="T2" in p["name"])] for p in ((r.get("multiexp") or {}).get("params", []) + (r.get("multiexp") or {}).get("derived", []))]
-        L += _md_table(["parameter", f"median [{round(100 * r['level'])}% interval]"], rows) + [""]
-        for w in r["warnings"]:
-            L.append(f"> {w}")
-        L.append("")
+    L += _uncertainty_md(mcmc, boot)
     L += ["## Provenance", "", *[f"- {line}" for line in provenance.describe(prov)], "- full detail: `provenance.json`; the settings used: `params_used.toml`", ""]
     if files:
         L += ["## Files", "", *[f"- `{f}`" for f in sorted(files)], ""]

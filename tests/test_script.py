@@ -196,7 +196,7 @@ def test_batch_orders_by_timestamp_and_computes_elapsed_time(series):
     assert float(done[0]["T2_2_s"]) > float(done[0]["T2_1_s"]) > 0
     assert {"params_used.toml", "provenance.json", "batch_summary.csv"} <= {p.name for p in bdir.iterdir()}
     prov = json.loads((bdir / "provenance.json").read_text())
-    assert prov["kind"] == "batch" and prov["timestamps"]["source"].startswith("data.2d modification time") and len(prov["datasets"]) == 4
+    assert prov["kind"] == "batch" and prov["timestamps"]["source"].startswith("modification time of the main data file") and len(prov["datasets"]) == 4
     assert all(Path(r["output_dir"]).is_dir() for r in rows if r["status"] == "ok")
 
 
