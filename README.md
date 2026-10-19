@@ -92,7 +92,7 @@ use decade ticks (`1e-5, 1e-4, …`).
   `REF_B1FREQ_1H_MHZ` in `nmrdash/constants.py`. The lab has a **second magnet** run by a non-Kea (Tecmag) spectrometer; when
   Tecmag reading is added, that magnet's reference frequency must be set separately. No ¹⁹F dataset has been tested.
 - Default gradient **G = 23.67 T/m** (`nmrdash/physics.py`; adjustable: FT tab and T₂–D settings; the T₂–D b-values are calculated from it, Δ and τ), zero-fill ×2⁴, z-window **−200 … +200 µm** (`nmrdash/constants.py`).
-- ILT defaults: α = 1e8, T₂ range from the echo times (min = decade ≤ first echo, max = decade ≥ 10 × last echo).
+- ILT defaults: α = 1e8 and the T₂ range from the echo times (min = decade ≤ first echo, max = decade ≥ 10 × last echo). The page takes α and the T₂ limits as log₁₀ values (log₁₀ T₂ = −5 is 10 µs, 0 is 1 s); the params file keeps α in plain form and T₂ in seconds.
 - The per-position phase is a zero-order correction per z; positions closer than the natural resolution
   (1 / (points × dwell), converted to µm) are interpolations of each other, not independent measurements.
 
