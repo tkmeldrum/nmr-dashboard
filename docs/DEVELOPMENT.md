@@ -36,7 +36,7 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
   `t2d_model.py` (few-population T₂–D model), `uncertainty.py` (MCMC, bootstrap), `t2d_uncertainty.py`.
 - *Orchestration:* `pipeline.py` (the functions the worker calls; holds the loaded dataset in `_STATE`), `params.py` (the params file: SPEC, defaults, validation, TOML),
   `runner.py` + `cli.py` (script and batch), `webbatch.py` (batch driven by the page), `export.py` (Export button).
-- *Output:* `outputs.py` (CSV, figures, summary.md), `figures.py` (matplotlib; `styled()` applies the plot settings), `formatting.py`, `provenance.py`.
+- *Output:* `outputs.py` (CSV, figures, summary.md), `report.py` (the PDF report and batch report), `figures.py` (matplotlib; `styled()` applies the plot settings), `formatting.py`, `provenance.py`.
 
 **Other:** `tests/` (pytest; ~290 tests), `tools/` (`build_site.py`, `fetch_vendor.py`, `dev_server.py`, `make_references.py`), `test_data/` (public sample folders),
 `docs/` (this file, the plans `PLAN*.md`, `REFERENCES.md` + `references.json`), `.github/workflows/pages.yml` (test, then deploy).
@@ -116,6 +116,7 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 Everything below is merged to `main` and live; CI green; no open PRs.
 - **Analyses:** CPMG (integrate or FT; multi-exponential with intervals, model comparison, unsupported-component warnings; ILT with α sweep; per-position fits and a linked cross-section viewer),
   T1Sat, and SSE-T2 (map + few-population model; MCMC and bootstrap for CPMG, T1 and the T₂–D model).
+- **Report:** `report.pdf` per analysis (Save card: "Save report (PDF)" writes it into `processed_…` in one click in Chrome/Edge, otherwise downloads it; also in every full save, the script and batch, with a `batch_report.pdf`).
 - **Page:** tabs Load / Raw / Process / Results with Back/Next buttons (the Uncertainty tab was folded into Advanced settings on the Process tab, 2026-10-19); per-sequence controls; Load params…; plot settings and per-figure overrides; Save card (folder or zip);
   batch mode with a banner, warnings, progress and Stop; feedback box; About page, physics page, licence and notices.
 - **Script:** `nmrdash run | batch | params`, TOML params, batch time series, provenance.
@@ -131,7 +132,7 @@ Agreed with Tyler on 2026-10-19, in this order:
    holds the *α sweep*. A separate collapsed **"Advanced settings"** block on the Process tab holds the confidence level, the MCMC and bootstrap options (and the decay to analyse). Defaults while closed:
    the model comparison stays computed (it drives the "BIC prefers…" note), the α sweep, MCMC and bootstrap are off. For T₂–D the automatic 1–4 population choice stays visible; its MCMC/bootstrap options go in Advanced.
    Loading a params file that enables an advanced option opens the block.
-3. **Per-analysis PDF report**, 2–4 pages, US Letter: page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
+3. **Per-analysis PDF report (done 2026-10-19)**, 2–4 pages, US Letter (titled "Spinlab Data Analysis Report" at Tyler's request; `nmrdash/report.py`: compose blocks → paginate → render with matplotlib PdfPages; figures embedded as 170-dpi images, text is vector/selectable): page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
    Saved as `report_<timestamp>.pdf` inside the `processed_…` folder with one click (a "Save report" button), alongside the other files; downloaded in browsers that cannot write folders.
    Batch: one report per dataset plus a one-page batch summary. Built with matplotlib's multi-page PDF (vector text, already in the page).
 4. **Tecmag support** (later; see §9).

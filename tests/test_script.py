@@ -128,6 +128,8 @@ def test_output_directory_redirects_everything_away_from_the_data(ds, tmp_path):
 
 def test_csv_and_figures_can_be_switched_off(ds):
     out = Path(runner.run_dataset(ds, fast(output={"csv": False, "figures": False}))["output_dir"])
+    assert {p.name for p in out.iterdir()} == {"params_used.toml", "provenance.json", "summary.md", "report.pdf"}       # the PDF report is on by default
+    out = Path(runner.run_dataset(ds, fast(output={"csv": False, "figures": False, "report": False}))["output_dir"])
     assert {p.name for p in out.iterdir()} == {"params_used.toml", "provenance.json", "summary.md"}
 
 

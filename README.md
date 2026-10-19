@@ -205,7 +205,7 @@ nmrdash batch params.toml  data/series --list     # just list the datasets and t
 - **Where results go:** a `processed_<timestamp>` folder **inside each data folder** (raw data is never touched; re-running
   never overwrites, it adds `-2`, `-3`, …), or under `output.directory` / `--out`. It holds CSV tables (decay, fit components
   with intervals, fit quality, model comparison, ILT spectrum / peaks / α sweep, FT profile and per-position tables, MCMC and
-  bootstrap summaries and samples), figures (`png`/`pdf`/`svg`; titles can be switched off), `summary.md` (readable, same
+  bootstrap summaries and samples), figures (`png`/`pdf`/`svg`; titles can be switched off), **`report.pdf`** (a 2–4 page US-Letter report: settings, key numbers with intervals, every warning, the main figures, the physics that applies and the provenance; `[output] report = false` to skip; a batch also writes `batch_report.pdf`), `summary.md` (readable, same
   number formatting as the page), `params_used.toml` (the resolved settings, runnable again) and `provenance.json`.
 - **Batch:** every folder under the root holding `acqu.par` is a dataset (results folders are skipped), sorted by its
   `data.2d` modification time. `batch_summary.csv` has a row per dataset with `timestamp_utc`, `timestamp_local`,
