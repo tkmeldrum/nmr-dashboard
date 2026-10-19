@@ -51,7 +51,7 @@ const onWorkerMessage = (e) => {
     resetUncertainty();
     refreshProvenance();
     showTab("results");
-    runUncertainty();                       // MCMC / bootstrap, if requested on the Uncertainty tab (asks first)
+    runUncertainty();                       // MCMC / bootstrap, if requested in Advanced settings (asks first)
   } else if (m.type === "error") {
     $("status").textContent = "Python ready.";
     if (state.running) processFailed(m.text);
@@ -165,7 +165,7 @@ function resetSections() {
   state.provenance = null;
   $("prov-details").hidden = true;
   resetUncertainty();
-  for (const t of ["raw", "process", "uncertainty", "results"]) setTabEnabled(t, false);
+  for (const t of ["raw", "process", "results"]) setTabEnabled(t, false);
   showTab("load");
 }
 
@@ -345,13 +345,11 @@ function showResult(r) {
     initT2dDefaults(r);
     setTabEnabled("raw", true);
     setTabEnabled("process", true);
-    setTabEnabled("uncertainty", true);
     return;
   }
   if (r.kind === "t1") {
     setTabEnabled("raw", true);
     setTabEnabled("process", true);
-    setTabEnabled("uncertainty", true);
     return;
   }
   const idx = $("echo-idx");
@@ -360,12 +358,11 @@ function showResult(r) {
   initProcessDefaults(r.raw);
   setTabEnabled("raw", true);
   setTabEnabled("process", true);
-  setTabEnabled("uncertainty", true);
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
 initTabs((name) => {
-  $("run-bar").hidden = name !== "process" && name !== "uncertainty";     // one Run button for both option tabs
+  $("run-bar").hidden = name !== "process";
   // plots drawn while hidden have no width, so draw on show (with an indicator: big heat maps take a moment)
   if (name === "raw") withBusy("Drawing the raw-data plots…", renderRaw);
   if (name === "results") withBusy("Drawing the results…", renderResults);

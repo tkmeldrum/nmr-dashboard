@@ -176,3 +176,11 @@ td.outlier { background:rgba(213, 94, 0, .18); }
 .about .model p { margin:.3rem 0; }
 .about .sub { margin:1.5rem 0 .25rem; font-size:1.1rem; }
 .about .equation { overflow-wrap:anywhere; }
+
+/* small collapsed "Advanced" next to an analysis, and the Advanced settings block at the end of the Process tab */
+details.adv { flex-basis:100%; margin:.15rem 0; }
+details.adv > summary { cursor:pointer; color:var(--muted); font-size:.9rem; }
+details.adv > .adv-body { display:flex; flex-wrap:wrap; gap:.5rem 1rem; margin:.4rem 0 .2rem 1rem; }
+details.advanced-settings { margin:1.25rem 0 0; padding:.6rem 1rem; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+details.advanced-settings > summary { cursor:pointer; }
+details.advanced-settings > .adv-body { margin-top:.75rem; }
