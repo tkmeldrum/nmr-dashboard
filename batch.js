@@ -78,7 +78,7 @@ async function runBatch() {
   try {
     if (folderMode && (await state.dirHandle.requestPermission({ mode: "readwrite" })) !== "granted") throw new Error("Writing to that folder was not allowed; allow it, or use a browser that cannot write folders to get a .zip instead.");
     if (unc) { status.textContent = "Fetching the emcee package…"; await rpc("install_emcee"); }
-    const output = { csv: $("batch-csv").checked, figures: $("batch-figs").checked, samples: true, figure_format: $("save-format").value, dpi: +$("save-dpi").value || 150 };
+    const output = { csv: $("batch-csv").checked, figures: $("batch-figs").checked, report: $("batch-report").checked, samples: true, figure_format: $("save-format").value, dpi: +$("save-dpi").value || 150 };
     await rpc("batch_start", { settings, options, style: { ...figureStyle(), decay_logy: $("fit-log").checked }, kind, output, root_name: state.dirHandle ? state.dirHandle.name : "datasets" });
     for (let i = 0; i < n; i++) {
       if (run.stop) { log("Stopped by you; the datasets above are done.", "bad"); break; }

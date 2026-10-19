@@ -541,12 +541,13 @@ def export_script():
 def save_bundle(opts):
     """Everything the page shows, as files: tables, figures, params_used.toml, provenance.json and summary.md.
 
-    opts: {figure_format, dpi, style, csv, figures, samples, mcmc, boot, zip, options, page}.
+    opts: {figure_format, dpi, style, csv, figures, samples, mcmc, boot, zip, options, page, report (default true), report_only}.
+    The PDF report (report.pdf) is part of the bundle unless report is false; report_only writes just the report.
     Returns {"folder": "processed_<stamp>", "files": {name: base64}} or, with zip, {"zip_name", "zip_b64", "files": [names]}.
     """
     import base64, io, tempfile, zipfile
     from pathlib import Path
-    from . import outputs
+    from . import outputs, report
     from . import params as P
     res = _STATE.get("last_result")
     pr = _STATE.get("processed")
@@ -555,6 +556,8 @@ def save_bundle(opts):
     options, page = opts.get("options") or {}, opts.get("page") or {}
     settings = pr["settings"]
     samples = bool(opts.get("samples", True))
+    report_only = bool(opts.get("report_only"))
+    want_report = report_only or bool(opts.get("report", True))
     mcmc = boot = None
     notes = []
     if opts.get("mcmc") and _STATE.get("mcmc") is not None:
@@ -568,18 +571,22 @@ def save_bundle(opts):
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         files = []
-        if opts.get("csv", True):
+        if opts.get("csv", True) and not report_only:
             files += outputs.write_tables(d, res, mcmc, boot, samples=samples)
-        if opts.get("figures", True):
+        if opts.get("figures", True) and not report_only:
             files += outputs.write_figures(d, res, mcmc, boot, opts.get("figure_format", "png"), int(opts.get("dpi", 150)), True, band, style=opts.get("style") or {},
                                            raw=_STATE.get("raw_out"), kind=("t1" if "t1" in _STATE else "t2d" if "t2d" in _STATE else "cpmg"))
         label = page.get("dataset") or "dataset"
-        (d / "params_used.toml").write_text(P.dump_toml(P.with_style(P.from_settings(settings, options), opts.get("style")), header=f"Used for: {label}"))
-        files.append("params_used.toml")
-        names = files + ["provenance.json", "summary.md"]
+        if not report_only:
+            (d / "params_used.toml").write_text(P.dump_toml(P.with_style(P.from_settings(settings, options), opts.get("style")), header=f"Used for: {label}"))
+            files.append("params_used.toml")
+        names = files + ([] if report_only else ["provenance.json", "summary.md"]) + (["report.pdf"] if want_report else [])
         rec, _ = _provenance_record({**page, "notes": list(page.get("notes") or []) + notes}, options, outputs=names)
-        (d / "provenance.json").write_text(json.dumps(rec, indent=2, default=str))
-        (d / "summary.md").write_text(outputs.summary_markdown(res, rec, mcmc, boot, names, notes))
+        if not report_only:
+            (d / "provenance.json").write_text(json.dumps(rec, indent=2, default=str))
+            (d / "summary.md").write_text(outputs.summary_markdown(res, rec, mcmc, boot, names, notes))
+        if want_report:
+            (d / "report.pdf").write_bytes(report.build(res, rec, mcmc, boot, raw=_STATE.get("raw_out"), style=opts.get("style") or {}))
         blobs = {n: (d / n).read_bytes() for n in names}
     if opts.get("zip"):
         buf = io.BytesIO()
