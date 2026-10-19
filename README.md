@@ -1,13 +1,13 @@
 # nmr-dashboard
 
-Browser-based processing of Magritek Kea CPMG NMR data. Drop a data folder onto the page, look at the
-parameters and raw echoes, run multi-exponential fits and ILTs (optionally spatially resolved), and read off
-fit statistics and uncertainties.
+Browser-based processing of Magritek Kea single-sided NMR data (CPMG, saturation recovery, T₂–D). Drop a data folder onto the page, look at the
+parameters and raw echoes, run multi-exponential fits, ILTs and T₂–D analyses (optionally spatially resolved), and read off
+fit statistics and uncertainties. **Developers and new contributors: start with [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).**
 
 **All processing happens in your browser.** The page loads Python (numpy/scipy, via [Pyodide](https://pyodide.org))
 into a Web Worker and runs the code in `nmrdash/` locally. Your data is never uploaded; this repository holds
-only code. A Content-Security-Policy in `index.html` restricts network access to the CDN hosts that serve Pyodide
-and Plotly, and the page has no analytics.
+only code. The libraries are served from the site itself and a Content-Security-Policy in `index.html` allows connections to the site only
+(see "Self-hosted libraries" below); the page has no analytics.
 
 Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data** to try it without any files).
 
@@ -15,7 +15,7 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
 
 0. **The sequence decides the analysis.** The `experiment` entry in `acqu.par` is read (spelling variants tolerated): **CPMG**
    → exponential decay (T₂), with FT, ILT and per-position fits; **T1Sat** → saturation recovery (T₁); **SSE-T2** → T₂–D
-   correlation (recognised, not implemented yet). The page shows the detected analysis on the Load tab and offers only the
+   correlation (a 2D inversion plus a few-population model). The page shows the detected analysis on the Load tab and offers only the
    controls that apply.
 1. **Load**: drag a folder in or click to browse. A parent folder with several experiments gets a dropdown.
    Shows the curated parameters (sequence, `data.2d` timestamp, pulse length with 90°/180° amplitudes in dB, echo
@@ -63,8 +63,9 @@ unit handling, the summaries and the interface are new. Files read: `acqu.par`, 
   drift. The page therefore shades the unresolvable band, flags each region as constrained or not, reports each region's share of the *resolvable*
   part, and offers **"Use the range the b-values can resolve"** (params: `d_min = d_max = "auto"`). Within that window the slow population of the
   synthetic test is recovered to ~10% in T₂ and D; the fast one's T₂ is good but its D can be off by ~2× and its share by ~20% (and shifts with α).
-- **Not available yet:** MCMC and bootstrap (each bootstrap replicate is a full 2D inversion; MCMC needs a parametric few-component T₂–D model, which is the
-  planned route).
+- **Uncertainty:** the regularised map has no intervals. A **few-population model** (1–4 populations by BIC unless set, no offset, D limited to the resolvable window) is fitted as
+  well, and MCMC and the bootstrap sample it (`docs/PLAN_T2D_UNCERTAINTY.md`). The **b-values are calculated** from the gradient setting (default 23.67 T/m), Δ and τ in `acqu.par`
+  (b = (γG)²τ²(Δ + 2τ/3)); the spectrometer's own axis files are only a cross-check.
 - **Outputs:** `t2d_spectrum.csv` (D rows × T₂ columns), `t2d_peaks.csv`, projections, `t2d_statistics.csv`, `t2d_data_fit_residual.csv`, the spectrum
   and data/fit/residual figures, `summary.md`, provenance. Batch tables gain `t2d_peak{1-3}_*` columns.
 
@@ -104,13 +105,14 @@ index.html, style.css, *.js      the page (plain ES modules, no build step)
   plotutil.js   plot styling, number formatting               state.js     shared state
 worker.js       Pyodide in a Web Worker (load / process messages, progress)
 nmrdash/        the Python package (also runs on a desktop: pip install -e .; its command is `nmrdash`)
-  kea_io.py echoes.py multiexp.py ilt.py ilt_tools.py spatial.py pipeline.py constants.py display_params.py
-  uncertainty.py (MCMC, bootstrap)   params.py (the params file)   runner.py cli.py (run, batch)
+  physics.py inference.py     the physics models and the estimation formulas (everything else calls these)
+  kea_io.py sequences.py t2d.py echoes.py multiexp.py ilt.py ilt2d.py ilt_tools.py spatial.py pipeline.py constants.py display_params.py
+  t2d_model.py uncertainty.py t2d_uncertainty.py (MCMC, bootstrap)   params.py (the params file)   runner.py cli.py webbatch.py (run, batch)
   outputs.py figures.py formatting.py (results on disk)   provenance.py export.py
 tests/          pytest: synthetic recovery tests, statistics invariance tests, every sample dataset
 test_data/      sample Kea datasets (PUBLIC, see below)
 tools/          build_site.py (assembles the deployable site), dev_server.py (local server)
-docs/PLAN.md    the original build plan
+docs/DEVELOPMENT.md  the development log and guide (read first)   docs/PLAN*.md  the plans   docs/REFERENCES.md  references to check
 ```
 
 `nmrdash/` is the canonical home of this code. It started as copies of `MeldrumLabCode/pythonic/` (`kea_io.py`,
