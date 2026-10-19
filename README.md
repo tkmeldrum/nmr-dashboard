@@ -29,7 +29,7 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
    - *Advanced* (collapsed): next to the multi-exponential fit, **compare 1–4 components** (on by default, hidden); next to the ILT, the **α sweep**
      (L-curve, off). At the end of the tab, **Advanced settings** (closed by default): the confidence level for the fit intervals (68 / 95 / 99%), and optional
      **MCMC** and **bootstrap** on the whole decay or on one z position. They run after the processing, with their progress on the Results tab, once you have seen a timed
-     estimate and confirmed; a progress bar and a **Stop (keep partial results)** button are shown while they run. Loading a params file that turns one of these on opens its block.
+     estimate (a prompt appears only for runs over about 20 seconds; a yes is remembered for the session for runs up to 1.5× as long) and confirmed; a progress bar and a **Stop (keep partial results)** button are shown while they run. Loading a params file that turns one of these on opens its block.
 4. **Results**: spatial profile and echo map (FT mode), spatially resolved fits (T₂(z) with error bars, amplitude(z),
    reduced χ²(z), a linked ILT cross-section viewer, per-peak ILT T₂ and signal fraction vs z), the decay with fits and
    residuals, fit tables, fit-quality statistics and the ILT spectrum.

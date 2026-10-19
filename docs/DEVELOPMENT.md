@@ -83,6 +83,7 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 - **Apache-2.0**; copyright line "Tyler Meldrum and the nmr-dashboard contributors" (to confirm). References are drafts in `docs/references.json`; **only verified ones are shown** on the physics page.
 - **Merge default (Tyler, 2026-10-14):** merge every PR as soon as its CI passes so the change is live; he reverts what he dislikes. He cannot easily test locally (headless Mac mini over VS Code Remote).
 - **Mailto feedback** (address assembled in script), no analytics, no server.
+- **Long-run prompts (2026-10-19):** MCMC, bootstrap and the T₂–D solve ask before running only when the estimate is over 20 s; a yes is remembered for the page session and covers runs up to 1.5× that length (`uncertainty.js: confirmLong`). Batch always confirms (it multiplies the cost).
 - **No in-browser self-check button**; the physics page shows formulas and links to code; checks live in `tests/`.
 
 ## 5. Conventions
