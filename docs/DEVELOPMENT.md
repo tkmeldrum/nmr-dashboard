@@ -1,0 +1,169 @@
+# Development log and guide
+
+**Read this first if you are picking the project up (a person or a new Claude session).** It records how the code is organised, why things are the way
+they are, what has gone wrong before, where the project stands and what is planned. **Update it at the end of every working session** (the "Status",
+"Next up" and "Session log" sections especially). The README describes the tool for users; this file is for whoever develops it.
+
+Contents: 1 What it is · 2 Where things are · 3 How a run flows · 4 Decisions and why · 5 Conventions · 6 Working practices and gotchas ·
+7 Status · 8 Next up · 9 Tecmag notes · 10 Kept out of this public repo · 11 Session log
+
+## 1. What it is
+
+A browser tool for processing single-sided NMR relaxometry data from Magritek Kea spectrometers: CPMG (T₂), T1Sat (T₁) and SSE-T2 (T₂–D). The user opens a
+data folder, sees the parameters and raw data, picks processing options, and saves tables, figures and a record of exactly how the results were produced.
+**All computation runs in the browser** (Python via Pyodide in a Web Worker); nothing is uploaded; the repository holds only code (plus public sample data).
+The same Python package also runs on a desktop and on a cluster (`nmrdash run | batch | params`).
+
+- Live: https://tkmeldrum.github.io/nmr-dashboard/ (GitHub Pages, deployed by an Action on every merge to `main`)
+- Repo: https://github.com/tkmeldrum/nmr-dashboard (public; Apache-2.0)
+- Owner: Tyler Meldrum (PI, Chemistry, William & Mary). Users so far: his research group.
+
+## 2. Where things are
+
+**The page** (plain ES modules, no build step; `build_site.py` only versions the imports):
+`index.html` (all markup; controls are shown per sequence with `data-for="cpmg t1 t2d"`), `about.html`, `physics.html`, `style.css`;
+`app.js` (worker plumbing, folder loading, tabs flow), `tabs.js`, `process.js` (settings form and the Run button), `raw.js`, `results.js` (CPMG/T1 results),
+`t2dview.js` (T₂–D results and the populations plot), `uncertainty.js` (MCMC / bootstrap orchestration and their tables), `save.js` (save to folder or zip),
+`batch.js`, `paramsload.js` (fill the form from a params file), `plotstyle.js` (plot settings), `plotutil.js`, `provenance.js`, `feedback.js`, `kinds.js`,
+`busy.js`, `rpc.js`, `state.js`, `zip.js`, `equations.js`, `worker.js` (Pyodide; whitelist of callable `pipeline` functions).
+
+**The Python package `nmrdash/`** (also `pip install -e .`):
+- *Physics and estimation (the one implementation of every formula):* `physics.py` (signal models, kernels, b-values, position relations; registry `MODELS`),
+  `inference.py` (noise, χ², AIC/BIC, intervals, regularisation; registry `METHODS`). Everything else calls these.
+- *Input:* `kea_io.py` (binary and `acqu.par` readers), `sequences.py` (the `experiment` name decides the analysis), `t2d.py` (T₂–D loader and the b-value axes), `display_params.py`.
+- *Analysis:* `echoes.py` (phasing, integration, FT), `multiexp.py`, `ilt.py` + `ilt_tools.py` (1D, copy of the Matlab-matched code), `ilt2d.py`, `spatial.py`,
+  `t2d_model.py` (few-population T₂–D model), `uncertainty.py` (MCMC, bootstrap), `t2d_uncertainty.py`.
+- *Orchestration:* `pipeline.py` (the functions the worker calls; holds the loaded dataset in `_STATE`), `params.py` (the params file: SPEC, defaults, validation, TOML),
+  `runner.py` + `cli.py` (script and batch), `webbatch.py` (batch driven by the page), `export.py` (Export button).
+- *Output:* `outputs.py` (CSV, figures, summary.md), `figures.py` (matplotlib; `styled()` applies the plot settings), `formatting.py`, `provenance.py`.
+
+**Other:** `tests/` (pytest; ~290 tests), `tools/` (`build_site.py`, `fetch_vendor.py`, `dev_server.py`, `make_references.py`), `test_data/` (public sample folders),
+`docs/` (this file, the plans `PLAN*.md`, `REFERENCES.md` + `references.json`), `.github/workflows/pages.yml` (test, then deploy).
+
+## 3. How a run flows
+
+1. **Load.** `app.js` reads the files of one dataset and sends them to the worker; `pipeline.load()` classifies the dataset from `acqu.par` (`sequences.describe`),
+   reads it, and returns the display parameters, raw data and defaults. The data stay in `pipeline._STATE`.
+2. **Process.** `process.js:readSettings()` builds a settings dict; the worker calls `pipeline.process(settings)` (dispatching to the CPMG, T1 or T₂–D path) and
+   returns a JSON result. `results.js` / `t2dview.js` draw it.
+3. **Uncertainty** (MCMC, bootstrap) runs afterwards as chunked RPC calls (`mcmc_start/step/finish`, `boot_*`) so the page can show progress and stop.
+4. **Save.** `pipeline.save_bundle()` writes tables, figures, `params_used.toml`, `provenance.json`, `summary.md` (into a new `processed_<time>/` folder through the
+   File System Access API in Chrome/Edge, or as one zip elsewhere). Raw data are never modified.
+5. **Batch.** The page stages one dataset at a time (`stage_dataset`), runs it through `runner.run_dataset` (`webbatch.run_one`), and writes a summary with timestamps.
+   The script does the same with `nmrdash batch`.
+6. **Params file.** One TOML file configures everything (`[processing] [ft] [multiexp] [ilt] [t1] [t2d] [t2d_model] [mcmc] [bootstrap] [uncertainty] [output] [style] [figures.*] [batch]`);
+   the page can load and export it, so page and script agree.
+
+## 4. Decisions and why
+
+*Architecture*
+- **Local-only, Pyodide.** Privacy and no server to run. The CSP forbids connections to anything but the site itself; the libraries are self-hosted (`vendor/`, checksummed by `tools/vendor.lock.json`).
+- **One canonical Python package** shared by the page, the script and notebooks, so results cannot differ between them. `pythonic/` scripts were *not* switched over to import it.
+- **No frontend build step.** Plain modules keep it maintainable by students.
+- **Physics in two small files**, with a registry that generates the physics page, so a reviewer reads what runs. A test fails if a function is added without being listed.
+- **Provenance everywhere:** every save records input hashes, resolved settings, versions and build; Python and browser results agree to ~3e-7.
+
+*Scientific choices*
+- **Units:** times in seconds; D in m²/s (the solver works on D×10⁹ and b×10⁻⁹ internally, converted back). Value ± uncertainty pairs share one exponent.
+- **The sequence name decides the analysis** (CPMG → decay/ILT/FT; T1Sat → saturation recovery, no ILT; SSE-T2 → T₂–D).
+- **FT conventions:** z = f/(γG); +z is +frequency, toward the magnet (down); echo centre moved to t = 0 with zero-fill in the middle; per-position zero-order phase.
+- **Gradient G = 23.67 T/m** (Tyler's value), one constant for the FT axis and the diffusion weighting, user-adjustable.
+- **b-values are calculated** from G, Δ and τ: b = (γG)²τ²(Δ + 2τ/3). Kea's axis files are only a cross-check (shape and scale; they imply G = 23.49 T/m from `gradient = 1000` kHz/mm). The echo time does not enter b.
+- **T1 recovery keeps an offset by default** (RMSE 38 vs 305 without it on the samples). One component by default, two on request. No ILT for T1.
+- **ILT** is the Matlab-matched solver (curvature penalty, SVD compression); α is entered as log₁₀ α.
+- **`exclude_first`** (first n echoes) applies to every fit, ILT, MCMC and bootstrap; excluded points are shown as open markers.
+- **T₂–D:** the regularised map is exploratory and has no intervals. A **few-population model** (no offset; K from 1 to 4 by BIC unless set; D limited to the resolvable window `[1/b_max, 5/b_min]`, widenable)
+  gives intervals; MCMC and bootstrap sample it. Populations slower than the window are reported as bounds; faster ones leave no signal and are never found (the map's weight there is extrapolation).
+- **Noise σ** comes from the imaginary channel (1.4826·MAD); there is none for T1 data (MCMC samples σ, bootstrap resamples residuals).
+- **MCMC** (emcee): ordered ln T₂ priors, log-uniform; walkers start strictly inside the prior (a T₂ on the prior edge is warned about). Bootstrap noise source defaults to the measured imaginary channel.
+- **Echo-train diffusion** (1/T₂,app = 1/T₂ + γ²G²D·tₑ²/12) is stated as a footnote, not corrected.
+
+*Project*
+- **Apache-2.0**; copyright line "Tyler Meldrum and the nmr-dashboard contributors" (to confirm). References are drafts in `docs/references.json`; **only verified ones are shown** on the physics page.
+- **Merge default (Tyler, 2026-10-14):** merge every PR as soon as its CI passes so the change is live; he reverts what he dislikes. He cannot easily test locally (headless Mac mini over VS Code Remote).
+- **Mailto feedback** (address assembled in script), no analytics, no server.
+- **No in-browser self-check button**; the physics page shows formulas and links to code; checks live in `tests/`.
+
+## 5. Conventions
+
+- Results are plain dicts, made JSON-safe by `pipeline._jsonable` (NaN/inf → null); tests use strict JSON.
+- Anything the user can set is a params-file key too (`params.SPEC`); the page, the script and Export/Load must stay in step (tests cover round trips).
+- Refactors must not move numbers: compare old and new code on the sample data (CPMG with ILT, FT, T1, T₂–D with the model) and require bit-identical output (done for the physics move: 322,442 numbers).
+- Figures follow the plot settings (`figures.styled`) and have per-figure overrides (`figures.FIGURES`, `params.FIGURE_NAMES`, the selector in `index.html` must agree; a test checks).
+- New physics goes in `physics.py` / `inference.py` and its registry; new references go in `docs/references.json` (unverified).
+- Colours are colour-blind safe (Okabe–Ito); T₂ axes use decade ticks; only decades are labelled on log axes.
+
+## 6. Working practices and gotchas
+
+- **Workflow:** feature branch → PR → tests pass on CI → merge (merge commit, not squash) → a deploy follows (~5 min; hard-refresh the live site). Stacked PRs: merge in order and retarget to `main`.
+  **Gate every merge on the test check actually passing** (a merge once followed a red test because the merge command was chained after a watch that returned early).
+- **CI** (`.github/workflows/pages.yml`): `pytest -n auto` with `OMP/OPENBLAS/MKL_NUM_THREADS=1` (without it NumPy over-threads under xdist and gives no speed-up), pip cached, the vendor libraries fetched and cached.
+  CI runs ~3–6 min. The deploy job is a *bare* runner: it must `pip install -e .` before `build_site.py` (the physics page imports the package) — a missed install once broke a deploy.
+- **Tests that bit us:** wall-clock tests are flaky on shared runners (the T₂–D time-estimate test now retries and uses the fastest trial); tests sharing a fixed folder race under xdist
+  (`webbatch.ROOT` is per-test); ill-conditioned inversions differ between machines (assert sane ranges, not exact region fractions).
+- **Python on the dev machine:** use the environment that has SciPy (`python`, the miniforge one), not the system `python3`.
+- **Browser testing without a local browser session:** Playwright with Chromium, routing every request to the built `site/` and *refusing everything else* (so a stray outside request fails loudly).
+  Load a bundled sample with the "Explore test data" button; for folder-write paths use an OPFS directory as a stand-in. Things that cost time: collapsed `<details>` hide their contents from
+  "visible" waits (the Results sections start collapsed); Plotly shapes on log axes use data values; a Playwright `wait_for_function` returns immediately if the condition is already true.
+  The real File System Access prompt and Safari/Firefox have not been exercised by a person yet (Tyler confirmed saving to a folder works in Chrome).
+- **Long commands:** use `tmux` (Tyler switches computers mid-session). Do not poll with chained sleeps; run in the background and read the output.
+- **Unverified things must not appear on a public page** (references), and nothing about unpublished work (see §10).
+
+## 7. Status (2026-10-19)
+
+Everything below is merged to `main` and live; CI green; no open PRs.
+- **Analyses:** CPMG (integrate or FT; multi-exponential with intervals, model comparison, unsupported-component warnings; ILT with α sweep; per-position fits and a linked cross-section viewer),
+  T1Sat, and SSE-T2 (map + few-population model; MCMC and bootstrap for CPMG, T1 and the T₂–D model).
+- **Page:** tabs Load / Raw / Process / Uncertainty / Results with Back/Next buttons; per-sequence controls; Load params…; plot settings and per-figure overrides; Save card (folder or zip);
+  batch mode with a banner, warnings, progress and Stop; feedback box; About page, physics page, licence and notices.
+- **Script:** `nmrdash run | batch | params`, TOML params, batch time series, provenance.
+- **Notable PRs:** #5 residual line · #6 exclude first n · #7 T₂–D · #12 save + plot settings · #16/#17/#18 per-figure overrides, `[style]`, load params · #22 all figures saved · #23 batch mode ·
+  #24 About + Apache-2.0 · #25 self-hosted libraries · #27–#29 few-population model, MCMC/bootstrap, page · #31 b-values from G, Δ, τ · #33 physics module · #34 deploy fix · #36 physics subpage.
+- **Known limits:** references unverified; no ¹⁹F data tested; the regularised T₂–D map is ill-conditioned (stated on the page); a long T₂–D or MCMC dataset cannot be stopped inside a batch.
+
+## 8. Next up
+
+Agreed with Tyler on 2026-10-19, in this order:
+1. **This log** (done with this file).
+2. **Advanced settings.** The Uncertainty tab goes away. Next to the multi-exponential fit, a small collapsed "Advanced" holds *compare 1–4 components*; next to the ILT, a collapsed "Advanced"
+   holds the *α sweep*. A separate collapsed **"Advanced settings"** block on the Process tab holds the confidence level, the MCMC and bootstrap options (and the decay to analyse). Defaults while closed:
+   the model comparison stays computed (it drives the "BIC prefers…" note), the α sweep, MCMC and bootstrap are off. For T₂–D the automatic 1–4 population choice stays visible; its MCMC/bootstrap options go in Advanced.
+   Loading a params file that enables an advanced option opens the block.
+3. **Per-analysis PDF report**, 2–4 pages, US Letter: page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
+   Saved as `report_<timestamp>.pdf` inside the `processed_…` folder with one click (a "Save report" button), alongside the other files; downloaded in browsers that cannot write folders.
+   Batch: one report per dataset plus a one-page batch summary. Built with matplotlib's multi-page PDF (vector text, already in the page).
+4. **Tecmag support** (later; see §9).
+5. Tyler: verify `docs/REFERENCES.md`; confirm the copyright line; ask W&M about the licence/IP.
+
+Backlog (not started): batch timestamp override on the page; T₂(z, t) maps for FT batches; SLURM example for the script; stopping inside a long batch dataset; auto-open the uncertainty section when MCMC/bootstrap finish
+(superseded by item 2); regularised inversion with other penalties (needs unpublished colleague work, see §10); optionally correct the echo-train diffusion term when D is known.
+
+## 9. Tecmag notes (for later)
+
+The lab's **second magnet is a single-sided (static-gradient) magnet run by a Tecmag spectrometer, with a gradient of about 6.7 T/m** (Tyler, 2026-10-19; to be confirmed more precisely).
+Because it is also a static-gradient magnet, the physics carries over with different numbers:
+- Position relations use the same `z = f/(γG)`; at 6.7 T/m the native resolution Δz ∝ 1/G is about 3.5× coarser than at 23.67 T/m for the same dwell and points.
+- The stimulated-echo b-value `b = (γG)²τ²(Δ + 2τ/3)` applies if the diffusion sequence is the same kind; `G` is already a setting. G² is ~12.5× smaller, so b-values and the echo-train diffusion term are far smaller.
+- The Larmor frequency, the nucleus and `REF_B1FREQ_1H_MHZ` (in `constants.py`) are specific to the Kea magnet and must be set separately for this one (`guess_nucleus` assumes the Kea magnet).
+
+What is needed before building anything:
+1. **Sample files** from the Tecmag software, one per experiment of interest, plus a reference analysis of the same data from the existing workflow to compare against.
+2. **The file format and where each acquisition parameter lives** (echo time, number of echoes, points per echo, dwell, scans, frequency, gradient/τ/Δ for diffusion). Tecmag's native format is binary with a header; sequence parameters
+   may be in the pulse program rather than the header, so some may have to be entered on the page.
+3. **Which analyses apply** (CPMG and T1 only, or diffusion too; whether the FT profile is used).
+4. **Phase and data-layout conventions** (complex storage, point/echo ordering, phase cycling): the most likely source of silent errors.
+
+Plan: a new `tecmag_io.py` that returns the same structures as `kea_io.py` and `t2d.py`; format detection in `pipeline.load`; a "magnet" setting for the constants; tests with a public sample; validation against the reference analysis.
+Suggested model for the reader and its validation: one of the more capable models (Opus 5.5 or Fable 5.1), then Sonnet 5.5 for the integration.
+
+## 10. Kept out of this public repo
+
+- Tyler's **PED** method (unpublished colleague work): no code, no description, no checkbox. The idea of "regularised inversion with other penalties" is only noted here without detail.
+- Anything about W&M policy discussions, students, or personal details. Private notes live in Claude's memory directory on Tyler's machine, not in the repo.
+
+## 11. Session log
+
+- **2026-10-12 – 14 (the build):** Plan and scaffold; load, raw, integrate/FT, multi-exponential, ILT, per-position fits and the linked viewer; statistics; MCMC and bootstrap; the script, params file, batch and provenance;
+  cosmetics; T1; exclude-first; T₂–D; feedback box; save and plot settings; batch mode; self-hosted libraries and the strict CSP; About/licence; the few-population T₂–D model with MCMC/bootstrap;
+  explicit b-values; the physics module and pages. Lessons are in §6.
+- **2026-10-19:** Tyler back after handing the tool to his students. Agreed the four items in §8; wrote this log first.
