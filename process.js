@@ -19,8 +19,8 @@ function showMsg(text) {
 // Sensible starting values from the echo-time axis.
 export function initProcessDefaults(raw) {
   const t = raw.echo_time_s;
-  $("ilt-t2min").value = 10 ** Math.floor(Math.log10(t[0]));
-  $("ilt-t2max").value = 10 ** Math.ceil(Math.log10(10 * t[t.length - 1]));
+  $("ilt-t2min").value = Math.floor(Math.log10(t[0]));                 // entered as log10 of the time in s: -5 is 10 µs, 0 is 1 s
+  $("ilt-t2max").value = Math.ceil(Math.log10(10 * t[t.length - 1]));
   $("ilt-steps").value = DEFAULT_MAX_STEPS;
   const d = state.result.defaults;
   if (d) {
@@ -133,11 +133,11 @@ export function readSettings() {
   if (me && 2 * settings.multiexp.n + settings.multiexp.offset >= nEchoes - 1) {
     throw new Error(`${settings.multiexp.n} components need more echoes than this dataset has (${nEchoes}).`);
   }
-  const t2min = num("ilt-t2min", "T₂ min"), t2max = num("ilt-t2max", "T₂ max");
+  const t2min = 10 ** num("ilt-t2min", "log10 T₂ min"), t2max = 10 ** num("ilt-t2max", "log10 T₂ max");
   const steps = Math.round(num("ilt-steps", "Max grid points")), alpha = 10 ** num("ilt-alpha", "log10 α");
   const thr = num("ilt-peakthr", "Peak threshold"), lo = num("ilt-sweep-lo", "α sweep start"), hi = num("ilt-sweep-hi", "α sweep end");
   if (il) {
-    if (t2min <= 0 || t2max <= t2min) throw new Error("T₂ min must be positive and smaller than T₂ max.");
+    if (!(t2max > t2min)) throw new Error("log₁₀ T₂ min must be smaller than log₁₀ T₂ max.");
     if (steps < 10 || steps > STEPS_LIMIT) throw new Error(`Max grid points must be between 10 and ${STEPS_LIMIT}.`);
     if (thr < 0 || thr > 100) throw new Error("Peak threshold must be between 0 and 100%.");
     if ($("ilt-sweep").checked && lo >= hi) throw new Error("The α sweep must start below where it ends.");
