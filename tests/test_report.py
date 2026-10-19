@@ -81,7 +81,7 @@ def test_the_cpmg_report_says_what_was_done_and_found(reports):
     (res, prov, mc, bs, raw), blocks, _, _ = reports["cpmg"]
     text = all_text(blocks)
     me = res["multiexp"]["selected"]
-    for needle in ("nmrdash analysis report", "CPMG_EtGly/1", "Settings", "integrate each echo", "Exponential fit", F.fmt_sci(me["components"][0]["T2"]), "ILT",
+    for needle in ("Spinlab Data Analysis Report", "CPMG_EtGly/1", "Settings", "integrate each echo", "Exponential fit", F.fmt_sci(me["components"][0]["T2"]), "ILT",
                    "Uncertainty: methods compared", "MCMC: 24 walkers", "Bootstrap: 20 replicates", "Warnings and notes", "How these numbers were obtained", "Provenance", "SHA-256", "Provided as is"):
         assert needle in text, needle
     assert "exp(−t / T₂)" in text                                                       # the equations that apply are listed
@@ -206,6 +206,7 @@ def test_the_batch_report_lists_every_dataset_and_why_some_were_skipped():
     assert "T₂ 3.00e-2 s (100%)" in report._row_result(rows[0]) and "this batch is cpmg" in report._row_result(rows[2])
     pdf = report.build_batch(rows, P.defaults(), "demo")
     assert pdf[:5] == b"%PDF-" and pdf_pages(pdf) >= 1
+    assert "nmrdash analysis report" not in all_text(report.compose(*analysis("T1SAT/1", T1), style={})).lower()
 
 
 def test_the_params_file_has_a_report_switch():
