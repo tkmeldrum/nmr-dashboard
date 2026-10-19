@@ -351,7 +351,7 @@ def _header(res, prov, kind):
                 "integrate": "each echo integrated"}.get(res.get("mode") if res.get("mode") in ("t1", "t2d", "ft") else "integrate")
     when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat")), None)
     nm = prov.get("nmrdash", {})
-    blocks = [title("nmrdash analysis report", prov.get("dataset")),
+    blocks = [title("Spinlab Data Analysis Report", prov.get("dataset")),
               table(None, [["Sequence", f"{experiment}", "Data written", when or "unknown"], ["Analysis", analysis, "Processed", prov.get("created_utc", "?")],
                            ["Tool", f"nmrdash {nm.get('version', '?')} ({(nm.get('commit') or 'unknown')[:10]})", "Dataset folder", prov.get("dataset") or "?"]], [1.0, 2.6, 1.0, 2.6], size="note")]
     return blocks
@@ -497,7 +497,7 @@ def build(res, prov, mcmc=None, boot=None, raw=None, style=None):
     blocks = compose(res, prov, mcmc, boot, raw, style)
     pages, scale = fit(blocks)
     nm = prov.get("nmrdash", {})
-    return render(pages, scale, f"nmrdash {nm.get('version', '?')} ({(nm.get('commit') or 'unknown')[:10]})  ·  {prov.get('dataset')}", f"nmrdash report: {prov.get('dataset')}")
+    return render(pages, scale, f"nmrdash {nm.get('version', '?')} ({(nm.get('commit') or 'unknown')[:10]})  ·  {prov.get('dataset')}", f"Spinlab Data Analysis Report: {prov.get('dataset')}")
 
 
 # ── a batch of datasets ──────────────────────────────────────────────────────
@@ -524,7 +524,7 @@ def build_batch(rows, params, root_name, t0=None, params_text=None):
     ok = [r for r in rows if r["status"] == "ok"]
     counts = {k: sum(r["status"] == k for r in rows) for k in ("ok", "skipped", "failed")}
     times = [r["timestamp_utc"] for r in rows if r.get("timestamp_utc")]
-    B = [title("nmrdash batch report", root_name),
+    B = [title("Spinlab Batch Data Analysis Report", root_name),
          table(None, [["Datasets", f"{len(rows)} ({counts['ok']} processed, {counts['skipped']} skipped, {counts['failed']} failed)", "Measured", (min(times) + " to " + max(times)) if times else "unknown"],
                       ["Time zero", t0.isoformat() if t0 else "none", "Tool", f"nmrdash {__import__('nmrdash').__version__}"]], [0.9, 3.0, 0.9, 2.4], size="note"),
          h2("Datasets")]
@@ -547,4 +547,4 @@ def build_batch(rows, params, root_name, t0=None, params_text=None):
     B.append(para("Each dataset has its own report (report.pdf) in its processed_… folder, with the settings used, the full numbers, the figures and the provenance. Provided as is, without warranty; "
                   "check results independently before relying on them.", size="note", color=MUTED))
     pages, scale = fit(B, max_pages=60)
-    return render(pages, scale, f"nmrdash batch report  ·  {root_name}", f"nmrdash batch report: {root_name}")
+    return render(pages, scale, f"Spinlab batch report  ·  {root_name}  ·  nmrdash {__import__('nmrdash').__version__}", f"Spinlab Batch Data Analysis Report: {root_name}")

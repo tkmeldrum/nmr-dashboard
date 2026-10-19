@@ -132,7 +132,7 @@ Agreed with Tyler on 2026-10-19, in this order:
    holds the *α sweep*. A separate collapsed **"Advanced settings"** block on the Process tab holds the confidence level, the MCMC and bootstrap options (and the decay to analyse). Defaults while closed:
    the model comparison stays computed (it drives the "BIC prefers…" note), the α sweep, MCMC and bootstrap are off. For T₂–D the automatic 1–4 population choice stays visible; its MCMC/bootstrap options go in Advanced.
    Loading a params file that enables an advanced option opens the block.
-3. **Per-analysis PDF report (done 2026-10-19)**, 2–4 pages, US Letter (`nmrdash/report.py`: compose blocks → paginate → render with matplotlib PdfPages; figures embedded as 170-dpi images, text is vector/selectable): page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
+3. **Per-analysis PDF report (done 2026-10-19)**, 2–4 pages, US Letter (titled "Spinlab Data Analysis Report" at Tyler's request; `nmrdash/report.py`: compose blocks → paginate → render with matplotlib PdfPages; figures embedded as 170-dpi images, text is vector/selectable): page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
    Saved as `report_<timestamp>.pdf` inside the `processed_…` folder with one click (a "Save report" button), alongside the other files; downloaded in browsers that cannot write folders.
    Batch: one report per dataset plus a one-page batch summary. Built with matplotlib's multi-page PDF (vector text, already in the page).
 4. **Tecmag support** (later; see §9).
