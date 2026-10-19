@@ -52,7 +52,7 @@ The sequence name `SSE-T2` selects a 2D inverse Laplace transform of the echo ×
 unit handling, the summaries and the interface are new. Files read: `acqu.par`, `data2D_Cp.2d` (or `data2D.dat`), `data.dat`, and
 `DiffAxis.dat` / `T2Axis.dat` when present; the imaginary channel after phasing gives a measured noise σ and a χ² per point.
 
-- **Defaults (as you specified):** T₂ 1e-5 to 1 s, D 1e-12 to 1e-8 m²/s, α = 1e9, 50 T₂ × 25 D points. D is entered and reported in m²/s; the
+- **Defaults (as you specified):** T₂ 1e-5 to 1 s, D 1e-12 to 2.2e-9 m²/s (the upper limit is about the self-diffusion coefficient of water; it was 1e-8 until 2026-10-19), α = 1e9, 50 T₂ × 25 D points. D is entered and reported in m²/s; the
   solver works on D × 10⁹ (and b × 10⁻⁹) and every result is converted back. Params file section `[t2d]`; `exclude_first` applies.
 - **Cost:** one dense problem of (T₂ points × D points) unknowns: native times of 1.9 s (30 × 25), 8 s (50 × 25), 54 s (100 × 25) and ~0.9 GB for the
   last. In the browser 50 × 25 takes about 20 s and 100 × 25 about 3 minutes. Before a long solve the page times a small trial, shows an estimate and asks;
@@ -60,7 +60,7 @@ unit handling, the summaries and the interface are new. Files read: `acqu.par`, 
 - **What the data can resolve (important).** A diffusion coefficient is only measurable if the signal decays over the b-values used: roughly from
   1/b_max to 5/b_min (for the M1115 sample, b = 6.4e9 – 2.9e12 s/m², i.e. **3.5e-13 to 7.8e-10 m²/s**). The regularisation (a curvature penalty) does
   not discourage large amplitudes where the kernel is ~0, so outside that window the solution can hold a lot of "signal" that the data say nothing
-  about: on both sample datasets 64–69% of the spectrum's weight sits above 7e-10 m²/s, and a synthetic test with known populations shows the same
+  about: on both sample datasets 64–69% of the spectrum's weight sat above 7e-10 m²/s when the grid reached 1e-8 (the 2.2e-9 default shortens that tail: 21–41% of the spectrum is then outside the resolvable window), and a synthetic test with known populations shows the same
   drift. The page therefore shades the unresolvable band, flags each region as constrained or not, reports each region's share of the *resolvable*
   part, and offers **"Use the range the b-values can resolve"** (params: `d_min = d_max = "auto"`). Within that window the slow population of the
   synthetic test is recovered to ~10% in T₂ and D; the fast one's T₂ is good but its D can be off by ~2× and its share by ~20% (and shifts with α).

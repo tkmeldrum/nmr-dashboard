@@ -28,7 +28,7 @@ def test_t2d_is_read(d):
     assert r["kind"] == "t2d" and r["supported"] and not r["is_cpmg"] and "T₂–D" in r["analysis"]
     raw = r["raw"]
     assert raw["n_echoes"] == len(raw["echo_time_s"]) and raw["n_tau"] == len(raw["b_vec"]) == len(raw["data"]) and len(raw["data"][0]) == raw["n_echoes"]
-    assert raw["noise_sigma"] > 0 and r["defaults"]["t2_steps"] == 50 and r["defaults"]["d_max"] == 1e-8
+    assert raw["noise_sigma"] > 0 and r["defaults"]["t2_steps"] == 50 and r["defaults"]["d_max"] == 2.2e-9
 
 
 def test_a_folder_with_a_sequence_nmrdash_does_not_know_is_declined(tmp_path):
