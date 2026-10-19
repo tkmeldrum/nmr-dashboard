@@ -65,6 +65,22 @@ function validate(o) {
 export const duration = (s) => (s < 1.5 ? "a second" : s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`);
 const msg = (text, kind = "") => { const m = $("unc-message"); m.textContent = text; m.className = "message " + kind; m.hidden = !text; };
 
+// Long runs ask first, but not every time. Under LONG_SECONDS nothing is asked; once the user has said yes to a long run, runs of up to RENEWED_FACTOR times
+// that length go ahead without asking (for the rest of this page session: it is not stored anywhere). A much longer run asks again.
+export const LONG_SECONDS = 20;
+const RENEWED_FACTOR = 1.5;
+const consent = { seconds: 0 };
+
+export async function confirmLong(estSeconds, text) {
+  if (estSeconds <= LONG_SECONDS || estSeconds <= consent.seconds * RENEWED_FACTOR) return true;
+  const note = consent.seconds > 0
+    ? ` This is much longer than the run you agreed to earlier (about ${duration(consent.seconds)}).`
+    : " If you agree, similar runs this session will start without asking.";
+  const ok = await ask(text + note);
+  if (ok) consent.seconds = Math.max(consent.seconds, estSeconds);
+  return ok;
+}
+
 export function ask(text) {
   return new Promise((resolve) => {
     const d = $("unc-dialog");
@@ -122,8 +138,8 @@ export async function runUncertainty() {
     const what = jobs.map((j) => (j.kind === "mcmc"
       ? `MCMC with ${j.info.nwalkers} walkers × ${j.total} steps`
       : `a bootstrap of ${j.total} replicates (${j.info.method === "noise" ? "measured" : j.info.method} noise)`)).join(" and ");
-    const go = await ask(`This will run ${what} on the ${target}. It may take a while: about ${duration(est)} on this computer, ` +
-                         `based on a timed trial. The page stays usable, and you can stop at any time and keep what has run so far.`);
+    const go = await confirmLong(est, `This will run ${what} on the ${target}. It may take a while: about ${duration(est)} on this computer, ` +
+                                      `based on a timed trial. The page stays usable, and you can stop at any time and keep what has run so far.`);
     if (!go) { bar.hidden = true; msg("Skipped. Change the options in Advanced settings and run the processing again to retry."); return; }
 
     $("unc-stop").hidden = false;

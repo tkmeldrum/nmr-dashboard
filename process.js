@@ -5,7 +5,7 @@ import { applyKind, updateEquation } from "./kinds.js";
 import { rpc } from "./rpc.js";
 import { setBusy, setStoppable } from "./busy.js";
 import { download } from "./provenance.js";
-import { ask, duration, exportOptions } from "./uncertainty.js";
+import { confirmLong, duration, exportOptions } from "./uncertainty.js";
 import { figureStyle } from "./plotstyle.js";
 
 const DEFAULT_MAX_STEPS = 100;   // user-editable; Python also caps at the echo count
@@ -222,7 +222,7 @@ export function initProcess() {
       setRunning(true, "Estimating how long the inversion will take…");
       try {
         const est = await rpc("t2d_estimate", settings);
-        if (est.seconds > 20 && !(await ask(`The ${est.n_T2} × ${est.n_D} T₂–D inversion (${est.unknowns} unknowns) is estimated to take about ${duration(est.seconds)} on this computer, ` +
+        if (!(await confirmLong(est.seconds, `The ${est.n_T2} × ${est.n_D} T₂–D inversion (${est.unknowns} unknowns) is estimated to take about ${duration(est.seconds)} on this computer, ` +
             "based on a short timed trial. The page cannot show progress during the solve, but you can stop it (this restarts Python and keeps your data and settings). Run it?"))) {
           setRunning(false, "");
           return;
