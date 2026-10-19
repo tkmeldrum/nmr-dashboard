@@ -109,8 +109,8 @@
           <label class="opt"><strong>T₂–D inversion</strong> <small>(2D inverse Laplace transform of the echo × diffusion-delay data)</small></label>
           <div class="fields" id="t2d-fields">
             <label>Gradient G (T/m) <input type="number" id="t2d-gradient" step="any" min="0"></label>
-            <label>T₂ min (s) <input type="number" id="t2d-t2min" step="any" min="0"></label>
-            <label>T₂ max (s) <input type="number" id="t2d-t2max" step="any" min="0"></label>
+            <label>log<sub>10</sub> T₂ min (s) <input type="number" id="t2d-t2min" step="1"></label>
+            <label>log<sub>10</sub> T₂ max (s) <input type="number" id="t2d-t2max" step="1"></label>
             <label>T₂ points <input type="number" id="t2d-t2steps" step="1" min="10" max="400"></label>
             <label>D min (m²/s) <input type="number" id="t2d-dmin" step="any" min="0"></label>
             <label>D max (m²/s) <input type="number" id="t2d-dmax" step="any" min="0"></label>
