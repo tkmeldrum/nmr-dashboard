@@ -53,7 +53,7 @@ async function apply(out) {
       }
       set("me-enabled", s.multiexp.enabled);
       const il = s.ilt;
-      set("ilt-enabled", il.enabled); set("ilt-t2min", il.t2_min); set("ilt-t2max", il.t2_max); set("ilt-steps", il.n_steps);
+      set("ilt-enabled", il.enabled); set("ilt-t2min", log10(il.t2_min)); set("ilt-t2max", log10(il.t2_max)); set("ilt-steps", il.n_steps);
       set("ilt-alpha", log10(il.alpha)); set("ilt-sweep", il.sweep); set("ilt-peakthr", il.peak_threshold_pct);
       set("ilt-sweep-lo", il.sweep_lo); set("ilt-sweep-hi", il.sweep_hi);
       if (il.sweep) showAdvanced("ilt-sweep");

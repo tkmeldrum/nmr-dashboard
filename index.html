@@ -174,8 +174,8 @@
         <div class="analysis" data-for="cpmg">
           <label class="opt"><input type="checkbox" id="ilt-enabled" checked> Inverse Laplace transform (ILT)</label>
           <div class="fields" id="ilt-fields">
-            <label>T₂ min (s) <input type="number" id="ilt-t2min" step="any" min="0"></label>
-            <label>T₂ max (s) <input type="number" id="ilt-t2max" step="any" min="0"></label>
+            <label>log<sub>10</sub> T₂ min (s) <input type="number" id="ilt-t2min" step="1"></label>
+            <label>log<sub>10</sub> T₂ max (s) <input type="number" id="ilt-t2max" step="1"></label>
             <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
             <label>log<sub>10</sub> α <input type="number" id="ilt-alpha" step="1" value="8"></label>
             <label>Peak threshold (% of tallest) <input type="number" id="ilt-peakthr" step="any" min="0" max="100" value="5"></label>
