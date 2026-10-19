@@ -146,6 +146,7 @@ SPEC = {
         ("directory", "", "Where results go. Empty = a processed_<timestamp> folder inside each data folder (raw data is never touched);\n# otherwise a folder you name, mirrored by dataset.", _text),
         ("csv", True, "Numeric results as CSV files.", _boolean),
         ("figures", True, "Figures.", _boolean),
+        ("report", True, "A 2-4 page PDF report per dataset (US Letter): settings, key numbers with intervals, warnings, the main figures and the provenance; a batch also gets a batch report.", _boolean),
         ("figure_format", "png", "", _one_of("png", "pdf", "svg")),
         ("figure_dpi", 150, "", _integer(50, 1200)),
         ("titles", True, "Put titles on figures (switch off for publication figures).", _boolean),

@@ -268,6 +268,7 @@
       <div class="save-opts">
         <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
         <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
+        <label><input type="checkbox" id="batch-report" checked> PDF report for every dataset, and a batch report</label>
       </div>
       <div class="save-bar">
         <button type="button" id="batch-run">Run batch…</button>
@@ -317,17 +318,19 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
       <div class="save-bar">
         <button type="button" id="save-folder" title="Writes a new processed_… folder inside the folder you opened">Save to the data folder</button>
         <button type="button" id="save-other" class="secondary">Save to another folder…</button>
+        <button type="button" id="save-report-only" class="secondary" title="Just the PDF report (2–4 pages): into the data folder in Chrome or Edge, otherwise a download">Save report (PDF)</button>
         <button type="button" id="save-zip" class="secondary">Download .zip</button>
         <span id="save-status" class="status" role="status"></span>
       </div>
       <div class="save-opts">
         <label><input type="checkbox" id="save-csv" checked> Tables (CSV)</label>
         <label><input type="checkbox" id="save-samples" checked> MCMC and bootstrap samples</label>
+        <label><input type="checkbox" id="save-report" checked> PDF report</label>
         <label><input type="checkbox" id="save-figs" checked> Figures</label>
         <label>as <select id="save-format"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label>
         <label id="save-dpi-row">resolution <input type="number" id="save-dpi" value="200" min="50" max="1200" step="50"> dpi</label>
       </div>
-      <p class="note">Every save also writes params_used.toml, provenance.json (inputs, settings, versions) and a summary.md.</p>
+      <p class="note">Every save also writes params_used.toml, provenance.json (inputs, settings, versions) and a summary.md. The PDF report is a 2–4 page record of the analysis: settings, key numbers with intervals, warnings, the main figures and the provenance.</p>
       <details class="plot-settings">
         <summary>Plot settings</summary>
         <p class="note">Applied to the plots on this page and to the saved figures, except where noted. Kept in this browser for next time.</p>

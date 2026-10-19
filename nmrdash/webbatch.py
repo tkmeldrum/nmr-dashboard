@@ -26,7 +26,7 @@ def start(a):
     os.makedirs(ROOT)
     p = P.with_style(P.from_settings(a["settings"], a["options"]), a.get("style"))
     o = a.get("output") or {}
-    for k, key in (("csv", "csv"), ("figures", "figures"), ("samples", "samples"), ("figure_format", "figure_format"), ("dpi", "figure_dpi")):
+    for k, key in (("csv", "csv"), ("figures", "figures"), ("report", "report"), ("samples", "samples"), ("figure_format", "figure_format"), ("dpi", "figure_dpi")):
         if o.get(k) is not None:
             p["output"][key] = max(50, int(o[k])) if k == "dpi" else o[k]       # the params file allows 50-1200 dpi
     p = P.validate(p)
