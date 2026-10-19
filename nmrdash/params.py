@@ -115,7 +115,7 @@ SPEC = {
         ("t2_max", 1.0, "", _number(0, lo_open=True)),
         ("t2_steps", 50, "T2 grid points (never more than echoes). The solve is a dense problem of T2 x D unknowns: 50 x 25 takes seconds, 100 x 25 about a minute, in the browser several times longer.", _integer(10, 400)),
         ("d_min", 1e-12, "Diffusion coefficient grid, m^2/s (processed internally as D x 1e9, reported in m^2/s). The b-values can only tell apart D from about\n# 1/b_max to 5/b_min; outside that the solution is regularisation, not data. \"auto\" for both = exactly that range for this dataset.", _auto_or(_number(0, lo_open=True))),
-        ("d_max", 1e-8, "", _auto_or(_number(0, lo_open=True))),
+        ("d_max", 2.2e-9, "(Default: 2.2e-9, about the self-diffusion coefficient of water.)", _auto_or(_number(0, lo_open=True))),
         ("d_steps", 25, "D grid points (never more than the number of diffusion delays).", _integer(5, 200)),
         ("alpha", 1e9, "Regularisation strength: larger = less smoothing.", _number(0, lo_open=True)),
         ("peak_threshold_pct", 10.0, "Regions of the spectrum above this % of its maximum are reported as peaks.", _number(0, 100)),

@@ -176,7 +176,7 @@ def test_provenance_records_every_t2d_input_file():
 
 def test_params_t2d_section_round_trips():
     p = P.defaults()
-    assert p["t2d"]["d_min"] == 1e-12 and p["t2d"]["d_max"] == 1e-8 and p["t2d"]["t2_min"] == 1e-5 and p["t2d"]["t2_max"] == 1.0 and p["t2d"]["alpha"] == 1e9
+    assert p["t2d"]["d_min"] == 1e-12 and p["t2d"]["d_max"] == 2.2e-9 and p["t2d"]["t2_min"] == 1e-5 and p["t2d"]["t2_max"] == 1.0 and p["t2d"]["alpha"] == 1e9
     s, o = P.to_settings_t2d(p)
     assert s == {"kind": "t2d", "exclude_first": 0, "t2d": p["t2d"], "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable", "seed": 0}}
     assert o["mcmc"]["enabled"] is False and o["bootstrap"]["enabled"] is False and o["mcmc"]["target"] == "bulk"
@@ -241,7 +241,7 @@ def test_regions_outside_the_window_are_flagged_and_the_samples_show_why_it_matt
         lo, hi = r["d_sensitive"]
         assert all(p["constrained"] == (lo <= p["D_mean"] <= hi) for p in r["peaks"])
         assert not r["peaks"][0]["constrained"]                                # the biggest region is regularisation filling D the data cannot see
-        assert r["fraction_in_sensitive_window"] < 0.5
+        assert r["fraction_in_sensitive_window"] < 0.85                        # 59% and 79% on these samples with the default D range (37% and 60% when it reached 1e-8)
         assert all(0 <= p["fraction_in_window"] <= 1.0001 for p in r["peaks"])        # the part of each region inside the window, never more than all of it
         assert sum(p["fraction_in_window"] for p in r["peaks"]) <= 1.0001
 

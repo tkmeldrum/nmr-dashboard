@@ -73,6 +73,7 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 - **T1 recovery keeps an offset by default** (RMSE 38 vs 305 without it on the samples). One component by default, two on request. No ILT for T1.
 - **ILT** is the Matlab-matched solver (curvature penalty, SVD compression); α is entered as log₁₀ α.
 - **`exclude_first`** (first n echoes) applies to every fit, ILT, MCMC and bootstrap; excluded points are shown as open markers.
+- **T₂–D grid defaults:** T₂ 10⁻⁵–1 s and D 10⁻¹²–2.2×10⁻⁹ m²/s (D max changed from 10⁻⁸ on 2026-10-19 at Tyler's request: about the self-diffusion coefficient of water); both ranges are entered as log₁₀ values on the page.
 - **T₂–D:** the regularised map is exploratory and has no intervals. A **few-population model** (no offset; K from 1 to 4 by BIC unless set; D limited to the resolvable window `[1/b_max, 5/b_min]`, widenable)
   gives intervals; MCMC and bootstrap sample it. Populations slower than the window are reported as bounds; faster ones leave no signal and are never found (the map's weight there is extrapolation).
 - **Noise σ** comes from the imaginary channel (1.4826·MAD); there is none for T1 data (MCMC samples σ, bootstrap resamples residuals).

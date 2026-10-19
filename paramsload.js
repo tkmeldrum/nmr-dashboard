@@ -38,7 +38,7 @@ async function apply(out) {
       const ax = await rpc("t2d_axes", { t2d: { gradient: t.gradient } });
       [dmin, dmax] = ax.d_window.map((v) => +v.toPrecision(2));
     }
-    set("t2d-dmin", dmin); set("t2d-dmax", dmax); set("t2d-alpha", log10(t.alpha)); set("t2d-peakthr", t.peak_threshold_pct);
+    set("t2d-dmin", +Math.log10(dmin).toFixed(3)); set("t2d-dmax", +Math.log10(dmax).toFixed(3)); set("t2d-alpha", log10(t.alpha)); set("t2d-peakthr", t.peak_threshold_pct);
     const tm = s.t2d_model || {};
     set("t2d-model-enabled", tm.enabled !== false); set("t2d-model-k", tm.k ? String(tm.k) : "auto"); set("t2d-model-window", tm.d_window || "resolvable");
   } else {

@@ -42,7 +42,7 @@ export function initProcessDefaults(raw) {
 export function initT2dDefaults(r) {
   const d = r.defaults;
   $("t2d-t2min").value = +Math.log10(d.t2_min).toFixed(3); $("t2d-t2max").value = +Math.log10(d.t2_max).toFixed(3);          // entered as log10 of the time in s $("t2d-t2steps").value = d.t2_steps;
-  $("t2d-dmin").value = d.d_min; $("t2d-dmax").value = d.d_max; $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
+  $("t2d-dmin").value = +Math.log10(d.d_min).toFixed(3); $("t2d-dmax").value = +Math.log10(d.d_max).toFixed(3);          // log10 of the coefficient in m²/s $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
   $("t2d-alpha").value = +Math.log10(d.alpha).toFixed(3); $("t2d-peakthr").value = d.peak_threshold_pct;
   $("t2d-equation").innerHTML = T2D_EQUATION;
   $("t2d-gradient").value = d.gradient;
@@ -85,12 +85,12 @@ export function readSettings() {
   if (state.result.kind === "t2d") {
     const t = {
       t2_min: 10 ** num("t2d-t2min", "log10 T₂ min"), t2_max: 10 ** num("t2d-t2max", "log10 T₂ max"), t2_steps: Math.round(num("t2d-t2steps", "T₂ points")),
-      gradient: num("t2d-gradient", "Gradient G"), d_min: num("t2d-dmin", "D min"), d_max: num("t2d-dmax", "D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
+      gradient: num("t2d-gradient", "Gradient G"), d_min: 10 ** num("t2d-dmin", "log10 D min"), d_max: 10 ** num("t2d-dmax", "log10 D max"), d_steps: Math.round(num("t2d-dsteps", "D points")),
       alpha: 10 ** num("t2d-alpha", "log10 α"), peak_threshold_pct: num("t2d-peakthr", "Region threshold"),
     };
     if (!(t.gradient > 0)) throw new Error("The gradient G must be a positive number (T/m).");
     if (!(t.t2_max > t.t2_min)) throw new Error("log₁₀ T₂ min must be smaller than log₁₀ T₂ max.");
-    if (t.d_min <= 0 || t.d_max <= t.d_min) throw new Error("D min must be positive and smaller than D max.");
+    if (!(t.d_max > t.d_min)) throw new Error("log₁₀ D min must be smaller than log₁₀ D max.");
     if (t.t2_steps < 10 || t.t2_steps > 400) throw new Error("T₂ points must be between 10 and 400.");
     if (t.d_steps < 5 || t.d_steps > 200) throw new Error("D points must be between 5 and 200.");
     if (t.alpha <= 0) throw new Error("α must be a finite positive number.");
@@ -207,7 +207,7 @@ export function initProcess() {
     const ax = await refreshT2dAxes();
     if (!ax) return;
     const two = (v) => +v.toPrecision(2);
-    $("t2d-dmin").value = two(ax.d_window[0]); $("t2d-dmax").value = two(ax.d_window[1]);
+    $("t2d-dmin").value = (Math.round(100 * Math.log10(ax.d_window[0])) / 100); $("t2d-dmax").value = (Math.round(100 * Math.log10(ax.d_window[1])) / 100);     // log10, to 0.01
   });
   $("t2d-gradient").addEventListener("change", () => refreshT2dAxes().catch((err) => showMsg(err.message)));
   $("run-btn").addEventListener("click", async () => {
