@@ -32,7 +32,7 @@ async function apply(out) {
   if (out.kind === "t2d") {
     const t = s.t2d;
     set("t2d-gradient", t.gradient);
-    set("t2d-t2min", t.t2_min); set("t2d-t2max", t.t2_max); set("t2d-t2steps", t.t2_steps); set("t2d-dsteps", Math.min(t.d_steps, state.result.raw.n_tau));
+    set("t2d-t2min", log10(t.t2_min)); set("t2d-t2max", log10(t.t2_max)); set("t2d-t2steps", t.t2_steps); set("t2d-dsteps", Math.min(t.d_steps, state.result.raw.n_tau));
     let dmin = t.d_min, dmax = t.d_max;
     if (dmin === "auto" || dmax === "auto") {
       const ax = await rpc("t2d_axes", { t2d: { gradient: t.gradient } });
