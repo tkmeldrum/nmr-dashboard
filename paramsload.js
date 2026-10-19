@@ -1,4 +1,4 @@
-// Fill the Process and Uncertainty controls from a params file (the same file the command-line script reads).
+// Fill the Process controls (including Advanced settings) from a params file (the same file the command-line script reads).
 import { $, state } from "./state.js";
 import { rpc } from "./rpc.js";
 import { withBusy } from "./busy.js";
@@ -13,12 +13,16 @@ function set(id, value) {
 }
 const pick = (name, value) => { const el = document.querySelector(`input[name="${name}"][value="${value}"]`); if (el) { el.checked = true; el.dispatchEvent(new Event("change", { bubbles: true })); } };
 const log10 = (x) => +Math.log10(x).toFixed(3);
+// A file that turns an advanced option on (or off its default) opens the Advanced block that holds it, so nothing is hidden.
+const showAdvanced = (id) => { const d = $(id) && $(id).closest("details.adv, details.advanced-settings"); if (d) d.open = true; };
 
 function applyDecay(s) {
   set("me-n", s.multiexp.n); set("me-offset", s.multiexp.offset); set("me-compare", s.multiexp.compare);
   const ci = String(s.multiexp.ci_level);
   const option = [...$("me-ci").options].find((o) => +o.value === +ci);
   if (option) set("me-ci", option.value);
+  if (!s.multiexp.compare) showAdvanced("me-compare");
+  if (option && +option.value !== 0.95) showAdvanced("me-ci");
   return option ? null : `The confidence level ${ci} is not one of the page's choices (68, 95, 99%); it was left as it was.`;
 }
 
@@ -52,12 +56,14 @@ async function apply(out) {
       set("ilt-enabled", il.enabled); set("ilt-t2min", il.t2_min); set("ilt-t2max", il.t2_max); set("ilt-steps", il.n_steps);
       set("ilt-alpha", log10(il.alpha)); set("ilt-sweep", il.sweep); set("ilt-peakthr", il.peak_threshold_pct);
       set("ilt-sweep-lo", il.sweep_lo); set("ilt-sweep-hi", il.sweep_hi);
+      if (il.sweep) showAdvanced("ilt-sweep");
     }
   }
   if (o.mcmc) {
     set("mcmc-enabled", o.mcmc.enabled); set("mcmc-walkers", o.mcmc.nwalkers); set("mcmc-steps", o.mcmc.steps); set("mcmc-burn", o.mcmc.burn);
     set("mcmc-sigma", o.mcmc.sample_sigma);
-    if (out.kind === "cpmg") { pick("unc-target", o.mcmc.target); set("unc-z", o.mcmc.z_um); }
+    if (o.mcmc.enabled || o.bootstrap.enabled) showAdvanced("mcmc-enabled");
+    if (out.kind === "cpmg") { pick("unc-target", o.mcmc.target); set("unc-z", o.mcmc.z_um); if (o.mcmc.target === "position") showAdvanced("unc-z"); }
     const b = o.bootstrap;
     set("boot-enabled", b.enabled); set("boot-n", b.replicates); set("boot-method", b.method || "auto"); set("boot-me", b.do_multiexp);
     if (out.kind === "cpmg") set("boot-ilt", b.do_ilt);
