@@ -97,7 +97,8 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 ## 6. Working practices and gotchas
 
 - **Workflow:** feature branch → PR → tests pass on CI → merge (merge commit, not squash) → a deploy follows (~5 min; hard-refresh the live site). Stacked PRs: merge in order and retarget to `main`.
-  **Gate every merge on the test check actually passing** (a merge once followed a red test because the merge command was chained after a watch that returned early).
+  **Gate every merge on the test check of the PR's *latest commit* passing.** Two ways this has gone wrong: a merge followed a red test because the merge command was chained after a watch that returned early, and a
+  check read right after a push still showed the *previous* commit's green. Wait until `gh run list --branch <branch> --commit <head sha>` shows a run for the head commit and it has completed successfully; after the merge, confirm the run on `main` (tests and deploy) is green.
 - **CI** (`.github/workflows/pages.yml`): `pytest -n auto` with `OMP/OPENBLAS/MKL_NUM_THREADS=1` (without it NumPy over-threads under xdist and gives no speed-up), pip cached, the vendor libraries fetched and cached.
   CI runs ~3–6 min. The deploy job is a *bare* runner: it must `pip install -e .` before `build_site.py` (the physics page imports the package) — a missed install once broke a deploy.
 - **Tests that bit us:** wall-clock tests are flaky on shared runners (the T₂–D time-estimate test now retries and uses the fastest trial); tests sharing a fixed folder race under xdist
@@ -111,7 +112,7 @@ Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 - **Long commands:** use `tmux` (Tyler switches computers mid-session). Do not poll with chained sleeps; run in the background and read the output.
 - **Unverified things must not appear on a public page** (references), and nothing about unpublished work (see §10).
 
-## 7. Status (2026-10-19)
+## 7. Status (2026-10-19, end of session)
 
 Everything below is merged to `main` and live; CI green; no open PRs.
 - **Analyses:** CPMG (integrate or FT; multi-exponential with intervals, model comparison, unsupported-component warnings; ILT with α sweep; per-position fits and a linked cross-section viewer),
@@ -132,10 +133,10 @@ Agreed with Tyler on 2026-10-19, in this order:
    holds the *α sweep*. A separate collapsed **"Advanced settings"** block on the Process tab holds the confidence level, the MCMC and bootstrap options (and the decay to analyse). Defaults while closed:
    the model comparison stays computed (it drives the "BIC prefers…" note), the α sweep, MCMC and bootstrap are off. For T₂–D the automatic 1–4 population choice stays visible; its MCMC/bootstrap options go in Advanced.
    Loading a params file that enables an advanced option opens the block.
-3. **Per-analysis PDF report (done 2026-10-19)**, 2–4 pages, US Letter (titled "Spinlab Data Analysis Report" at Tyler's request; `nmrdash/report.py`: compose blocks → paginate → render with matplotlib PdfPages; figures embedded as 170-dpi images, text is vector/selectable): page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
+3. **Per-analysis PDF report (done 2026-10-19, PR #40)**, 2–4 pages, US Letter (titled "Spinlab Data Analysis Report" at Tyler's request; `nmrdash/report.py`: compose blocks → paginate → render with matplotlib PdfPages; figures embedded as 170-dpi images, text is vector/selectable): page 1 header, settings, key numbers with intervals and all warnings; then the main figures; last page provenance and the physics assumptions that apply.
    Saved as `report_<timestamp>.pdf` inside the `processed_…` folder with one click (a "Save report" button), alongside the other files; downloaded in browsers that cannot write folders.
    Batch: one report per dataset plus a one-page batch summary. Built with matplotlib's multi-page PDF (vector text, already in the page).
-4. **Tecmag support** (later; see §9).
+4. **Tecmag support** (later; see §9; Tyler: "we'll do this later, just put it in the docs").
 5. Tyler: verify `docs/REFERENCES.md`; confirm the copyright line; ask W&M about the licence/IP.
 
 Backlog (not started): batch timestamp override on the page; T₂(z, t) maps for FT batches; SLURM example for the script; stopping inside a long batch dataset; auto-open the uncertainty section when MCMC/bootstrap finish
@@ -169,4 +170,7 @@ Suggested model for the reader and its validation: one of the more capable model
 - **2026-10-12 – 14 (the build):** Plan and scaffold; load, raw, integrate/FT, multi-exponential, ILT, per-position fits and the linked viewer; statistics; MCMC and bootstrap; the script, params file, batch and provenance;
   cosmetics; T1; exclude-first; T₂–D; feedback box; save and plot settings; batch mode; self-hosted libraries and the strict CSP; About/licence; the few-population T₂–D model with MCMC/bootstrap;
   explicit b-values; the physics module and pages. Lessons are in §6.
-- **2026-10-19:** Tyler back after handing the tool to his students. Agreed the four items in §8; wrote this log first.
+- **2026-10-19:** Tyler back after handing the tool to his students. Agreed four items (§8) and did them in order: this log (#37); the Advanced settings (#38: the Uncertainty tab folded into the Process tab; compare 1–4
+  components and the α sweep as small Advanced next to their analyses; `tools/browser_harness.py`); the ILT T₂ range as log₁₀ values (#39, his request mid-session); the PDF report (#40, titled "Spinlab Data Analysis Report" at his request;
+  a batch report too). Tecmag recorded in §9, not started. Still open: references to verify, copyright line, W&M question, student feedback (none received yet).
+  Possible next steps he has not chosen: T₂–D min/max T₂ as log₁₀ too (only the ILT was asked for), batch timestamp override, T₂(z, t) maps, the backlog in §8.
