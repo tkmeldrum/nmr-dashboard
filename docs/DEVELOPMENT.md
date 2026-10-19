@@ -23,9 +23,10 @@ The same Python package also runs on a desktop and on a cluster (`nmrdash run | 
 **The page** (plain ES modules, no build step; `build_site.py` only versions the imports):
 `index.html` (all markup; controls are shown per sequence with `data-for="cpmg t1 t2d"`), `about.html`, `physics.html`, `style.css`;
 `app.js` (worker plumbing, folder loading, tabs flow), `tabs.js`, `process.js` (settings form and the Run button), `raw.js`, `results.js` (CPMG/T1 results),
-`t2dview.js` (T₂–D results and the populations plot), `uncertainty.js` (MCMC / bootstrap orchestration and their tables), `save.js` (save to folder or zip),
+`t2dview.js` (T₂–D results and the populations plot), `uncertainty.js` (MCMC / bootstrap orchestration and their tables; the controls live in "Advanced settings" on the Process tab), `save.js` (save to folder or zip),
 `batch.js`, `paramsload.js` (fill the form from a params file), `plotstyle.js` (plot settings), `plotutil.js`, `provenance.js`, `feedback.js`, `kinds.js`,
 `busy.js`, `rpc.js`, `state.js`, `zip.js`, `equations.js`, `worker.js` (Pyodide; whitelist of callable `pipeline` functions).
+Browser checks without a local browser: `tools/browser_harness.py` (see §6).
 
 **The Python package `nmrdash/`** (also `pip install -e .`):
 - *Physics and estimation (the one implementation of every formula):* `physics.py` (signal models, kernels, b-values, position relations; registry `MODELS`),
@@ -102,7 +103,8 @@ The same Python package also runs on a desktop and on a cluster (`nmrdash run | 
 - **Tests that bit us:** wall-clock tests are flaky on shared runners (the T₂–D time-estimate test now retries and uses the fastest trial); tests sharing a fixed folder race under xdist
   (`webbatch.ROOT` is per-test); ill-conditioned inversions differ between machines (assert sane ranges, not exact region fractions).
 - **Python on the dev machine:** use the environment that has SciPy (`python`, the miniforge one), not the system `python3`.
-- **Browser testing without a local browser session:** Playwright with Chromium, routing every request to the built `site/` and *refusing everything else* (so a stray outside request fails loudly).
+- **Browser testing without a local browser session:** `tools/browser_harness.py` (`with browser_page() as (pg, blocked, errors):`), which builds the site, routes every request to it and *refuses everything else*
+  (so a stray outside request fails loudly). One-off setup: `pip install playwright && playwright install chromium`, plus `pip install -e .` and `python tools/fetch_vendor.py` in the same environment. Scratch scripts using it are not kept in the repo.
   Load a bundled sample with the "Explore test data" button; for folder-write paths use an OPFS directory as a stand-in. Things that cost time: collapsed `<details>` hide their contents from
   "visible" waits (the Results sections start collapsed); Plotly shapes on log axes use data values; a Playwright `wait_for_function` returns immediately if the condition is already true.
   The real File System Access prompt and Safari/Firefox have not been exercised by a person yet (Tyler confirmed saving to a folder works in Chrome).
@@ -114,7 +116,7 @@ The same Python package also runs on a desktop and on a cluster (`nmrdash run | 
 Everything below is merged to `main` and live; CI green; no open PRs.
 - **Analyses:** CPMG (integrate or FT; multi-exponential with intervals, model comparison, unsupported-component warnings; ILT with α sweep; per-position fits and a linked cross-section viewer),
   T1Sat, and SSE-T2 (map + few-population model; MCMC and bootstrap for CPMG, T1 and the T₂–D model).
-- **Page:** tabs Load / Raw / Process / Uncertainty / Results with Back/Next buttons; per-sequence controls; Load params…; plot settings and per-figure overrides; Save card (folder or zip);
+- **Page:** tabs Load / Raw / Process / Results with Back/Next buttons (the Uncertainty tab was folded into Advanced settings on the Process tab, 2026-10-19); per-sequence controls; Load params…; plot settings and per-figure overrides; Save card (folder or zip);
   batch mode with a banner, warnings, progress and Stop; feedback box; About page, physics page, licence and notices.
 - **Script:** `nmrdash run | batch | params`, TOML params, batch time series, provenance.
 - **Notable PRs:** #5 residual line · #6 exclude first n · #7 T₂–D · #12 save + plot settings · #16/#17/#18 per-figure overrides, `[style]`, load params · #22 all figures saved · #23 batch mode ·
@@ -125,7 +127,7 @@ Everything below is merged to `main` and live; CI green; no open PRs.
 
 Agreed with Tyler on 2026-10-19, in this order:
 1. **This log** (done with this file).
-2. **Advanced settings.** The Uncertainty tab goes away. Next to the multi-exponential fit, a small collapsed "Advanced" holds *compare 1–4 components*; next to the ILT, a collapsed "Advanced"
+2. **Advanced settings (done 2026-10-19).** The Uncertainty tab goes away. Next to the multi-exponential fit, a small collapsed "Advanced" holds *compare 1–4 components*; next to the ILT, a collapsed "Advanced"
    holds the *α sweep*. A separate collapsed **"Advanced settings"** block on the Process tab holds the confidence level, the MCMC and bootstrap options (and the decay to analyse). Defaults while closed:
    the model comparison stays computed (it drives the "BIC prefers…" note), the α sweep, MCMC and bootstrap are off. For T₂–D the automatic 1–4 population choice stays visible; its MCMC/bootstrap options go in Advanced.
    Loading a params file that enables an advanced option opens the block.

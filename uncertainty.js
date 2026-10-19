@@ -84,6 +84,7 @@ export async function runUncertainty() {
   if (run.running) return;
   const box = $("unc-results");
   box.hidden = false;
+  box.open = true;                      // the progress bar and the results are inside it: show them
   for (const id of ["unc-compare", "mcmc-results", "boot-results"]) $(id).hidden = true;
   msg("");
   state.unc = { mcmc: null, boot: null, level: o.level, targetKind: o.target };
@@ -123,7 +124,7 @@ export async function runUncertainty() {
       : `a bootstrap of ${j.total} replicates (${j.info.method === "noise" ? "measured" : j.info.method} noise)`)).join(" and ");
     const go = await ask(`This will run ${what} on the ${target}. It may take a while: about ${duration(est)} on this computer, ` +
                          `based on a timed trial. The page stays usable, and you can stop at any time and keep what has run so far.`);
-    if (!go) { bar.hidden = true; msg("Skipped. Change the options on the Uncertainty tab and run the processing again to retry."); return; }
+    if (!go) { bar.hidden = true; msg("Skipped. Change the options in Advanced settings and run the processing again to retry."); return; }
 
     $("unc-stop").hidden = false;
     const totalEst = Math.max(est, 1e-6);

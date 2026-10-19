@@ -20,8 +20,7 @@
     <button type="button" role="tab" id="tab-load" aria-controls="panel-load" aria-selected="true"><span>1</span> Load</button>
     <button type="button" role="tab" id="tab-raw" aria-controls="panel-raw" aria-selected="false" disabled><span>2</span> Raw data</button>
     <button type="button" role="tab" id="tab-process" aria-controls="panel-process" aria-selected="false" disabled><span>3</span> Process</button>
-    <button type="button" role="tab" id="tab-uncertainty" aria-controls="panel-uncertainty" aria-selected="false" disabled><span>4</span> Uncertainty</button>
-    <button type="button" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled><span>5</span> Results</button>
+    <button type="button" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled><span>4</span> Results</button>
   </nav>
 
   <!-- 1 · Load -->
@@ -149,7 +148,7 @@
                 The few-population model fits a small number of discrete populations,</p>
               <p class="equation">S(t, b) = Σ<sub>k</sub> A<sub>k</sub> exp(−t / T<sub>2,k</sub>) exp(−b D<sub>k</sub>), A<sub>k</sub> ≥ 0 (no offset),</p>
               <p>each with an amplitude, T<sub>2</sub> and <i>D</i> and a confidence interval. It is fitted for 1 to 4 populations, starting from the regions the map found, and the number the
-                <a href="https://en.wikipedia.org/wiki/Bayesian_information_criterion" target="_blank" rel="noopener noreferrer">BIC</a> prefers is used unless you choose one. MCMC and the bootstrap on the Uncertainty tab sample this model.</p>
+                <a href="https://en.wikipedia.org/wiki/Bayesian_information_criterion" target="_blank" rel="noopener noreferrer">BIC</a> prefers is used unless you choose one. MCMC and the bootstrap (Advanced settings, below) sample this model.</p>
               <p><strong>Limits.</strong> Each population is a single exponential in T<sub>2</sub> and in b (free diffusion). Restricted diffusion or non-exponential relaxation can show up as extra populations. A population
                 slower than the b-values can resolve is reported as a <em>bound</em> (no interval); one faster than that leaves no signal in the data, so it is never found, and the map's weight there is extrapolation.</p>
             </div></details>
@@ -161,12 +160,14 @@
           <div class="fields" id="me-fields">
             <label>Components <select id="me-n"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
             <label><input type="checkbox" id="me-offset" checked> constant offset</label>
-            <label><input type="checkbox" id="me-compare" checked> <span data-for="cpmg">compare 1–4 components (BIC)</span><span data-for="t1">compare 1 and 2 components (BIC)</span></label>
+            <details class="adv"><summary>Advanced</summary><div class="adv-body">
+              <label><input type="checkbox" id="me-compare" checked> <span data-for="cpmg">compare 1–4 components (BIC)</span><span data-for="t1">compare 1 and 2 components (BIC)</span></label>
+            </div></details>
             <details class="more"><summary>Show more</summary><div class="more-body"><p>Fits the decay with a sum of exponentials; each component has an amplitude <i>A</i> and a relaxation time <i>T</i><sub>2</sub>. The constant offset <i>c</i> absorbs a flat baseline.
               Components are listed from fastest to slowest relaxing.</p>
               <p class="equation" id="me-eq-form"></p>
               <p><em>Compare 1–4 components</em> also fits one to four components and ranks them by ΔBIC, which rewards a good fit but penalises extra parameters (more components are not always justified by the data).
-              Intervals come from the least-squares covariance at the confidence level on the Uncertainty tab.</p></div></details>
+              Intervals come from the least-squares covariance at the confidence level in Advanced settings (below).</p></div></details>
           </div>
         </div>
 
@@ -178,7 +179,9 @@
             <label>Max grid points <input type="number" id="ilt-steps" step="1" min="10" max="1000"></label>
             <label>log<sub>10</sub> α <input type="number" id="ilt-alpha" step="1" value="8"></label>
             <label>Peak threshold (% of tallest) <input type="number" id="ilt-peakthr" step="any" min="0" max="100" value="5"></label>
-            <label><input type="checkbox" id="ilt-sweep"> α sweep (L-curve) from 10^<input type="number" id="ilt-sweep-lo" step="1" value="4"> to 10^<input type="number" id="ilt-sweep-hi" step="1" value="12"></label>
+            <details class="adv"><summary>Advanced</summary><div class="adv-body">
+              <label><input type="checkbox" id="ilt-sweep"> α sweep (L-curve) from 10^<input type="number" id="ilt-sweep-lo" step="1" value="4"> to 10^<input type="number" id="ilt-sweep-hi" step="1" value="12"></label>
+            </div></details>
             <details class="more"><summary>Show more</summary><div class="more-body"><p>The inverse Laplace transform finds the <em>distribution</em> of T<sub>2</sub> values that reproduces the decay, without assuming how many components there are.
               The solution is regularised (smoothed) so it is stable against noise.</p>
               <p class="equation" id="ilt-eq-form"></p>
@@ -188,32 +191,10 @@
         </div>
       </fieldset>
 
-    </form>
-
-    <section id="batch-card" class="batch-card" hidden>
-      <h3>Batch: the same settings on every dataset</h3>
-      <p class="message warn">Batch mode processes every dataset in the folder with the settings on this tab, one after another, here in your browser. It can take a long time (every dataset is a full run), and the page stays busy while it works. Your data still never leave this computer.</p>
-      <p id="batch-readiness" class="note"></p>
-      <p class="note">Only datasets of the same kind as this one are processed (others are listed as skipped). The T₂ range and other numbers above are used as they are for every dataset.</p>
-      <div class="save-opts">
-        <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
-        <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
-      </div>
-      <div class="save-bar">
-        <button type="button" id="batch-run">Run batch…</button>
-        <button type="button" id="batch-stop" class="secondary" hidden>Stop after this dataset</button>
-        <button type="button" id="batch-export" class="secondary" title="Download params.toml and a script that runs the whole batch on your own computer">Export params + script instead</button>
-        <progress id="batch-progress" max="1" value="0" hidden></progress>
-        <span id="batch-status" class="status" role="status"></span>
-      </div>
-      <ul id="batch-log" class="batch-log"></ul>
-    </section>
-  </section>
-
-  <!-- 4 · Uncertainty -->
-  <section role="tabpanel" id="panel-uncertainty" aria-labelledby="tab-uncertainty" hidden>
-    <h2>Uncertainty</h2>
-    <p class="note" data-for="t2d">For T₂–D data, MCMC and the bootstrap sample the <strong>few-population model</strong> switched on in the Process tab (intervals are 95%). The regularised map itself has no intervals: each solve takes seconds to minutes, and its regions are summaries, not fitted quantities.</p>
+      <details id="advanced-settings" class="advanced-settings">
+        <summary><strong>Advanced settings</strong> <small>(confidence level, MCMC, bootstrap)</small></summary>
+        <div class="adv-body">
+    <p class="note" data-for="t2d">For T₂–D data, MCMC and the bootstrap sample the <strong>few-population model</strong> switched on above (intervals are 95%). The regularised map itself has no intervals: each solve takes seconds to minutes, and its regions are summaries, not fitted quantities.</p>
     <fieldset data-for="cpmg t1">
       <legend>Fit confidence intervals</legend>
       <label>Confidence level
@@ -273,12 +254,33 @@
               <p>Intervals are percentile intervals at the confidence level above. More replicates smooth the intervals but take longer; a few hundred is usual.</p></div></details>
       </div>
     </fieldset>
-    <p class="note" data-for="cpmg t1 t2d">Both run after the processing, once you have confirmed a time estimate.</p>
+    <p class="note" data-for="cpmg t1 t2d">MCMC and the bootstrap run after the processing, once you have confirmed a time estimate; their results appear on the Results tab.</p>
+        </div>
+      </details>
 
+    </form>
 
+    <section id="batch-card" class="batch-card" hidden>
+      <h3>Batch: the same settings on every dataset</h3>
+      <p class="message warn">Batch mode processes every dataset in the folder with the settings on this tab, one after another, here in your browser. It can take a long time (every dataset is a full run), and the page stays busy while it works. Your data still never leave this computer.</p>
+      <p id="batch-readiness" class="note"></p>
+      <p class="note">Only datasets of the same kind as this one are processed (others are listed as skipped). The T₂ range and other numbers above are used as they are for every dataset.</p>
+      <div class="save-opts">
+        <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
+        <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
+      </div>
+      <div class="save-bar">
+        <button type="button" id="batch-run">Run batch…</button>
+        <button type="button" id="batch-stop" class="secondary" hidden>Stop after this dataset</button>
+        <button type="button" id="batch-export" class="secondary" title="Download params.toml and a script that runs the whole batch on your own computer">Export params + script instead</button>
+        <progress id="batch-progress" max="1" value="0" hidden></progress>
+        <span id="batch-status" class="status" role="status"></span>
+      </div>
+      <ul id="batch-log" class="batch-log"></ul>
+    </section>
   </section>
 
-  <!-- shared by the Process and Uncertainty tabs -->
+  <!-- shared by the Process tab: one Run button -->
   <div id="run-bar" class="run-bar" hidden>
     <button type="button" id="run-btn">Run processing</button>
     <button type="button" id="params-btn" class="secondary" title="Fill the settings in from a params.toml (or .json), for example one written by this page or used with the script">Load params…</button>
@@ -417,7 +419,7 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
         <div id="t2d-model-warnings"></div>
         <div class="table-wrap"><table id="t2d-model-table" class="grid"></table></div>
         <div class="plot-card wide"><div id="plot-t2d-pop" class="tall"></div></div>
-        <p class="note">Each marker is a population with its 95% interval (open triangles: only a bound on <i>D</i>; open circles: not supported by the data); the grey map is the regularised solution and the shaded bands are diffusion coefficients the b-values cannot resolve. Dots are bootstrap or MCMC samples, when you have run them on the Uncertainty tab.</p>
+        <p class="note">Each marker is a population with its 95% interval (open triangles: only a bound on <i>D</i>; open circles: not supported by the data); the grey map is the regularised solution and the shaded bands are diffusion coefficients the b-values cannot resolve. Dots are bootstrap or MCMC samples, when you have run them (Advanced settings on the Process tab).</p>
         <details class="more"><summary>Model comparison</summary><div class="more-body">
           <p>Each model is fitted from 1 to 4 populations. ΔBIC is relative to the best; lower is better, and a ΔBIC above about 10 is strong evidence against that model. The chosen model is the one BIC prefers unless you set the number.</p>
           <div class="table-wrap"><table id="t2d-model-compare" class="grid"></table></div>
