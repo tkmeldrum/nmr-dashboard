@@ -192,7 +192,7 @@ nmrdash batch params.toml  data/series --jobs 8   # every dataset under a folder
 nmrdash batch params.toml  data/series --list     # just list the datasets and their timestamps
 ```
 
-- **From the page:** the **Export params + script** button (Process and Uncertainty tabs) downloads a `params.toml` holding
+- **From the page:** the **Export params + script** button (Process tab) downloads a `params.toml` holding
   exactly the settings currently on the page, plus `process_nmr.py`, a short runner (`python process_nmr.py DATA_FOLDER`, add
   `--batch` for a folder of datasets). Use `defaults` in place of a params file to run with the built-in defaults.
 - **Excluding the first points:** `[processing] exclude_first = n` (or the "Exclude the first n echoes" field on the Process tab; for T1 it counts
