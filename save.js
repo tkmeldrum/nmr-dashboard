@@ -16,7 +16,7 @@ export function bytes(b64) {
 function choices() {
   const u = state.unc || {};
   return {
-    csv: $("save-csv").checked, figures: $("save-figs").checked, samples: $("save-samples").checked,
+    csv: $("save-csv").checked, figures: $("save-figs").checked, report: $("save-report").checked, samples: $("save-samples").checked,
     figure_format: $("save-format").value, dpi: Math.max(50, Math.min(1200, +$("save-dpi").value || 150)),
     style: { ...figureStyle(), decay_logy: $("fit-log").checked },     // what the decay plot on screen shows
     mcmc: !!u.mcmc, boot: !!u.boot, options: exportOptions(),
@@ -46,6 +46,22 @@ async function saveToFolder(dir) {
   say(`Saved ${Object.keys(out.files).length} files to ${dir.name}/${out.folder}/`);
 }
 
+// Just the PDF report: into the data folder where the browser allows it (one click), otherwise as a download.
+async function saveReportOnly() {
+  const opts = { ...choices(), report_only: true };
+  if (canWrite && state.dataDir && (await state.dataDir.requestPermission({ mode: "readwrite" })) !== "granted") return say("Writing to that folder was not allowed.", true);
+  const out = await withBusy("Making the report…", () => rpc("save_bundle", opts));
+  if (canWrite && state.dataDir) {
+    await writeInto(state.dataDir, out.folder, out.files);
+    return say(`Saved report.pdf to ${state.dataDir.name}/${out.folder}/`);
+  }
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([bytes(out.files["report.pdf"])], { type: "application/pdf" })), download: `report_${out.folder.replace("processed_", "")}.pdf` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  say("Downloaded the report (this browser cannot write into your data folder). Move it next to your data if you like.");
+}
+
 async function download() {
   const out = await withBusy("Making the figures and tables…", () => rpc("save_bundle", { ...choices(), zip: true }));
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([bytes(out.zip_b64)], { type: "application/zip" })), download: out.zip_name });
@@ -72,6 +88,7 @@ export function initSave() {
   }));
   $("save-other").addEventListener("click", () => guarded(async () => saveToFolder(await window.showDirectoryPicker({ mode: "readwrite" }))));
   $("save-zip").addEventListener("click", () => guarded(download));
+  $("save-report-only").addEventListener("click", () => guarded(saveReportOnly));
   $("save-format").addEventListener("change", () => { $("save-dpi-row").hidden = $("save-format").value !== "png"; });
   $("save-hint").textContent = canWrite
     ? "The files go into a new processed_… folder, so your raw data is never touched."

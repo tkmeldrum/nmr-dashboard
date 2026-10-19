@@ -123,10 +123,14 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         text = params_text if params_text is not None else P.dump_toml(p)
         (out_dir / "params_used.toml").write_text(P.dump_toml(p, header=f"Resolved and used for: {row['dataset']}\nOriginal params file: {params_path or '(defaults)'}"))
         files.append("params_used.toml")
+        names = files + ["provenance.json", "summary.md"] + (["report.pdf"] if out_cfg["report"] else [])
         prov = provenance.build(folder, settings, options, params_text=text, params_path=params_path, command=command, dataset=row["dataset"],
-                                acquisition=info["params_all"], notes=warnings, outputs=files + ["provenance.json", "summary.md"])
+                                acquisition=info["params_all"], notes=warnings, outputs=names)
         (out_dir / "provenance.json").write_text(json.dumps(prov, indent=2, default=str))
-        (out_dir / "summary.md").write_text(outputs.summary_markdown(res, prov, mcmc, boot, files + ["provenance.json", "summary.md"], warnings))
+        (out_dir / "summary.md").write_text(outputs.summary_markdown(res, prov, mcmc, boot, names, warnings))
+        if out_cfg["report"]:
+            from . import report
+            (out_dir / "report.pdf").write_bytes(report.build(res, prov, mcmc, boot, raw=pipeline._STATE.get("raw_out"), style=P.style_dict(p, out_cfg["titles"])))
         row.update(status="ok", output_dir=str(out_dir), warnings=warnings, settings=settings, result=_key_results(res, mcmc, boot))
     except Exception as exc:
         row.update(status="failed", reason=f"{type(exc).__name__}: {exc}", traceback=traceback.format_exc(limit=6))
@@ -323,6 +327,9 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
             "datasets": [{"dataset": r["dataset"], "status": r["status"], "reason": r["reason"], "timestamp_utc": r["timestamp_utc"], "elapsed_min": r.get("elapsed_min"),
                           "output_dir": r["output_dir"]} for r in rows]}
     (bdir / "provenance.json").write_text(json.dumps(prov, indent=2, default=str))
+    if p["output"]["report"]:
+        from . import report
+        (bdir / "batch_report.pdf").write_bytes(report.build_batch(rows, p, str(root), t0))
     if p["output"]["figures"]:
         from . import figures
         for sym, kind, name in (("T2", "cpmg", "timeseries"), ("T1", "t1", "timeseries_T1")):
