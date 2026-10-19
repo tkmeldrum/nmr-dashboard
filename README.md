@@ -24,12 +24,13 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
    is fixed from the second echo + 10%, and the summed decay.
 3. **Process**:
    - *Echo processing*: **integrate each echo** (autophase, sum the points), or **FT each echo** (signal vs position z).
-   - *Decay analysis*: **multi-exponential fit** (1–4 components, optional offset, optional 1–4 model comparison) and/or
+   - *Decay analysis*: **multi-exponential fit** (1–4 components, optional offset) and/or
      **ILT**. In FT mode every analysis is run at every z position. The model equations are shown.
-4. **Uncertainty**: confidence level for the fit intervals (68 / 95 / 99%), and optional **MCMC** and **bootstrap** on the
-   whole decay or on one z position. They run after the processing, on the Results tab, once you have seen a timed
-   estimate and confirmed; a progress bar and a **Stop (keep partial results)** button are shown while they run.
-5. **Results**: spatial profile and echo map (FT mode), spatially resolved fits (T₂(z) with error bars, amplitude(z),
+   - *Advanced* (collapsed): next to the multi-exponential fit, **compare 1–4 components** (on by default, hidden); next to the ILT, the **α sweep**
+     (L-curve, off). At the end of the tab, **Advanced settings** (closed by default): the confidence level for the fit intervals (68 / 95 / 99%), and optional
+     **MCMC** and **bootstrap** on the whole decay or on one z position. They run after the processing, with their progress on the Results tab, once you have seen a timed
+     estimate and confirmed; a progress bar and a **Stop (keep partial results)** button are shown while they run. Loading a params file that turns one of these on opens its block.
+4. **Results**: spatial profile and echo map (FT mode), spatially resolved fits (T₂(z) with error bars, amplitude(z),
    reduced χ²(z), a linked ILT cross-section viewer, per-peak ILT T₂ and signal fraction vs z), the decay with fits and
    residuals, fit tables, fit-quality statistics and the ILT spectrum.
 
@@ -191,7 +192,7 @@ nmrdash batch params.toml  data/series --jobs 8   # every dataset under a folder
 nmrdash batch params.toml  data/series --list     # just list the datasets and their timestamps
 ```
 
-- **From the page:** the **Export params + script** button (Process and Uncertainty tabs) downloads a `params.toml` holding
+- **From the page:** the **Export params + script** button (Process tab) downloads a `params.toml` holding
   exactly the settings currently on the page, plus `process_nmr.py`, a short runner (`python process_nmr.py DATA_FOLDER`, add
   `--batch` for a folder of datasets). Use `defaults` in place of a params file to run with the built-in defaults.
 - **Excluding the first points:** `[processing] exclude_first = n` (or the "Exclude the first n echoes" field on the Process tab; for T1 it counts
