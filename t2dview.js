@@ -99,11 +99,12 @@ export function renderT2dPopulations() {
     });
     traces.push({ x: [null], y: [null], mode: "markers", marker: { symbol, size: 10, color: ink(), line: { width: symbol === "x" ? 2 : 0, color: ink() } }, name: label, legendgroup: label, hoverinfo: "skip" });
   }
+  const withSamples = traces.length > 1;                        // MCMC / bootstrap samples are on the map: draw each fitted population as a ring so they show through
   m.populations.forEach((p, i) => {
     const bound = p.D_at_limit || p.T2_at_limit;
     traces.push({
       x: [p.T2], y: [p.D], mode: "markers+text", text: [`${i + 1}: ${Math.round(100 * p.fraction)}%`], textposition: "top right", showlegend: false,
-      marker: { size: 11, color: p.supported && !bound ? POP_COLORS[i % 4] : "rgba(0,0,0,0)", symbol: p.D_at_limit === "low" ? "triangle-down" : p.D_at_limit === "high" ? "triangle-up" : "circle", line: { color: ink(), width: 2 } },
+      marker: { size: withSamples ? 20 : 11, color: p.supported && !bound && !withSamples ? POP_COLORS[i % 4] : "rgba(0,0,0,0)", symbol: p.D_at_limit === "low" ? "triangle-down" : p.D_at_limit === "high" ? "triangle-up" : "circle", line: { color: ink(), width: 2 } },
       error_x: finite(p.T2_ci[0]) ? { type: "data", symmetric: false, array: [p.T2_ci[1] - p.T2], arrayminus: [p.T2 - p.T2_ci[0]], color: ink(), thickness: 1.5 } : undefined,
       error_y: finite(p.D_ci[0]) ? { type: "data", symmetric: false, array: [p.D_ci[1] - p.D], arrayminus: [p.D - p.D_ci[0]], color: ink(), thickness: 1.5 } : undefined,
       name: `population ${i + 1}`,

@@ -42,8 +42,10 @@ export function initProcessDefaults(raw) {
 
 export function initT2dDefaults(r) {
   const d = r.defaults;
-  $("t2d-t2min").value = +Math.log10(d.t2_min).toFixed(3); $("t2d-t2max").value = +Math.log10(d.t2_max).toFixed(3);          // entered as log10 of the time in s $("t2d-t2steps").value = d.t2_steps;
-  $("t2d-dmin").value = +Math.log10(d.d_min).toFixed(3); $("t2d-dmax").value = +Math.log10(d.d_max).toFixed(3);          // log10 of the coefficient in m²/s $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);
+  $("t2d-t2min").value = +Math.log10(d.t2_min).toFixed(3); $("t2d-t2max").value = +Math.log10(d.t2_max).toFixed(3);          // entered as log10 of the time in s
+  $("t2d-t2steps").value = d.t2_steps;
+  $("t2d-dmin").value = +Math.log10(d.d_min).toFixed(3); $("t2d-dmax").value = +Math.log10(d.d_max).toFixed(3);          // log10 of the coefficient in m²/s
+  $("t2d-dsteps").value = Math.min(d.d_steps, r.raw.n_tau);                 // never more D points than diffusion delays
   $("t2d-alpha").value = +Math.log10(d.alpha).toFixed(3); $("t2d-peakthr").value = d.peak_threshold_pct;
   $("t2d-equation").innerHTML = T2D_EQUATION;
   $("t2d-gradient").value = d.gradient;
