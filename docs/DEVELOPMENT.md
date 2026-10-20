@@ -172,6 +172,8 @@ Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everyth
 date stored in the file; warnings (odd date, echo layout notes) show above the analysis; results folders are `processed_<file stem>_<time>`; `ft.G` and `t2d.gradient` are `"auto"` by default (23.67 Kea, 6.59 Tecmag);
 the batch time stamp is the experiment date (read from the header alone, so large files are cheap to list). No time-stamp override (decided 2026-10-20): odd dates are flagged for the user to deal with.
 
+**Standalone copies for notebooks:** `MeldrumLabCode/pythonic/tecmag_io.py` and `tecmag.py` (drop-in like `kea_io.py`) plus `run_tecmag_example.py`; `nmrdash/` here is canonical, and `python tools/sync_pythonic.py` re-copies the two modules (it commits nothing in the other repository).
+
 **Options added 2026-10-20 at Tyler's request:** T1 recovery amplitude from the echo-train sum (default) or the first echo only (Advanced settings, Tecmag data only; `t1.amplitude`); "flip z" (above); the open dataset's name under the tab bar on every tab; `.tnt` files dropped directly on the drop zone (clicking the zone browses for a folder only: a browser cannot pick a file or a folder in one dialog).
 
 **Still open:** the stimulated echo is left out of T₂–D (explained to Tyler; he has not decided otherwise), orientation of the Tecmag profile (above), a plain diffusion series (`SEDiff…`, later).
