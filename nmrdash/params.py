@@ -74,7 +74,7 @@ SPEC = {
     ],
     "ft": [
         ("nucleus", AUTO, "\"1H\", \"19F\" or \"auto\" (chosen from b1Freq in acqu.par).", _one_of(AUTO, "1H", "19F")),
-        ("G", AUTO, "Static field gradient, T/m (the same quantity as t2d.gradient). \"auto\" = 23.67 for Kea data, 6.7 for Tecmag data (the magnets of this lab).", _auto_or(_number(0, lo_open=True))),
+        ("G", AUTO, "Static field gradient, T/m (the same quantity as t2d.gradient). \"auto\" = 23.67 for Kea data, 6.59 for Tecmag data (the magnets of this lab).", _auto_or(_number(0, lo_open=True))),
         ("zero_fill", 4, "FFT length is the next power of two above points x 2^zero_fill.", _integer(0, 6)),
         ("z_min", -200.0, "Sample window, micrometres (+ z = + frequency = closer to the magnet). \"auto\" for both = where the\n# profile exceeds 10% of its maximum.", _auto_or(_number())),
         ("z_max", 200.0, "", _auto_or(_number())),
@@ -110,7 +110,7 @@ SPEC = {
         ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
     ],
     "t2d": [
-        ("gradient", AUTO, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m (\"auto\" = 23.67 for Kea data, 6.7 for Tecmag data). The b-values are calculated from it with the delays of the data:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _auto_or(_number(0, lo_open=True))),
+        ("gradient", AUTO, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m (\"auto\" = 23.67 for Kea data, 6.59 for Tecmag data). The b-values are calculated from it with the delays of the data:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _auto_or(_number(0, lo_open=True))),
         ("t2_min", 1e-5, "T2 grid, seconds.", _number(0, lo_open=True)),
         ("t2_max", 1.0, "", _number(0, lo_open=True)),
         ("t2_steps", 50, "T2 grid points (never more than echoes). The solve is a dense problem of T2 x D unknowns: 50 x 25 takes seconds, 100 x 25 about a minute, in the browser several times longer.", _integer(10, 400)),

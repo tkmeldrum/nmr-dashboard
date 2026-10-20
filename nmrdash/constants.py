@@ -7,8 +7,8 @@ DEFAULT_G_T_PER_M = physics.DEFAULT_GRADIENT_T_PER_M                          # 
 
 
 def default_gradient(params):
-    """The static gradient to start from for a dataset: this lab's Tecmag magnet (about 6.7 T/m) or the Kea magnet (23.67 T/m). It is a setting; the file does not hold it."""
-    return 6.7 if params.get("source") == "tecmag" else DEFAULT_G_T_PER_M
+    """The static gradient to start from for a dataset: this lab's Tecmag magnet (6.59 T/m) or the Kea magnet (23.67 T/m). It is a setting; the file does not hold it."""
+    return 6.59 if params.get("source") == "tecmag" else DEFAULT_G_T_PER_M
 DEFAULT_ZERO_FILL = 4                             # FFT length = nextpow2(nrPnts * 2**zf)
 DEFAULT_Z_WINDOW_UM = (-200.0, 200.0)             # sample region; + z = + frequency = closer to the magnet (down)
 
