@@ -42,13 +42,14 @@ async function apply(out) {
     const tm = s.t2d_model || {};
     set("t2d-model-enabled", tm.enabled !== false); set("t2d-model-k", tm.k ? String(tm.k) : "auto"); set("t2d-model-window", tm.d_window || "resolvable");
   } else {
+    if (out.kind === "t1" && !$("t1-amp-box").hidden) { set("t1-amplitude", s.t1_amplitude || "sum"); if (s.t1_amplitude === "first") showAdvanced("t1-amplitude"); }
     const warn = applyDecay(s);
     if (warn) notes.push(warn);
     if (out.kind === "cpmg") {
       pick("echo", s.echo);
       if (s.ft) {
         if (s.ft.nucleus) set("ft-nucleus", s.ft.nucleus);
-        set("ft-G", s.ft.G); set("ft-zf", s.ft.zero_fill); set("ft-zmin", s.ft.z_min); set("ft-zmax", s.ft.z_max);
+        set("ft-G", s.ft.G); set("ft-flip", !!s.ft.flip_z); set("ft-zf", s.ft.zero_fill); set("ft-zmin", s.ft.z_min); set("ft-zmax", s.ft.z_max);
         set("ft-spacing", s.ft.spacing_um); set("ft-ilt-spacing", s.ft.ilt_spacing_um); set("ft-minsig", s.ft.min_signal_pct);
       }
       set("me-enabled", s.multiexp.enabled);

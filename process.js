@@ -26,6 +26,7 @@ export function initProcessDefaults(raw) {
   if (d) {
     $("ft-nucleus").value = d.nucleus;           // from b1Freq in acqu.par (Kea) or the file header (Tecmag)
     $("ft-G").value = d.G;
+    $("ft-flip").checked = false;
     $("ft-zf").value = d.zero_fill;
     $("ft-nucleus-note").textContent = "Nucleus preset: " + d.nucleus_reason + ".";
   }
@@ -102,7 +103,7 @@ export function readSettings() {
   if (state.result.kind === "t1") {                           // saturation recovery: one or two components, no echo processing, no ILT
     const n = +$("me-n").value, offset = $("me-offset").checked;
     if (2 * n + offset + 2 > state.result.raw.n_points) throw new Error(`${n} component${n > 1 ? "s" : ""} need more delays than this dataset has (${state.result.raw.n_points}).`);
-    return { kind: "t1", exclude_first: excludeFirst(), multiexp: { enabled: true, n, offset, ci_level: +$("me-ci").value, compare: $("me-compare").checked } };
+    return { kind: "t1", exclude_first: excludeFirst(), t1_amplitude: $("t1-amp-box").hidden ? "sum" : $("t1-amplitude").value, multiexp: { enabled: true, n, offset, ci_level: +$("me-ci").value, compare: $("me-compare").checked } };
   }
   const settings = { exclude_first: excludeFirst(), echo: document.querySelector('input[name="echo"]:checked').value };
   if (settings.echo === "ft") {
@@ -118,7 +119,7 @@ export function readSettings() {
     if (minsig < 0 || minsig > 100) throw new Error("Min signal must be between 0 and 100%.");
     const isp = $("ft-ilt-spacing").value.trim();
     if (isp !== "" && !(+isp > 0)) throw new Error("The ILT map spacing must be positive (or blank for every zero-filled point).");
-    settings.ft = { nucleus: $("ft-nucleus").value, G, zero_fill: zf,
+    settings.ft = { nucleus: $("ft-nucleus").value, G, flip_z: $("ft-flip").checked, zero_fill: zf,
                     z_min: zmin === "" ? null : +zmin, z_max: zmax === "" ? null : +zmax,
                     spacing_um: sp === "" ? null : +sp, ilt_spacing_um: isp === "" ? null : +isp,
                     min_signal_pct: minsig };

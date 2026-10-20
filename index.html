@@ -22,14 +22,14 @@
     <button type="button" role="tab" id="tab-process" aria-controls="panel-process" aria-selected="false" disabled><span>3</span> Process</button>
     <button type="button" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled><span>4</span> Results</button>
   </nav>
+  <p id="dataset-banner" class="dataset-banner" role="status" hidden>Dataset: <strong id="dataset-banner-name"></strong></p>
 
   <!-- 1 · Load -->
   <section role="tabpanel" id="panel-load" aria-labelledby="tab-load">
-    <div id="drop" tabindex="0" role="button" aria-label="Drop a data folder here, or click to browse">
-      <strong>Drop a data folder here</strong>
-      <span>or click to browse (Kea: a folder with <code>acqu.par</code> and <code>data.2d</code>; Tecmag: a folder with <code>.tnt</code> files)</span>
+    <div id="drop" tabindex="0" role="button" aria-label="Drop a data folder or Tecmag .tnt files here, or click to browse for a folder">
+      <strong>Drop a data folder (or Tecmag .tnt files) here</strong>
+      <span>or click to browse for a folder (Kea: <code>acqu.par</code> and <code>data.2d</code>; Tecmag: <code>.tnt</code> files). Tecmag <code>.tnt</code> files can also be dropped here directly.</span>
     </div>
-    <p class="samples-row"><button id="browse-tnt" type="button" title="Choose one or more Tecmag .tnt files (results then come as a .zip)">Choose Tecmag .tnt files…</button></p>
     <p class="samples-row">
       <button id="sample-btn" type="button" hidden>Explore test data</button>
       <label id="sample-picker" hidden>Sample dataset:
@@ -80,6 +80,7 @@
         <div class="fields" id="ft-fields">
           <label>Nucleus <select id="ft-nucleus"><option value="1H">¹H (proton)</option><option value="19F">¹⁹F</option></select></label>
           <label>G (T/m) <input type="number" id="ft-G" step="any" min="0" value="23.67"></label>
+          <label title="This lab's convention is + z = towards the magnet. Tick this if a profile comes out mirrored (it depends on how the spectrometer stores the data)."><input type="checkbox" id="ft-flip"> flip z <small>(+z = towards the magnet)</small></label>
           <label>Zero-fill (×2<sup>n</sup>) <input type="number" id="ft-zf" step="1" min="0" max="6" value="4"></label>
           <label>z-window min (µm) <input type="number" id="ft-zmin" step="any" placeholder="auto"></label>
           <label>max (µm) <input type="number" id="ft-zmax" step="any" placeholder="auto"></label>
@@ -201,6 +202,11 @@
       <label>Confidence level
         <select id="me-ci"><option value="0.68">68%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
       <details class="more"><summary>Show more</summary><div class="more-body"><p>Intervals from the least-squares covariance of the multi-exponential fit (Student-<i>t</i> intervals), at every position in FT mode. They assume the likelihood is a symmetric Gaussian around the best fit, which is fine for well-determined parameters; MCMC and the bootstrap below test that assumption.</p></div></details>
+    </fieldset>
+    <fieldset data-for="t1" id="t1-amp-box" hidden>
+      <legend>Recovery amplitude <small>(Tecmag data: an echo train is measured at every delay)</small></legend>
+      <label>Amplitude of each delay from
+        <select id="t1-amplitude"><option value="sum" selected>the sum of all echoes</option><option value="first">the first echo only</option></select></label>
     </fieldset>
     <fieldset data-for="cpmg t1">
       <legend>Decay to analyse <small>(for MCMC and bootstrap)</small></legend>

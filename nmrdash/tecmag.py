@@ -205,8 +205,8 @@ def load_tnt(path):
         tds = [_td(r, layout) for r in records]
         ref = tds[int(np.argmax(delays_s))]
         theta = -np.angle(ref.sum())                                                        # one phase, from the fully recovered record, applied to all
-        y = np.array([(td * np.exp(1j * theta)).real.sum() for td in tds])
-        out["t1"] = {"t": delays_s[order], "y": y[order]}
+        amps = np.array([(td * np.exp(1j * theta)).real.sum(axis=0) for td in tds])        # (delays, echoes): each echo's amplitude
+        out["t1"] = {"t": delays_s[order], "y": amps.sum(axis=1)[order], "echoes": amps[order]}      # y: the sum over the echo train (the default amplitude)
         params.update(nrPntsT1=len(delays_s))
         out["delays_from"] = f"table {name} (the delay {setting})"
         note = _centre_note(ref)

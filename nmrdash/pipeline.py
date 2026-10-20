@@ -58,13 +58,14 @@ def _load_t1(d, params, out, source):
     _set_t1(arr[:, 0].astype(float), arr[:, 1].astype(float), params, out, source)
 
 
-def _set_t1(t, y, params, out, source):
+def _set_t1(t, y, params, out, source, echoes=None):
+    """t, y: the recovery curve. echoes (Tecmag): (delays x echoes) amplitudes, from which the amplitude can be the first echo instead of the sum."""
     if len(t) < 4:
         raise ValueError("data.dat needs at least 4 rows of (delay, amplitude)" if source.get("format") != "tecmag" else "a T1 curve needs at least 4 delays")
     if np.any(t <= 0) or np.any(np.diff(t) <= 0):
         raise ValueError("the delays in data.dat must be positive and increasing" if source.get("format") != "tecmag" else "the T1 delays must be positive and increasing")
-    _STATE.update(t1={"t": t, "y": y}, params=params, source=source)
-    out["raw"] = {"n_points": len(t), "t": _clean(t), "y": _clean(y)}
+    _STATE.update(t1={"t": t, "y": y, "echoes": echoes}, params=params, source=source)
+    out["raw"] = {"n_points": len(t), "t": _clean(t), "y": _clean(y), "has_echoes": echoes is not None}
     out["defaults"] = {"t1_components": 1, "t1_offset": constants.T1_DEFAULT_OFFSET}
 
 
@@ -133,7 +134,7 @@ def _load_tecmag(path, timestamp_ms):
                 out["is_cpmg"] = True
                 _set_cpmg(r["td"], params, out, source)
             elif kind == "t1":
-                _set_t1(r["t1"]["t"], r["t1"]["y"], params, out, source)
+                _set_t1(r["t1"]["t"], r["t1"]["y"], params, out, source, r["t1"].get("echoes"))
             else:
                 d = r["t2d"]
                 _set_t2d(t2d.prepare(d["raw"], params, axes=d), params, out, source)
@@ -332,6 +333,9 @@ def _run_ft(cfg, skip=0):
         raise ValueError("The gradient G must be positive.")
     r = echoes.ft(td, float(params.get("dwellTime", 1.0)), gamma, g, zf)
     z, S = r["z_um"], r["S"]
+    if cfg.get("flip_z"):                         # the file's frequency sign is opposite to this lab's convention (+z = towards the magnet): mirror the axis
+        z, S = -z[::-1], S[::-1]
+        r["z_um"], r["S"] = z, S
     S_fit = S[:, skip:]                           # excluded echoes take no part in the profile, window, fits or noise estimate
     prof = echoes.profile(S_fit)
     z0, z1 = cfg.get("z_min"), cfg.get("z_max")
@@ -440,6 +444,13 @@ def _process_t2d(settings):
 def _process_t1(settings):
     """Saturation recovery: fit 1 (or 2) components; the sparse data have no ILT and no noise channel."""
     t_all, y_all = _STATE["t1"]["t"], _STATE["t1"]["y"]
+    amplitude = settings.get("t1_amplitude", "sum")
+    if amplitude not in ("sum", "first"):
+        raise ValueError('t1_amplitude must be "sum" (all echoes) or "first" (first echo only)')
+    if amplitude == "first":
+        if _STATE["t1"].get("echoes") is None:
+            raise ValueError("The first-echo amplitude is only available for data with an echo train per delay (Tecmag); this recovery curve is a single amplitude per delay.")
+        y_all = _STATE["t1"]["echoes"][:, 0]
     skip = _skip_count(settings, len(t_all))
     t, y = t_all[skip:], y_all[skip:]
     me = settings.get("multiexp") or {}

@@ -74,6 +74,7 @@ SPEC = {
     ],
     "ft": [
         ("nucleus", AUTO, "\"1H\", \"19F\" or \"auto\" (chosen from b1Freq in acqu.par).", _one_of(AUTO, "1H", "19F")),
+        ("flip_z", False, "Mirror the position axis. This lab's convention is + z = towards the magnet; set true if a profile comes out reversed (the sign of the frequency axis depends on how the spectrometer stores the data).", _boolean),
         ("G", AUTO, "Static field gradient, T/m (the same quantity as t2d.gradient). \"auto\" = 23.67 for Kea data, 6.59 for Tecmag data (the magnets of this lab).", _auto_or(_number(0, lo_open=True))),
         ("zero_fill", 4, "FFT length is the next power of two above points x 2^zero_fill.", _integer(0, 6)),
         ("z_min", -200.0, "Sample window, micrometres (+ z = + frequency = closer to the magnet). \"auto\" for both = where the\n# profile exceeds 10% of its maximum.", _auto_or(_number())),
@@ -108,6 +109,7 @@ SPEC = {
         ("components", 1, "Saturation recovery (sequence T1Sat): number of exponential components, 1 or 2 (two is rare and needs good data).", _integer(1, 2)),
         ("offset", True, "Include a constant offset c: M(t) = c + sum_i A_i (1 - exp(-t/T1_i)). Kea recovery curves usually do not start at zero.", _boolean),
         ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
+        ("amplitude", "sum", "Amplitude of each recovery point for data with an echo train per delay (Tecmag): \"sum\" of all echoes, or \"first\" echo only. Kea data have one amplitude per delay (use \"sum\").", _one_of("sum", "first")),
     ],
     "t2d": [
         ("gradient", AUTO, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m (\"auto\" = 23.67 for Kea data, 6.59 for Tecmag data). The b-values are calculated from it with the delays of the data:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _auto_or(_number(0, lo_open=True))),
@@ -289,7 +291,7 @@ def to_settings(params, echo_times_s, default_nucleus="1H", default_gradient=con
     settings = {
         "exclude_first": p["processing"]["exclude_first"],
         "echo": p["processing"]["echo"],
-        "ft": {"nucleus": default_nucleus if ft["nucleus"] == AUTO else ft["nucleus"], "G": default_gradient if ft["G"] == AUTO else ft["G"], "zero_fill": ft["zero_fill"],
+        "ft": {"nucleus": default_nucleus if ft["nucleus"] == AUTO else ft["nucleus"], "G": default_gradient if ft["G"] == AUTO else ft["G"], "flip_z": ft["flip_z"], "zero_fill": ft["zero_fill"],
                "z_min": nz(ft["z_min"]), "z_max": nz(ft["z_max"]), "spacing_um": nz(ft["spacing_um"]),
                "ilt_spacing_um": nz(ft["ilt_spacing_um"]), "min_signal_pct": ft["min_signal_pct"]},
         "multiexp": {"enabled": me["enabled"], "n": me["n"], "offset": me["offset"], "ci_level": un["ci_level"], "compare": me["compare"]},
@@ -314,7 +316,7 @@ def to_settings_t1(params):
     """Settings for a saturation-recovery dataset (no echo processing, no ILT, no FT)."""
     p = validate(params)
     t1, un, mc, bs = p["t1"], p["uncertainty"], p["mcmc"], p["bootstrap"]
-    settings = {"kind": "t1", "exclude_first": p["processing"]["exclude_first"], "multiexp": {"enabled": True, "n": t1["components"], "offset": t1["offset"], "ci_level": un["ci_level"], "compare": t1["compare"]}}
+    settings = {"kind": "t1", "exclude_first": p["processing"]["exclude_first"], "t1_amplitude": t1["amplitude"], "multiexp": {"enabled": True, "n": t1["components"], "offset": t1["offset"], "ci_level": un["ci_level"], "compare": t1["compare"]}}
     target = {"target": "bulk", "z_um": None, "ci_level": un["ci_level"]}
     options = {
         "mcmc": {"enabled": mc["enabled"], **target, "nwalkers": mc["walkers"], "steps": mc["steps"], "burn": mc["burn"], "sample_sigma": mc["sample_sigma"], "seed": mc["seed"]},
@@ -361,7 +363,7 @@ def from_settings(settings, options=None, base=None):
         return validate(p)
     if settings.get("kind") == "t1":
         me = settings.get("multiexp") or {}
-        p["t1"].update({"components": me.get("n", 1), "offset": bool(me.get("offset", True)), "compare": bool(me.get("compare", True))})
+        p["t1"].update({"components": me.get("n", 1), "offset": bool(me.get("offset", True)), "compare": bool(me.get("compare", True)), "amplitude": settings.get("t1_amplitude", "sum")})
         p["uncertainty"]["ci_level"] = me.get("ci_level", 0.95)
         for name in ("mcmc", "bootstrap"):
             o = (options or {}).get(name) or {}
@@ -376,7 +378,7 @@ def from_settings(settings, options=None, base=None):
     p["processing"]["echo"] = settings.get("echo", "integrate")
     ft = settings.get("ft") or {}
     if ft:
-        p["ft"].update({"nucleus": ft.get("nucleus", AUTO), "G": ft.get("G", constants.DEFAULT_G_T_PER_M), "zero_fill": ft.get("zero_fill", 4),
+        p["ft"].update({"nucleus": ft.get("nucleus", AUTO), "flip_z": bool(ft.get("flip_z", False)), "G": ft.get("G", constants.DEFAULT_G_T_PER_M), "zero_fill": ft.get("zero_fill", 4),
                         "z_min": AUTO if ft.get("z_min") is None else ft["z_min"], "z_max": AUTO if ft.get("z_max") is None else ft["z_max"],
                         "spacing_um": AUTO if ft.get("spacing_um") is None else ft["spacing_um"],
                         "ilt_spacing_um": AUTO if ft.get("ilt_spacing_um") is None else ft["ilt_spacing_um"],
