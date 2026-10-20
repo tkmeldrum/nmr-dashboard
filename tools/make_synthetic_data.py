@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nmrdash import physics  # noqa: E402
 
 SEED = 20261019
@@ -23,6 +24,17 @@ TRUTH = {
         "echo_time_us": 200, "n_echoes": 256, "n_points": 64, "dwell_us": 1.0, "noise_sigma": 12.0, "phase_deg": 35.0,
     },
     "t1": {"T1_s": 0.8, "offset_fraction": 0.03, "n_delays": 20, "t_min_s": 0.01, "t_max_s": 5.0, "noise_sigma": 60.0, "amplitude": 20000.0},
+    # Tecmag-style sets (nmrdash.tecmag reads them): the same kinds of sample, at this lab's Tecmag magnet (gradient 6.7 T/m, 13.235 MHz), written as .tnt files
+    "tecmag_cpmg": {
+        "T2_s": (0.005, 0.020), "fraction": (0.4, 0.6), "layers_um": ((-424.0, 106.0), (-106.0, 424.0)), "G_t_per_m": 6.7,       # the same layers as the Kea set, scaled by 23.67 / 6.7
+        "echo_time_us": 150, "n_echoes": 256, "n_points": 32, "dwell_us": 2.0, "noise_sigma": 12.0, "phase_deg": 35.0, "pulse_us": 6.0, "trep_ms": 1000.0,
+    },
+    "tecmag_t1": {"T1_s": 0.8, "offset_fraction": 0.03, "n_delays": 16, "t_min_s": 0.01, "t_max_s": 5.0, "noise_sigma": 3.0, "amplitude": 300.0, "T2_s": 0.02,
+                  "echo_time_us": 150, "n_echoes": 16, "n_points": 16, "dwell_us": 2.0, "pulse_us": 6.0, "trep_ms": 1000.0},
+    "tecmag_t2d": {
+        "T2_s": (0.003, 0.012), "D_m2s": (1.5e-9, 3e-10), "fraction": (0.4, 0.6), "echo_time_us": 60, "n_echoes": 300, "n_tau": 16, "tau_table_us": (40.0, 400.0),
+        "DELTA_ms": 10.0, "G_t_per_m": 6.7, "dwell_us": 2.0, "window_us": 40.0, "pulse_us": 6.0, "amplitude": 300.0, "noise_sigma": 0.25, "phase_deg": 40.0, "trep_ms": 1500.0,
+    },
     "t2d": {
         "T2_s": (0.004, 0.020), "D_m2s": (1.5e-10, 2e-11), "fraction": (0.4, 0.6),     # both inside what these b-values resolve (about 3.5e-13 .. 7.7e-10 m^2/s)
         "echo_time_us": 100, "n_echoes": 600, "n_tau": 25, "tau_ms": (0.178, 3.2), "DELTA_ms": 5.0, "gradient_khz_per_mm": 1000, "G_t_per_m": physics.DEFAULT_GRADIENT_T_PER_M,
@@ -78,7 +90,7 @@ def cpmg_echoes(noise, rng, c=None):
     for (z0, z1), w, T2 in zip(c["layers_um"], c["fraction"], c["T2_s"]):
         z = np.linspace(z0, z1, 151) * 1e-6
         rho = w / z.size
-        f = gamma_hz_per_t * physics.DEFAULT_GRADIENT_T_PER_M * z                          # Hz
+        f = gamma_hz_per_t * c.get("G_t_per_m", physics.DEFAULT_GRADIENT_T_PER_M) * z                          # Hz
         shape = np.exp(2j * np.pi * np.outer(t_pt, f)).sum(axis=1) * rho                  # (n_pts,)
         td += np.outer(shape, np.exp(-te / T2))
     td *= 3000.0 * np.exp(1j * np.radians(c["phase_deg"]))
@@ -134,7 +146,25 @@ def write_t2d(d, noise, rng, name, **override):
     np.savetxt(d / "data.dat", np.column_stack([tau_s * 1e3, b_kea * 1e-9, first]), fmt="%.6g", delimiter="\t")
 
 
+def _tecmag():
+    import synthetic_tecmag
+    return synthetic_tecmag
+
+
+def write_tecmag_cpmg(path, noise, rng, name, **override):
+    return _tecmag().write_cpmg(path, noise, rng, {**TRUTH["tecmag_cpmg"], **override})
+
+
+def write_tecmag_t1(path, noise, rng, name, **override):
+    return _tecmag().write_t1(path, noise, rng, {**TRUTH["tecmag_t1"], **override})
+
+
+def write_tecmag_t2d(path, noise, rng, name, **override):
+    return _tecmag().write_t2d(path, noise, rng, {**TRUTH["tecmag_t2d"], **override})
+
+
 NAMES = {"cpmg": ("kea_cpmg", write_cpmg), "t1": ("kea_t1", write_t1), "t2d": ("kea_t2d", write_t2d)}
+TECMAG_NAMES = {"cpmg": ("tecmag_cpmg", write_tecmag_cpmg), "t1": ("tecmag_t1", write_tecmag_t1), "t2d": ("tecmag_t2d", write_tecmag_t2d)}
 
 
 def generate(out):
@@ -144,6 +174,12 @@ def generate(out):
         for variant, noise in (("clean", False), ("noisy", True)):
             name = f"{prefix}_{variant}"
             rng = np.random.default_rng([SEED, list(NAMES).index(kind), int(noise)])
+            writer(out / name, noise, rng, name)
+            made.append(name)
+    for kind, (prefix, writer) in TECMAG_NAMES.items():                                  # Tecmag: one .tnt file per dataset
+        for variant, noise in (("clean", False), ("noisy", True)):
+            name = f"{prefix}_{variant}.tnt"
+            rng = np.random.default_rng([SEED, 10 + list(TECMAG_NAMES).index(kind), int(noise)])
             writer(out / name, noise, rng, name)
             made.append(name)
     return made

@@ -8,6 +8,9 @@ from make_synthetic_data import TRUTH, write_kea_binary   # noqa: E402,F401  (th
 
 DATA = ROOT / "test_data"
 
+TECMAG_CPMG_CLEAN, TECMAG_CPMG_NOISY = DATA / "tecmag_cpmg_clean.tnt", DATA / "tecmag_cpmg_noisy.tnt"
+TECMAG_T1_CLEAN, TECMAG_T1_NOISY = DATA / "tecmag_t1_clean.tnt", DATA / "tecmag_t1_noisy.tnt"
+TECMAG_T2D_CLEAN, TECMAG_T2D_NOISY = DATA / "tecmag_t2d_clean.tnt", DATA / "tecmag_t2d_noisy.tnt"
 CPMG_CLEAN, CPMG_NOISY = DATA / "kea_cpmg_clean", DATA / "kea_cpmg_noisy"
 T1_CLEAN, T1_NOISY = DATA / "kea_t1_clean", DATA / "kea_t1_noisy"
 T2D_CLEAN, T2D_NOISY = DATA / "kea_t2d_clean", DATA / "kea_t2d_noisy"
@@ -27,3 +30,12 @@ def cpmg_single_exponential(d, T2=0.02, noisy=True):
     from make_synthetic_data import write_cpmg
     write_cpmg(d, noisy, np.random.default_rng(3), "kea_cpmg_single", T2_s=(T2,), fraction=(1.0,), layers_um=((-120.0, 120.0),))
     return d
+
+
+def tecmag_variant(path, kind, noisy=True, **override):
+    """A Tecmag file of the given kind ('cpmg', 't1', 't2d') with entries of its TRUTH replaced (and the writer's keyword options kept at their defaults)."""
+    import numpy as np
+    from make_synthetic_data import write_tecmag_cpmg, write_tecmag_t1, write_tecmag_t2d
+    write = {"cpmg": write_tecmag_cpmg, "t1": write_tecmag_t1, "t2d": write_tecmag_t2d}[kind]
+    write(path, noisy, np.random.default_rng(11), path.name, **override)
+    return path

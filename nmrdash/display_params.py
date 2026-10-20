@@ -38,16 +38,18 @@ def pulse_row(params):
     return {"label": "Pulse length", "value": f"{_fmt(pl)} µs{amps}"}
 
 
-def build_display(params, timestamp=None):
+def build_display(params, timestamp=None, from_file=False):
     """Curated [{label, value}, ...] list.
 
-    timestamp : datetime when data.2d was written, or None if unknown (shown as "not available").
+    timestamp : datetime when data.2d was written (Kea), or the experiment date stored in the file (Tecmag, from_file=True); None if unknown ("not available").
     """
     rows = []
     if "experiment" in params:
         rows.append({"label": "Sequence", "value": str(params["experiment"])})
+    if params.get("sequence_file"):
+        rows.append({"label": "Sequence file", "value": str(params["sequence_file"])})
     rows.append({
-        "label": "File timestamp",
+        "label": "Experiment date (stored in the file)" if from_file else "File timestamp",
         "value": timestamp.strftime("%Y-%m-%d %H:%M:%S") if timestamp is not None else "not available",
     })
     pr = pulse_row(params)
