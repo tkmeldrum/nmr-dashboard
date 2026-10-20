@@ -13,7 +13,7 @@ Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data**
 
 **Tecmag data (`.tnt`).** `nmrdash` reads Tecmag files too (CPMG, T1 saturation recovery, stimulated-echo T₂–D), using the sequence's own variables and delay tables, so the
 same analyses apply. Drop a folder with `.tnt` files (each file is one dataset; a batch can mix Kea folders and `.tnt` files) or choose `.tnt` files on the Load tab (results then come as a .zip);
-the command-line tool takes `.tnt` files and folders too. The gradient is not in a Tecmag file: `ft.G` and `t2d.gradient` default to `"auto"`, which means 6.7 T/m for Tecmag data
+the command-line tool takes `.tnt` files and folders too. The gradient is not in a Tecmag file: `ft.G` and `t2d.gradient` default to `"auto"`, which means 6.59 T/m for Tecmag data
 and 23.67 T/m for Kea data (set a number to override). The experiment date stored in the file is the time stamp. What is read and the assumptions made are in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §9.
 

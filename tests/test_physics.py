@@ -53,10 +53,10 @@ def test_the_calculated_b_values_have_the_spectrometers_shape_and_scale(sample):
 def test_the_default_gradient_is_one_constant_used_for_the_profile_and_the_diffusion_weighting():
     from nmrdash import constants, params as P
     assert ph.DEFAULT_GRADIENT_T_PER_M == 23.67 == constants.DEFAULT_G_T_PER_M == constants.T2D_DEFAULTS["gradient"]
-    assert P.defaults()["ft"]["G"] == "auto" and P.defaults()["t2d"]["gradient"] == "auto"              # "auto": 23.67 for Kea data, 6.7 for Tecmag data (the dataset says which)
-    assert P.to_settings_t2d(P.defaults())[0]["t2d"]["gradient"] == 23.67 and P.to_settings_t2d(P.defaults(), 6.7)[0]["t2d"]["gradient"] == 6.7
+    assert P.defaults()["ft"]["G"] == "auto" and P.defaults()["t2d"]["gradient"] == "auto"              # "auto": 23.67 for Kea data, 6.59 for Tecmag data (the dataset says which)
+    assert P.to_settings_t2d(P.defaults())[0]["t2d"]["gradient"] == 23.67 and P.to_settings_t2d(P.defaults(), 6.59)[0]["t2d"]["gradient"] == 6.59
     ft = {**P.defaults(), "processing": {**P.defaults()["processing"], "echo": "ft"}}
-    assert P.to_settings(ft, [1e-3, 2e-3], "1H", 6.7)[0]["ft"]["G"] == 6.7 and P.to_settings(ft, [1e-3, 2e-3])[0]["ft"]["G"] == 23.67
+    assert P.to_settings(ft, [1e-3, 2e-3], "1H", 6.59)[0]["ft"]["G"] == 6.59 and P.to_settings(ft, [1e-3, 2e-3])[0]["ft"]["G"] == 23.67
 
 
 def test_the_gradient_setting_rescales_b_and_the_resolvable_range_in_processing():

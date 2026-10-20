@@ -14,7 +14,7 @@ from nmrdash.pipeline import _STATE, get_provenance, load, process
 
 CPMG_FIT = {"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": False}, "ilt": {"enabled": False}}
 T1_FIT = {"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}}
-T2D_FIT = {"kind": "t2d", "t2d": {"t2_steps": 24, "d_steps": 15, "gradient": 6.7}, "t2d_model": {"enabled": True}}
+T2D_FIT = {"kind": "t2d", "t2d": {"t2_steps": 24, "d_steps": 15, "gradient": 6.59}, "t2d_model": {"enabled": True}}
 
 
 @pytest.mark.parametrize("name,kind", [("CPMG", "cpmg"), ("CPMG_EtOH", "cpmg"), ("cpmg2D_sample", "cpmg"), ("T1_SaturationRecovery", "t1"), ("T1_saturation_recovery", "t1"),
@@ -63,7 +63,7 @@ def test_each_sequence_loads_with_kea_style_parameters(path, kind, expect):
 
 
 def test_the_gradient_default_follows_the_instrument_not_the_kind_of_data():
-    assert load(TECMAG_CPMG_NOISY)["defaults"]["G"] == 6.7 and load(TECMAG_T2D_NOISY)["defaults"]["gradient"] == 6.7
+    assert load(TECMAG_CPMG_NOISY)["defaults"]["G"] == 6.59 and load(TECMAG_T2D_NOISY)["defaults"]["gradient"] == 6.59
     assert load(DATA / "kea_cpmg_noisy")["defaults"]["G"] == 23.67 and load(DATA / "kea_t2d_noisy")["defaults"]["gradient"] == 23.67
 
 
@@ -84,7 +84,7 @@ def test_the_timestamp_is_the_experiment_date_in_the_file_not_the_file_time():
 def test_cpmg_recovers_both_t2_by_integration_and_by_ft(path, tol):
     c = TRUTH["tecmag_cpmg"]
     load(path)
-    for cfg in (CPMG_FIT, {**CPMG_FIT, "echo": "ft", "ft": {"nucleus": "1H", "G": 6.7, "zero_fill": 4, "z_min": None, "z_max": None}}):
+    for cfg in (CPMG_FIT, {**CPMG_FIT, "echo": "ft", "ft": {"nucleus": "1H", "G": 6.59, "zero_fill": 4, "z_min": None, "z_max": None}}):
         comps = process(cfg)["multiexp"]["selected"]["components"]
         assert [x["T2"] for x in comps] == pytest.approx(c["T2_s"], rel=tol)
         assert [x["fraction"] for x in comps] == pytest.approx(c["fraction"], abs=tol)
@@ -143,7 +143,7 @@ def test_t2d_tau_is_the_table_plus_the_pulse_width_and_delta_is_as_stored():
 def test_t2d_b_values_follow_the_gradient_setting():
     load(TECMAG_T2D_NOISY)
     from nmrdash.pipeline import t2d_axes
-    a, b = t2d_axes({"t2d": {"gradient": 6.7}}), t2d_axes({"t2d": {"gradient": 13.4}})
+    a, b = t2d_axes({"t2d": {"gradient": 6.59}}), t2d_axes({"t2d": {"gradient": 13.18}})
     assert np.allclose(np.array(b["b_vec"]) / np.array(a["b_vec"]), 4.0) and a["b_check"]["compared"] == []              # no spectrometer files to compare with
 
 
@@ -152,9 +152,9 @@ def test_a_cpmg_profile_has_the_same_orientation_as_the_kea_equivalent(tmp_path)
     layer = {"T2_s": (0.02,), "fraction": (1.0,)}
     from make_synthetic_data import write_cpmg
     write_cpmg(tmp_path / "kea", True, np.random.default_rng(5), "k", layers_um=((60.0, 120.0),), **layer)
-    tecmag_variant(tmp_path / "t.tnt", "cpmg", layers_um=((212.0, 424.0),), **layer)
+    tecmag_variant(tmp_path / "t.tnt", "cpmg", layers_um=((216.0, 431.0),), **layer)
     centroids = []
-    for path, g in ((tmp_path / "kea", 23.67), (tmp_path / "t.tnt", 6.7)):
+    for path, g in ((tmp_path / "kea", 23.67), (tmp_path / "t.tnt", 6.59)):
         load(path)
         ft = process({**CPMG_FIT, "echo": "ft", "ft": {"nucleus": "1H", "G": g, "zero_fill": 4, "z_min": None, "z_max": None}})["ft"]
         z, p = np.array(ft["z_um"]), np.array(ft["profile"])
@@ -276,7 +276,7 @@ def test_the_script_uses_the_instrument_gradient_when_the_params_say_auto(tmp_pa
     f = tmp_path / "t.tnt"
     shutil.copy(TECMAG_T2D_NOISY, f)
     row = runner.run_dataset(f, _fast())
-    assert row["settings"]["t2d"]["gradient"] == 6.7
+    assert row["settings"]["t2d"]["gradient"] == 6.59
     k = tmp_path / "kea"
     shutil.copytree(DATA / "kea_t2d_noisy", k)
     assert runner.run_dataset(k, _fast())["settings"]["t2d"]["gradient"] == 23.67

@@ -14,7 +14,7 @@ What the sequences store (checked on files from this lab's magnets, see docs/DEV
   and Δ (the dashboard variable ``DELTA``) is already centre to centre.
 
 Conventions: the data are conjugated (re − i·im) as in the lab's MATLAB reader readTecmag_new.m, so the sign of the position axis in an FT follows that convention.
-The gradient of the magnet is not in the file: the page and the params file carry it (default 6.7 T/m for Tecmag data, see GRADIENT_T_PER_M).
+The gradient of the magnet is not in the file: the page and the params file carry it (default 6.59 T/m for Tecmag data, see GRADIENT_T_PER_M).
 """
 import re
 from datetime import datetime
@@ -26,7 +26,7 @@ from . import inference, physics
 from .tecmag_io import TntError, parse_value, read_header, read_tnt
 
 SOURCE = "tecmag"
-GRADIENT_T_PER_M = 6.7                      # about this magnet's static gradient (Tyler, 2026-10-20); the user can change it in the processing settings
+GRADIENT_T_PER_M = 6.59                      # about this magnet's static gradient (Tyler, 2026-10-20); the user can change it in the processing settings
 FIRST_PLAUSIBLE_YEAR = 2000
 
 NUCLEI = {"H1": "1H", "F19": "19F", "1H": "1H", "19F": "19F"}
