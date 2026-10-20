@@ -179,7 +179,7 @@ def test_params_t2d_section_round_trips():
     p = P.defaults()
     assert p["t2d"]["d_min"] == 1e-12 and p["t2d"]["d_max"] == 2.2e-9 and p["t2d"]["t2_min"] == 1e-5 and p["t2d"]["t2_max"] == 1.0 and p["t2d"]["alpha"] == 1e9
     s, o = P.to_settings_t2d(p)
-    assert s == {"kind": "t2d", "exclude_first": 0, "t2d": p["t2d"], "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable", "seed": 0}}
+    assert s == {"kind": "t2d", "exclude_first": 0, "t2d": {**p["t2d"], "gradient": 23.67}, "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable", "seed": 0}}
     assert o["mcmc"]["enabled"] is False and o["bootstrap"]["enabled"] is False and o["mcmc"]["target"] == "bulk"
     p["t2d"]["t2_steps"] = 60
     assert P.from_settings(P.to_settings_t2d(p)[0])["t2d"]["t2_steps"] == 60

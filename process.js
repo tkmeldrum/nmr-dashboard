@@ -24,10 +24,10 @@ export function initProcessDefaults(raw) {
   $("ilt-steps").value = DEFAULT_MAX_STEPS;
   const d = state.result.defaults;
   if (d) {
-    $("ft-nucleus").value = d.nucleus;           // from b1Freq in acqu.par
+    $("ft-nucleus").value = d.nucleus;           // from b1Freq in acqu.par (Kea) or the file header (Tecmag)
     $("ft-G").value = d.G;
     $("ft-zf").value = d.zero_fill;
-    $("ft-nucleus-note").textContent = "Nucleus preset from acqu.par: " + d.nucleus_reason + ".";
+    $("ft-nucleus-note").textContent = "Nucleus preset: " + d.nucleus_reason + ".";
   }
   const zw = d && d.z_window_um;                                          // default window: −200 to +200 µm
   $("ft-zmin").value = zw ? zw[0] : "";
@@ -60,7 +60,7 @@ export async function refreshT2dAxes() {
   const b = ax.b_vec.map((x) => x * 1e9), [lo, hi] = ax.d_window;
   const kea = (ax.b_check.compared.find((c) => c.kind === "shape" && c.implied_gradient_t_per_m) || {}).implied_gradient_t_per_m;
   state.t2dAxes = ax;
-  $("t2d-window-hint").textContent = `With G = ${g} T/m, Δ and τ from acqu.par, your b-values (${Math.min(...b).toExponential(2)} – ${Math.max(...b).toExponential(2)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
+  $("t2d-window-hint").textContent = `With G = ${g} T/m, Δ and τ from ${state.result.params_all.source === "tecmag" ? "the pulse sequence" : "acqu.par"}, your b-values (${Math.min(...b).toExponential(2)} – ${Math.max(...b).toExponential(2)} s/m²) can tell apart D from about ${lo.toExponential(1)} to ${hi.toExponential(1)} m²/s. ` +
     "The range above is yours to choose, but outside this one the solution is regularisation, not data." +
     " To probe diffusion coefficients above this range (faster diffusion), decrease b by decreasing the gradient encoding time τ or the diffusion time Δ; to probe below it (slower diffusion), increase b by increasing τ or Δ." +
     (kea ? ` (For reference, the spectrometer's own b-values correspond to G = ${kea.toFixed(2)} T/m.)` : "");

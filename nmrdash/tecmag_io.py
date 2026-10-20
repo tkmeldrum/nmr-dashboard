@@ -311,6 +311,15 @@ def _header(buf):
     return h
 
 
+def read_header(path):
+    """Just the TMAG header of a .tnt file (the first 1056 bytes): cheap enough to list many large files, e.g. for their experiment dates."""
+    with open(path, "rb") as f:
+        buf = f.read(_DATA_START)
+    if len(buf) < _DATA_START or buf[:3] != b"TNT" or buf[8:12] != b"TMAG":
+        raise TntError("this is not a Tecmag .tnt file")
+    return _header(buf)
+
+
 def read_tnt(source):
     """Read a .tnt file (a path, or the bytes of the file) and return a TntFile."""
     if isinstance(source, (bytes, bytearray, memoryview)):
