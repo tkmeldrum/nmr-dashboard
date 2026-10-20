@@ -166,8 +166,16 @@ const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { numeric: t
 // ── loading ───────────────────────────────────────────────────────────────
 let datasets = [];
 
+// The name of the open dataset: in the Parameters heading and under the tab bar, so it is visible on every tab.
+function setDatasetName(text) {
+  $("folder-name").textContent = text;
+  $("dataset-banner-name").textContent = text;
+  $("dataset-banner").hidden = !text;
+}
+
 function resetSections() {
   hideMessage();
+  setDatasetName("");
   $("params-section").hidden = true;
   state.result = state.results = null;
   state.provenance = null;
@@ -226,7 +234,7 @@ async function openDataset(i) {
   hideMessage();
   setBusy("Reading the files from disk…");
   const { files, timestampMs } = await readDatasetFiles(ds);
-  $("folder-name").textContent = ds.label;
+  setDatasetName(ds.label);
   state.dataDir = ds.dir.handle || null;                 // where "Save to the data folder" writes (only with a real folder handle)
   document.dispatchEvent(new Event("datasetchange"));
   refreshBatch();
@@ -276,7 +284,7 @@ $("sample-select").addEventListener("change", async (e) => {
       if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
       files[name] = await r.arrayBuffer();
     }
-    $("folder-name").textContent = "sample: " + s.label;
+    setDatasetName("sample: " + s.label);
     const payload = { files, timestampMs: null };
     if (state.ready) sendLoad(payload);
     else { state.pending = payload; $("status").textContent = "Python is still loading; the sample will open as soon as it's ready."; }
@@ -319,12 +327,6 @@ drop.addEventListener("drop", async (e) => {
     return showMessage("Could not read the dropped item: " + err.message, "error");
   }
   showMessage("Please drop a data folder, or Tecmag .tnt files.", "warn");
-});
-
-$("browse-tnt").addEventListener("click", () => {
-  const input = Object.assign(document.createElement("input"), { type: "file", multiple: true, accept: ".tnt" });
-  input.onchange = () => input.files.length && openLooseFiles(input.files);
-  input.click();
 });
 
 async function browse() {
@@ -378,6 +380,8 @@ function showResult(r) {
     return;
   }
   if (r.kind === "t1") {
+    $("t1-amp-box").hidden = !r.raw.has_echoes;       // only data with an echo train per delay (Tecmag) can use the first echo alone
+    $("t1-amplitude").value = "sum";
     setTabEnabled("raw", true);
     setTabEnabled("process", true);
     return;

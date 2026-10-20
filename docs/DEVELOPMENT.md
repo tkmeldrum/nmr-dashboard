@@ -161,8 +161,9 @@ Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everyth
 - CPMG, T1: records are `nrEchoes` windows one after the other. **T₂–D (single-acquisition sequence): one continuous record through the whole train**; window 0 is the stimulated echo, windows 1..nrEchoes are the CPMG echoes `tE` apart (start at k·tE),
   each `EchoAcqTime` long, with dead time between. The stimulated echo is left out (Kea convention: the first echo is at one echo time). Echo centres sit mid-window in all six files.
 - Delay tables (the T1 recovery delays, the T₂–D encoding delays τ) are lists of numbers **in microseconds** attached to a delay cell of the Delay row (the reader keeps which table each cell uses). The delay between pulse centres is the table value plus the
-  pulse width; for T₂–D the stored `DELTA` is already centre to centre. (Assumptions to confirm with the person who wrote the sequences: table units are µs; τ = table + pw.)
-- Data are conjugated on reading (re − i·im), as `readTecmag_new.m` does; the orientation of an FT profile on the real magnet is not verified (a sample with a known position would settle it).
+  pulse width; for T₂–D the stored `DELTA` is already centre to centre. (Confirmed by Tyler 2026-10-20: the table values are µs and the gap between pulse edges, so τ = table + pw. The gradient of the Tecmag magnet is 6.59 T/m.)
+- Data are conjugated on reading (re − i·im), as `readTecmag_new.m` does. The lab's convention is **+z = towards the magnet** for every instrument; whether the Tecmag data come out that way is not verified (no sample at a known position yet), so the
+  FT settings have a "flip z" checkbox (`ft.flip_z` in the params file) that mirrors the axis. If a profile looks reversed, tick it, and make it the default for Tecmag data.
 - Sequences are recognised by the sequence file name TNMR stores (`CPMG…`, `T1_Saturation…`, `StimEchoDiffusion…`); anything else (e.g. a plain diffusion series, `SEDiff…`) is declined with that name in the message.
 - The gradient is not in the file: the default is 6.59 T/m for Tecmag data (23.67 T/m for Kea), a setting like any other. The nucleus comes from the header (`H1`), not from a frequency lookup.
 - The experiment date stored in the file is used as the time stamp (file times change when files are copied). A date before 2000 or in the future is flagged for the user, never corrected.
@@ -171,7 +172,9 @@ Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everyth
 date stored in the file; warnings (odd date, echo layout notes) show above the analysis; results folders are `processed_<file stem>_<time>`; `ft.G` and `t2d.gradient` are `"auto"` by default (23.67 Kea, 6.59 Tecmag);
 the batch time stamp is the experiment date (read from the header alone, so large files are cheap to list). No time-stamp override (decided 2026-10-20): odd dates are flagged for the user to deal with.
 
-**Still open:** the assumptions listed above (µs tables, τ = table + pw, conjugation/orientation), what to do with the stimulated echo, a plain diffusion series (`SEDiff…`), and whether T1 amplitudes should be the echo-train sum (as now) or the first echo.
+**Options added 2026-10-20 at Tyler's request:** T1 recovery amplitude from the echo-train sum (default) or the first echo only (Advanced settings, Tecmag data only; `t1.amplitude`); "flip z" (above); the open dataset's name under the tab bar on every tab; `.tnt` files dropped directly on the drop zone (clicking the zone browses for a folder only: a browser cannot pick a file or a folder in one dialog).
+
+**Still open:** the stimulated echo is left out of T₂–D (explained to Tyler; he has not decided otherwise), orientation of the Tecmag profile (above), a plain diffusion series (`SEDiff…`, later).
 
 ## 10. Kept out of this public repo
 

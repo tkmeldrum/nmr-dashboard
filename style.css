@@ -49,6 +49,8 @@ button:hover, button:focus-visible { background:var(--accent); color:var(--bg); 
 .tabs [role="tab"]:hover:not(:disabled):not([aria-selected="true"]) { background:var(--card); color:var(--fg); }
 .tabs [role="tab"]:disabled { opacity:.45; cursor:not-allowed; }
 .tabs [role="tab"]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.dataset-banner { margin:-.75rem 0 1rem; color:var(--muted); font-size:.92rem; overflow-wrap:anywhere; }
+.dataset-banner strong { color:var(--fg); }
 .tab-nav { display:flex; justify-content:space-between; gap:1rem; margin:.5rem 0 1rem; }
 .tab-nav:last-child { margin:1.5rem 0 0; }
 [role="tabpanel"] > h2:first-child { margin-top:.5rem; }

@@ -322,3 +322,48 @@ def test_a_tnt_in_a_folder_is_one_dataset_for_the_page_batch(tmp_path):
     prov = json.loads(base64.b64decode(out["files"]["provenance.json"]))
     assert [i["name"] for i in prov["inputs"]] == [TECMAG_CPMG_NOISY.name] and prov["inputs"][0]["modified_utc"].startswith("2026-01-15")
     webbatch.finish()
+
+
+# ── options added at Tyler's request ────────────────────────────────────────
+
+def test_t1_can_use_the_first_echo_alone_instead_of_the_echo_train_sum():
+    r = load(TECMAG_T1_CLEAN)
+    assert r["raw"]["has_echoes"]
+    both = {sel: process({**T1_FIT, "t1_amplitude": sel}) for sel in ("sum", "first")}
+    for res in both.values():
+        assert res["multiexp"]["selected"]["components"][0]["T2"] == pytest.approx(TRUTH["tecmag_t1"]["T1_s"], rel=1e-3)
+    ys = {k: np.array(v["decay"]["y"]) for k, v in both.items()}
+    assert ys["first"] == pytest.approx(_STATE["t1"]["echoes"][:, 0]) and ys["sum"] == pytest.approx(_STATE["t1"]["echoes"].sum(axis=1))
+    assert not np.allclose(ys["first"], ys["sum"]) and process(T1_FIT)["settings"].get("t1_amplitude", "sum") == "sum"            # sum is the default
+    with pytest.raises(ValueError, match="t1_amplitude"):
+        process({**T1_FIT, "t1_amplitude": "last"})
+
+
+def test_the_first_echo_amplitude_needs_an_echo_train_per_delay():
+    r = load(DATA / "kea_t1_clean")
+    assert r["raw"]["has_echoes"] is False
+    with pytest.raises(ValueError, match="only available for data with an echo train"):
+        process({**T1_FIT, "t1_amplitude": "first"})
+
+
+def test_flip_z_mirrors_the_position_axis_and_the_profile(tmp_path):
+    tecmag_variant(tmp_path / "t.tnt", "cpmg", layers_um=((216.0, 431.0),), T2_s=(0.02,), fraction=(1.0,))
+    load(tmp_path / "t.tnt")
+    ft = {"nucleus": "1H", "G": 6.59, "zero_fill": 4, "z_min": None, "z_max": None}
+    a = process({**CPMG_FIT, "echo": "ft", "ft": ft})["ft"]
+    b = process({**CPMG_FIT, "echo": "ft", "ft": {**ft, "flip_z": True}})["ft"]
+    za, pa, zb, pb = (np.array(x) for x in (a["z_um"], a["profile"], b["z_um"], b["profile"]))
+    assert np.allclose(zb, -za[::-1]) and np.allclose(pb, pa[::-1])
+    assert (za * pa).sum() > 0 > (zb * pb).sum()                                                    # the layer is on the + side, then on the - side
+
+
+def test_the_new_options_travel_through_the_params_file():
+    from nmrdash import params as P
+    p = P.defaults()
+    assert p["t1"]["amplitude"] == "sum" and p["ft"]["flip_z"] is False
+    p["t1"]["amplitude"], p["ft"]["flip_z"], p["processing"]["echo"] = "first", True, "ft"
+    assert P.to_settings_t1(p)[0]["t1_amplitude"] == "first" and P.to_settings(p, [1e-3, 2e-3])[0]["ft"]["flip_z"] is True
+    assert P.from_settings(P.to_settings_t1(p)[0], P.to_settings_t1(p)[1])["t1"]["amplitude"] == "first"
+    assert P.from_settings(*P.to_settings(p, [1e-3, 2e-3]))["ft"]["flip_z"] is True
+    with pytest.raises(ValueError, match="t1.amplitude"):
+        P.validate({"t1": {"amplitude": "second"}})
