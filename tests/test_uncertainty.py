@@ -12,7 +12,7 @@ from nmrdash import multiexp, uncertainty as u  # noqa: E402
 from nmrdash.pipeline import (boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step,  # noqa: E402
                               process)
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_CLEAN, CPMG_NOISY, cpmg_single_exponential
 SIGMA = 4.0
 
 
@@ -173,7 +173,7 @@ SETTINGS = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset":
 
 
 def test_pipeline_mcmc_and_bootstrap_on_real_data_are_json_safe():
-    load(DATA / "CPMG_EtGly" / "1")
+    load(CPMG_NOISY)
     process(SETTINGS)
     info = mcmc_start({"steps": 600, "burn": 200, "nwalkers": 16})
     assert info["est_seconds"] > 0 and info["ndim"] == 3 and not info["sigma_sampled"]
@@ -192,7 +192,7 @@ def test_pipeline_mcmc_and_bootstrap_on_real_data_are_json_safe():
 
 
 def test_pipeline_can_target_a_position_after_ft():
-    load(DATA / "CPMG_EtGly" / "1")
+    load(CPMG_NOISY)
     process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -100, "z_max": 100},
              "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95}, "ilt": {"enabled": False}})
     info = mcmc_start({"target": "position", "z_um": 0, "steps": 300, "burn": 100, "nwalkers": 16})
@@ -203,7 +203,7 @@ def test_pipeline_can_target_a_position_after_ft():
 
 
 def test_pipeline_errors_are_clear():
-    load(DATA / "CPMG_EtGly" / "1")
+    load(CPMG_NOISY)
     with pytest.raises(RuntimeError, match="Run the processing first"):
         mcmc_start({})
     process({**SETTINGS, "multiexp": {"enabled": False}, "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})
@@ -213,10 +213,10 @@ def test_pipeline_errors_are_clear():
         boot_start({"target": "position"})
 
 
-def test_walkers_start_when_a_component_sits_on_the_edge_of_the_prior():
+def test_walkers_start_when_a_component_sits_on_the_edge_of_the_prior(tmp_path):
     """Regression: a least-squares T2 at the upper bound (the data cannot pin it down) used to leave every start point outside the prior."""
     from nmrdash.pipeline import load as _load
-    _load(DATA / "CPMG_EtGly" / "2")
+    _load(cpmg_single_exponential(tmp_path / "ds", T2=5.0, noisy=False))     # an almost flat decay: a T2 the data cannot bound
     res = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": False, "ci_level": 0.95, "compare": False}})
     assert max(c["T2"] for c in res["multiexp"]["selected"]["components"]) > 0.2              # pinned at 10 x the longest time
     mcmc_start({"target": "bulk", "nwalkers": 32, "steps": 200, "burn": 50, "seed": 0})

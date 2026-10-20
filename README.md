@@ -58,9 +58,9 @@ unit handling, the summaries and the interface are new. Files read: `acqu.par`, 
   last. In the browser 50 × 25 takes about 20 s and 100 × 25 about 3 minutes. Before a long solve the page times a small trial, shows an estimate and asks;
   there is no progress to report during a solve, so a **Stop** button restarts Python (data and settings are kept).
 - **What the data can resolve (important).** A diffusion coefficient is only measurable if the signal decays over the b-values used: roughly from
-  1/b_max to 5/b_min (for the M1115 sample, b = 6.4e9 – 2.9e12 s/m², i.e. **3.5e-13 to 7.8e-10 m²/s**). The regularisation (a curvature penalty) does
+  1/b_max to 5/b_min (for the synthetic T₂–D sets, b = 6.5e9 – 2.9e12 s/m², i.e. **3.5e-13 to 7.7e-10 m²/s**). The regularisation (a curvature penalty) does
   not discourage large amplitudes where the kernel is ~0, so outside that window the solution can hold a lot of "signal" that the data say nothing
-  about: on both sample datasets 64–69% of the spectrum's weight sat above 7e-10 m²/s when the grid reached 1e-8 (the 2.2e-9 default shortens that tail: 21–41% of the spectrum is then outside the resolvable window), and a synthetic test with known populations shows the same
+  about: with the grid reaching 1e-8 a large part of the spectrum's weight can sit above the window (the 2.2e-9 default for D max shortens that tail), and a synthetic test with known populations shows the same
   drift. The page therefore shades the unresolvable band, flags each region as constrained or not, reports each region's share of the *resolvable*
   part, and offers **"Use the range the b-values can resolve"** (params: `d_min = d_max = "auto"`). Within that window the slow population of the
   synthetic test is recovered to ~10% in T₂ and D; the fast one's T₂ is good but its D can be off by ~2× and its share by ~20% (and shifts with α).
@@ -111,7 +111,7 @@ nmrdash/        the Python package (also runs on a desktop: pip install -e .; it
   t2d_model.py uncertainty.py t2d_uncertainty.py (MCMC, bootstrap)   params.py (the params file)   runner.py cli.py webbatch.py (run, batch)
   outputs.py figures.py formatting.py (results on disk)   provenance.py export.py
 tests/          pytest: synthetic recovery tests, statistics invariance tests, every sample dataset
-test_data/      sample Kea datasets (PUBLIC, see below)
+test_data/      synthetic sample datasets (see below)
 tools/          build_site.py (assembles the deployable site), dev_server.py (local server)
 docs/DEVELOPMENT.md  the development log and guide (read first)   docs/PLAN*.md  the plans   docs/REFERENCES.md  references to check
 ```
@@ -149,8 +149,9 @@ python tools/build_site.py site # what CI deploys; versions every asset URL so b
 Deploys: every push to `main` runs the tests, builds the site and publishes it to GitHub Pages
 (`.github/workflows/pages.yml`).
 
-**Test data is public.** Anything under `test_data/` is in a public repo and is bundled into the live site (only
-`acqu.par` and `data.2d` are shipped). Commit only data you are happy to publish.
+**Test data is synthetic.** `test_data/` holds only generated datasets (made by `tools/make_synthetic_data.py`, with known true values listed in
+`test_data/README.md`), bundled into the live site as "Explore test data". No real measurements are kept in this repository: add new test cases to the generator, not
+recorded data.
 
 ## Status and roadmap
 
@@ -197,8 +198,8 @@ nmrdash batch params.toml  data/series --list     # just list the datasets and t
   `--batch` for a folder of datasets). Use `defaults` in place of a params file to run with the built-in defaults.
 - **Excluding the first points:** `[processing] exclude_first = n` (or the "Exclude the first n echoes" field on the Process tab; for T1 it counts
   delays) leaves the first n points out of **every** analysis: multi-exponential fit, ILT, per-position fits, MCMC, bootstrap and the noise estimate.
-  They are still plotted (open markers) and written to `decay.csv` with `included_in_fits = 0`. The first echo is often distorted: on `CPMG_EtGly`
-  (FT window sum) excluding just echo 1 cuts the MSE sixfold and moves T₂ from 3.85e-2 ± 0.76e-2 to 2.68e-2 ± 0.15e-2 s.
+  They are still plotted (open markers) and written to `decay.csv` with `included_in_fits = 0`. The first echo is often distorted on real instruments; one scaled
+  by 0.3 in the synthetic CPMG set (`test_excluding_a_distorted_first_echo_improves_the_fit`) wrecks the FT-sum fit, and excluding it restores the true T₂.
 - **Params file** (`nmrdash/params.py` is the single definition): sections `processing`, `ft`, `multiexp`, `ilt`,
   `uncertainty`, `mcmc`, `bootstrap`, `output`, `batch`; every setting is commented in the generated file, unknown names and
   out-of-range values are rejected with a message naming the setting, and `"auto"` means the same rule the page uses.

@@ -13,7 +13,7 @@ from nmrdash import formatting as F, params as P, report, runner, webbatch  # no
 from nmrdash.pipeline import (_STATE, _provenance_record, boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step,  # noqa: E402
                               process, save_bundle)
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_NOISY, DATA, t2d_with_a_slow_population
 CPMG = {"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": True},
         "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 0.3, "n_steps": 60, "alpha": 1e8, "sweep": True}}
 FT = {"echo": "ft", "ft": {"nucleus": "1H", "G": 23.67, "zero_fill": 3, "z_min": None, "z_max": None, "spacing_um": None, "ilt_spacing_um": None, "min_signal_pct": 5.0},
@@ -23,8 +23,9 @@ T1 = {"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_le
 T2D = {"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}, "t2d_model": {"enabled": True}}
 
 
-def analysis(sample, settings, uncertainty=False):
+def analysis(sample, settings, uncertainty=False, label=None):
     load(DATA / sample)
+    sample = label or sample
     res = process(settings)
     mc = bs = None
     if uncertainty:
@@ -58,9 +59,9 @@ def pdf_pages(pdf):
 
 
 @pytest.fixture(scope="module")
-def reports():
+def reports(tmp_path_factory):
     out = {}
-    for key, args in (("cpmg", ("CPMG_EtGly/1", CPMG, True)), ("ft", ("paperstack_CPMG_40C/1", FT, False)), ("t1", ("T1SAT/1", T1, False)), ("t2d", ("S3115_rt_100phr/1", T2D, True))):
+    for key, args in (("cpmg", ("kea_cpmg_noisy", CPMG, True)), ("ft", ("kea_cpmg_noisy", FT, False)), ("t1", ("kea_t1_noisy", T1, False)), ("t2d", (str(t2d_with_a_slow_population(tmp_path_factory.mktemp("slow") / "ds")), T2D, True, "kea_t2d_slow_population"))):
         a = analysis(*args)
         blocks = report.compose(*a, style={})
         pages, scale = report.fit(blocks)
@@ -81,7 +82,7 @@ def test_the_cpmg_report_says_what_was_done_and_found(reports):
     (res, prov, mc, bs, raw), blocks, _, _ = reports["cpmg"]
     text = all_text(blocks)
     me = res["multiexp"]["selected"]
-    for needle in ("Spinlab Data Analysis Report", "CPMG_EtGly/1", "Settings", "integrate each echo", "Exponential fit", F.fmt_sci(me["components"][0]["T2"]), "ILT",
+    for needle in ("Spinlab Data Analysis Report", "kea_cpmg_noisy", "Settings", "integrate each echo", "Exponential fit", F.fmt_sci(me["components"][0]["T2"]), "ILT",
                    "Uncertainty: methods compared", "MCMC: 24 walkers", "Bootstrap: 20 replicates", "Warnings and notes", "How these numbers were obtained", "Provenance", "SHA-256", "Provided as is"):
         assert needle in text, needle
     assert "exp(−t / T₂)" in text                                                       # the equations that apply are listed
@@ -163,7 +164,7 @@ def test_over_long_content_loses_its_optional_figures_last_first_and_never_the_e
 # ── every way it is saved ────────────────────────────────────────────────────
 
 def test_the_save_bundle_includes_the_report_unless_asked_not_to_and_can_make_only_the_report():
-    analysis("CPMG_EtGly/1", CPMG)
+    analysis("kea_cpmg_noisy", CPMG)
     full = save_bundle({"dpi": 50})
     assert "report.pdf" in full["files"] and base64.b64decode(full["files"]["report.pdf"])[:5] == b"%PDF-"
     import json
@@ -180,7 +181,7 @@ def test_the_script_writes_the_report_and_a_batch_report(tmp_path):
     root = tmp_path / "series"
     for i in range(2):
         d = root / f"run{i}"
-        shutil.copytree(DATA / "CPMG_EtGly" / "1", d)
+        shutil.copytree(CPMG_NOISY, d)
         for old in d.glob("processed_*"):
             shutil.rmtree(old)
     p = P.defaults()
@@ -206,7 +207,7 @@ def test_the_batch_report_lists_every_dataset_and_why_some_were_skipped():
     assert "T₂ 3.00e-2 s (100%)" in report._row_result(rows[0]) and "this batch is cpmg" in report._row_result(rows[2])
     pdf = report.build_batch(rows, P.defaults(), "demo")
     assert pdf[:5] == b"%PDF-" and pdf_pages(pdf) >= 1
-    assert "nmrdash analysis report" not in all_text(report.compose(*analysis("T1SAT/1", T1), style={})).lower()
+    assert "nmrdash analysis report" not in all_text(report.compose(*analysis("kea_t1_noisy", T1), style={})).lower()
 
 
 def test_the_params_file_has_a_report_switch():
@@ -223,7 +224,7 @@ def test_the_page_batch_carries_the_report_option(tmp_path, monkeypatch):
     webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "cpmg", "root_name": "demo", "output": {"figure_format": "png", "dpi": 50, "report": True}})
     for i, ts in enumerate((1_700_000_000_000, 1_700_000_600_000)):
         dest = Path(webbatch.ROOT) / str(i)
-        shutil.copytree(DATA / "CPMG_EtGly" / "1", dest)
+        shutil.copytree(CPMG_NOISY, dest)
         for old in dest.glob("processed_*"):
             shutil.rmtree(old)
         out = webbatch.run_one({"i": i, "label": f"d{i}", "timestamp_ms": ts})
