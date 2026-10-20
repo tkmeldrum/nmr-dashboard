@@ -61,7 +61,7 @@ unit handling, the summaries and the interface are new. Files read: `acqu.par`, 
 - **Defaults (as you specified):** T₂ 1e-5 to 1 s, D 1e-12 to 2.2e-9 m²/s (the upper limit is about the self-diffusion coefficient of water; it was 1e-8 until 2026-10-19), α = 1e9, 50 T₂ × 25 D points. D is entered and reported in m²/s; the
   solver works on D × 10⁹ (and b × 10⁻⁹) and every result is converted back. Params file section `[t2d]`; `exclude_first` applies.
 - **Cost:** one dense problem of (T₂ points × D points) unknowns: native times of 1.9 s (30 × 25), 8 s (50 × 25), 54 s (100 × 25) and ~0.9 GB for the
-  last. In the browser 50 × 25 takes about 20 s and 100 × 25 about 3 minutes. Before a long solve the page times a small trial, shows an estimate and asks;
+  last. In the browser 50 × 25 takes about 20 s and 100 × 25 about 3 minutes; the defaults are 100 T₂ × 20 D points (about 2 minutes in the browser; D points never exceed the number of diffusion delays). Before a long solve the page times a small trial, shows an estimate and asks;
   there is no progress to report during a solve, so a **Stop** button restarts Python (data and settings are kept).
 - **What the data can resolve (important).** A diffusion coefficient is only measurable if the signal decays over the b-values used: roughly from
   1/b_max to 5/b_min (for the synthetic T₂–D sets, b = 6.5e9 – 2.9e12 s/m², i.e. **3.5e-13 to 7.7e-10 m²/s**). The regularisation (a curvature penalty) does
