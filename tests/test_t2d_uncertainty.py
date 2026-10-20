@@ -11,7 +11,7 @@ pytest.importorskip("emcee")
 from nmrdash import ilt2d, t2d_model as M, t2d_uncertainty as U  # noqa: E402
 from nmrdash.pipeline import (_STATE, boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process)  # noqa: E402
 
-from sample_data import T2D_NOISY, t2d_with_a_slow_population
+from sample_data import T2D_SNR100, t2d_with_a_slow_population
 SIGMA, T2R = 10.0, (1e-5, 1.0)
 TWO = [(4000.0, 0.004, 3e-11), (2500.0, 0.03, 2e-12)]
 THEME = {"fg": "#222", "grid": "#aaa"}
@@ -19,7 +19,7 @@ THEME = {"fg": "#222", "grid": "#aaa"}
 
 @pytest.fixture(scope="module")
 def axes():
-    load(T2D_NOISY)
+    load(T2D_SNR100)
     L = _STATE["t2d"]
     return np.asarray(L["echo_s"][:300], float), np.asarray(L["b_vec"], float), ilt2d.sensitive_d_window(L["b_vec"])
 
@@ -142,7 +142,7 @@ def test_through_the_pipeline_and_strict_json(tmp_path):
 
 
 def test_without_the_model_the_message_says_what_to_do():
-    load(T2D_NOISY)
+    load(T2D_SNR100)
     process({"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}})
     for start in (mcmc_start, boot_start):
         with pytest.raises(ValueError, match="few-population model"):

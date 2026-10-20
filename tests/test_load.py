@@ -5,10 +5,10 @@ import pytest
 
 from nmrdash.pipeline import load
 
-from sample_data import CPMG_NOISY, DATA, T1_CLEAN, T1_NOISY, T2D_CLEAN, T2D_NOISY
+from sample_data import CPMG_SNR100, DATA, T1_CLEAN, T1_SNR100, T2D_CLEAN, T2D_SNR100
 CPMG = sorted(p.parent for p in DATA.rglob("data.2d") if (p.parent / "acqu.par").exists())
-T2D = [T2D_NOISY, T2D_CLEAN]
-T1 = [T1_NOISY, T1_CLEAN, T1_CLEAN]
+T2D = [T2D_SNR100, T2D_CLEAN]
+T1 = [T1_SNR100, T1_CLEAN, T1_CLEAN]
 
 
 @pytest.mark.parametrize("d", CPMG, ids=lambda p: str(p.relative_to(DATA)))
@@ -58,18 +58,18 @@ def test_t1sat_is_read_from_data_dat(d):
 
 
 def test_display_pulse_row():
-    r = load(CPMG_NOISY)
+    r = load(CPMG_SNR100)
     row = next(x for x in r["display"] if x["label"] == "Pulse length")
     assert row["value"] == "2.25 µs (90°/180° amp: -10/-4 dB)"
 
 
 def test_sequence_and_timestamp_are_base_rows():
-    r = load(CPMG_NOISY, 1760000000000)
+    r = load(CPMG_SNR100, 1760000000000)
     assert [x["label"] for x in r["display"]][:2] == ["Sequence", "File timestamp"]
     assert r["display"][0]["value"] == "CPMG"
     assert r["display"][1]["value"].startswith("2025-")
 
 
 def test_sequence_shown_for_non_cpmg():
-    r = load(T1_NOISY)
+    r = load(T1_SNR100)
     assert r["display"][0] == {"label": "Sequence", "value": "T1Sat"}

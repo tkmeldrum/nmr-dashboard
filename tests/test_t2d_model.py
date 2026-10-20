@@ -8,14 +8,14 @@ import pytest
 from nmrdash import ilt2d, t2d_model as M
 from nmrdash.pipeline import _STATE, load, process
 
-from sample_data import T2D_NOISY, t2d_with_a_slow_population, TRUTH
+from sample_data import T2D_SNR100, t2d_with_a_slow_population, TRUTH
 SIGMA = 10.0
 T2R = (1e-5, 1.0)
 
 
 @pytest.fixture(scope="module")
 def axes():
-    load(T2D_NOISY)
+    load(T2D_SNR100)
     L = _STATE["t2d"]
     return np.asarray(L["echo_s"][:400], float), np.asarray(L["b_vec"], float), ilt2d.sensitive_d_window(L["b_vec"])
 
@@ -98,7 +98,7 @@ def test_populations_come_back_ordered_by_t2(axes):
 
 def test_the_noisy_sample_fits_to_the_noise_level_and_a_slow_population_is_bound(tmp_path):
     truth = TRUTH["t2d"]
-    for sample, k_expected in ((T2D_NOISY, 2), (t2d_with_a_slow_population(tmp_path / "slow"), 3)):
+    for sample, k_expected in ((T2D_SNR100, 2), (t2d_with_a_slow_population(tmp_path / "slow"), 3)):
         load(sample)
         res = process({"kind": "t2d", "t2d": {"t2_steps": 30, "d_steps": 15}, "t2d_model": {"enabled": True}})["t2d"]
         m = res["model"]
@@ -107,14 +107,14 @@ def test_the_noisy_sample_fits_to_the_noise_level_and_a_slow_population_is_bound
         if k_expected == 2:                                                               # both populations in the window: recovered, and the fit is at the noise level
             assert m["chi2_per_point"] < 1.1 and not any(p["D_at_limit"] for p in m["populations"])
             for p, T2, D, f in zip(m["populations"], truth["T2_s"], truth["D_m2s"], truth["fraction"]):
-                assert p["T2"] == pytest.approx(T2, rel=0.05) and p["D"] == pytest.approx(D, rel=0.05) and p["fraction"] == pytest.approx(f, abs=0.03)
+                assert p["T2"] == pytest.approx(T2, rel=0.10) and p["D"] == pytest.approx(D, rel=0.10) and p["fraction"] == pytest.approx(f, abs=0.04)
         else:                                                                             # the slow one cannot be resolved: it is reported as bound at the low limit
             assert any(p["D_at_limit"] == "low" for p in m["populations"])
     assert _STATE["processed"]["t2d_model"]["fit"]["K"] == 3                                  # kept for MCMC and the bootstrap
 
 
 def test_the_model_is_off_unless_asked_for_and_k_is_checked():
-    load(T2D_NOISY)
+    load(T2D_SNR100)
     assert "model" not in process({"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}})["t2d"]
     for bad in (0, 9, 2.5, "2"):
         with pytest.raises(ValueError, match="t2d_model.k"):

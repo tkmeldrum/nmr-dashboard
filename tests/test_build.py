@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_manifest_lists_samples():
     m = sample_manifest()
-    assert any(s["label"] == "kea_cpmg_noisy" for s in m) and any(s["label"] == "tecmag_t2d_noisy" for s in m)
+    assert any(s["label"] == "kea_cpmg_snr100" for s in m) and any(s["label"] == "tecmag_t2d_snr100" for s in m)
     for s in m:
         assert ("acqu.par" in s["files"]) or (len(s["files"]) == 1 and s["files"][0].endswith(".tnt"))      # a Kea folder, or one Tecmag file
         assert s["path"].startswith("test_data")
@@ -42,14 +42,14 @@ def test_build_bundles_site(tmp_path):
     # only the data the page needs is shipped, not figures/exports
     assert [p.name for p in out.rglob("*.png")] == ["logo.png"] and not list(out.rglob("*.npz"))      # the lab logo is the only image
     # a bundled sample loads
-    s = next(s for s in manifest if s["label"] == "kea_cpmg_noisy")
+    s = next(s for s in manifest if s["label"] == "kea_cpmg_snr100")
     assert load(out / s["path"], None, fallback_to_mtime=False)["is_cpmg"]
     t = next(s for s in manifest if s["label"] == "tecmag_cpmg_clean")
     assert load(out / t["path"] / t["files"][0], None, fallback_to_mtime=False)["is_cpmg"]
 
 
 def test_no_timestamp_mode():
-    r = load(ROOT / "test_data" / "kea_cpmg_noisy", None, fallback_to_mtime=False)
+    r = load(ROOT / "test_data" / "kea_cpmg_snr100", None, fallback_to_mtime=False)
     row = next(x for x in r["display"] if x["label"] == "File timestamp")
     assert row["value"] == "not available"
 

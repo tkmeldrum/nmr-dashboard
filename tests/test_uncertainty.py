@@ -12,7 +12,7 @@ from nmrdash import multiexp, uncertainty as u  # noqa: E402
 from nmrdash.pipeline import (boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step,  # noqa: E402
                               process)
 
-from sample_data import CPMG_CLEAN, CPMG_NOISY, cpmg_single_exponential
+from sample_data import CPMG_CLEAN, CPMG_SNR100, cpmg_single_exponential
 SIGMA = 4.0
 
 
@@ -173,7 +173,7 @@ SETTINGS = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset":
 
 
 def test_pipeline_mcmc_and_bootstrap_on_real_data_are_json_safe():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     process(SETTINGS)
     info = mcmc_start({"steps": 600, "burn": 200, "nwalkers": 16})
     assert info["est_seconds"] > 0 and info["ndim"] == 3 and not info["sigma_sampled"]
@@ -192,7 +192,7 @@ def test_pipeline_mcmc_and_bootstrap_on_real_data_are_json_safe():
 
 
 def test_pipeline_can_target_a_position_after_ft():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -100, "z_max": 100},
              "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95}, "ilt": {"enabled": False}})
     info = mcmc_start({"target": "position", "z_um": 0, "steps": 300, "burn": 100, "nwalkers": 16})
@@ -203,7 +203,7 @@ def test_pipeline_can_target_a_position_after_ft():
 
 
 def test_pipeline_errors_are_clear():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     with pytest.raises(RuntimeError, match="Run the processing first"):
         mcmc_start({})
     process({**SETTINGS, "multiexp": {"enabled": False}, "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})

@@ -327,7 +327,7 @@ def _run_ft(cfg, skip=0):
     td, params = _STATE["td"], _STATE["params"]
     nuc = cfg.get("nucleus", "1H")
     gamma = constants.GAMMA_MHZ_PER_T[nuc]
-    g = float(cfg.get("G", constants.DEFAULT_G_T_PER_M))
+    g = float(cfg.get("G", constants.default_gradient(params)))
     zf = int(cfg.get("zero_fill", constants.DEFAULT_ZERO_FILL))
     if g <= 0:
         raise ValueError("The gradient G must be positive.")
@@ -377,7 +377,7 @@ def _run_ft(cfg, skip=0):
 
 
 def _t2d_cfg(settings):
-    cfg = {**constants.T2D_DEFAULTS, **(settings.get("t2d") or {})}
+    cfg = {**constants.T2D_DEFAULTS, "gradient": constants.default_gradient(_STATE.get("params") or {}), **(settings.get("t2d") or {})}      # a setting left out: the instrument of the data
     if cfg["d_min"] == "auto" or cfg["d_max"] == "auto":                     # the range these b-values can resolve
         cfg["d_min"], cfg["d_max"] = (float(f"{v:.2g}") for v in ilt2d.sensitive_d_window(t2d.b_values(_STATE["t2d"], cfg["gradient"])))
     for k in ("gradient", "t2_min", "t2_max", "d_min", "d_max", "alpha"):
@@ -393,7 +393,7 @@ def t2d_axes(settings):
     L = _STATE.get("t2d")
     if L is None:
         raise RuntimeError("No T2-D dataset is loaded.")
-    g = float({**constants.T2D_DEFAULTS, **(settings.get("t2d") or {})}["gradient"])
+    g = float({**constants.T2D_DEFAULTS, "gradient": constants.default_gradient(_STATE.get("params") or {}), **(settings.get("t2d") or {})}["gradient"])
     if not g > 0:
         raise ValueError("gradient must be positive")
     b = t2d.b_values(L, g)

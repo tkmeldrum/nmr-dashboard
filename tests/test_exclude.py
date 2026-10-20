@@ -11,7 +11,7 @@ from nmrdash import echoes, multiexp, params as P, runner
 from nmrdash.kea_io import read_kea_binary
 from nmrdash.pipeline import _STATE, _skip_count, boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process
 
-from sample_data import CPMG_CLEAN, CPMG_NOISY, T1_CLEAN, TRUTH, write_kea_binary
+from sample_data import CPMG_CLEAN, CPMG_SNR100, T1_CLEAN, TRUTH, write_kea_binary
 CPMG = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False},
         "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}}
 T1 = {"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": True}}
@@ -28,7 +28,7 @@ def test_skip_count_is_validated():
 
 
 def test_fits_use_only_the_included_echoes_and_the_full_decay_is_still_returned():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     base = process(CPMG)
     res = process({**CPMG, "exclude_first": 3})
     n = len(base["decay"]["t"])
@@ -64,7 +64,7 @@ def test_excluding_a_distorted_first_echo_improves_the_fit(tmp_path):
 
 
 def test_ft_mode_spatial_fits_and_profile_ignore_the_excluded_echoes_but_the_map_keeps_them():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({"echo": "ft", "exclude_first": 2, "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -100.0, "z_max": 100.0},
                    "multiexp": CPMG["multiexp"], "ilt": CPMG["ilt"]})
     n = len(res["decay"]["t"])
@@ -89,7 +89,7 @@ def test_t1_excludes_leading_delays():
 
 def test_mcmc_and_bootstrap_use_the_included_points_only():
     pytest.importorskip("emcee")
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({**CPMG, "exclude_first": 4, "ilt": {"enabled": False}})
     n = len(res["decay"]["t"])
     mcmc_start({"steps": 400, "burn": 100, "nwalkers": 16})
@@ -118,7 +118,7 @@ def test_params_file_carries_the_setting_in_both_directions():
 
 def test_script_outputs_show_what_was_excluded(tmp_path):
     d = tmp_path / "ds"
-    shutil.copytree(CPMG_NOISY, d)
+    shutil.copytree(CPMG_SNR100, d)
     p = P.defaults()
     p["processing"]["exclude_first"] = 2
     p["multiexp"]["compare"] = False
