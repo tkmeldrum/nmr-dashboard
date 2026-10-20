@@ -155,6 +155,7 @@ def build(out, version, vendor=True):
     (out / "physics.html").write_text(page)
     for src, dst in (("LICENSE", "LICENSE.txt"), ("NOTICE", "NOTICE.txt"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.txt")):
         shutil.copy(ROOT / src, out / dst)
+    shutil.copy(ROOT / "logo.png", out / "logo.png")
     shutil.copy(ROOT / "worker.js", out / "worker.js")
     # ES modules: version every relative import so a deploy never mixes old and new modules
     for js in sorted(ROOT.glob("*.js")):
