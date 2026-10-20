@@ -3,7 +3,12 @@
 from . import physics
 
 GAMMA_MHZ_PER_T = {n: g / 1e6 for n, g in physics.GAMMA_HZ_PER_T.items()}   # gyromagnetic ratio / 2π, from the physics module
-DEFAULT_G_T_PER_M = physics.DEFAULT_GRADIENT_T_PER_M                          # static gradient, T/m
+DEFAULT_G_T_PER_M = physics.DEFAULT_GRADIENT_T_PER_M                          # static gradient, T/m (the Kea magnet); Tecmag data: see tecmag.GRADIENT_T_PER_M
+
+
+def default_gradient(params):
+    """The static gradient to start from for a dataset: this lab's Tecmag magnet (about 6.7 T/m) or the Kea magnet (23.67 T/m). It is a setting; the file does not hold it."""
+    return 6.7 if params.get("source") == "tecmag" else DEFAULT_G_T_PER_M
 DEFAULT_ZERO_FILL = 4                             # FFT length = nextpow2(nrPnts * 2**zf)
 DEFAULT_Z_WINDOW_UM = (-200.0, 200.0)             # sample region; + z = + frequency = closer to the magnet (down)
 
@@ -11,6 +16,13 @@ DEFAULT_Z_WINDOW_UM = (-200.0, 200.0)             # sample region; + z = + frequ
 # (B0 = 19.44 / 42.577 = 0.4566 T), so 19F would sit at 19.44 * 40.078 / 42.577 = 18.30 MHz.
 REF_B1FREQ_1H_MHZ = 19.44
 B1FREQ_TOLERANCE_MHZ = 0.3
+
+
+def nucleus_of(params):
+    """(nucleus, reason) for a dataset: the nucleus the file names (Tecmag headers do), else the one nearest b1Freq (Kea)."""
+    if params.get("nucleus") in GAMMA_MHZ_PER_T:
+        return params["nucleus"], f"{ {'1H': '¹H', '19F': '¹⁹F'}[params['nucleus']] } from the file header"
+    return guess_nucleus(params.get("b1Freq"))
 
 
 def guess_nucleus(b1freq_mhz):
