@@ -88,8 +88,8 @@ In a static gradient, diffusion also attenuates the **CPMG echo train** itself, 
 
 | echo time | `γ²G²tₑ²/12` (s⁻¹ per m²/s of D) | for D = 10⁻⁹ m²/s (free water) | for D = 10⁻¹¹ |
 |---|---|---|---|
-| 44 µs (your SSE-T₂ data) | 6.5×10⁹ | 6.5 s⁻¹ | 0.07 s⁻¹ |
-| 200 µs (EtGly CPMG) | 1.3×10¹¹ | 130 s⁻¹ | 1.3 s⁻¹ |
+| 44 µs (SSE-T₂) | 6.5×10⁹ | 6.5 s⁻¹ | 0.07 s⁻¹ |
+| 200 µs (CPMG) | 1.3×10¹¹ | 130 s⁻¹ | 1.3 s⁻¹ |
 
 So for solids and slow diffusers (D ≲ 10⁻¹¹) it is negligible, but for a free liquid at long echo times it can shorten the apparent T₂ appreciably. Today T₂ in the fits is the *apparent* T₂. Options: state this on the About page (cheap), or add an optional correction when D is known (e.g. from the T₂–D result).
 

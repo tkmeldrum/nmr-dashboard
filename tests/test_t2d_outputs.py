@@ -11,8 +11,7 @@ pytest.importorskip("emcee")
 
 from nmrdash import params as P, runner  # noqa: E402
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
-M1115, S3115 = DATA / "M1115_rt_30phr" / "1", DATA / "S3115_rt_100phr" / "1"
+from sample_data import T2D_CLEAN, T2D_NOISY, t2d_with_a_slow_population
 
 
 def params(**over):
@@ -50,7 +49,7 @@ def test_the_params_file_has_a_t2d_model_section_that_round_trips_and_is_checked
 
 
 def test_the_script_writes_the_model_mcmc_and_bootstrap_results(tmp_path):
-    d = copy(S3115, tmp_path / "d")
+    d = t2d_with_a_slow_population(tmp_path / "d")
     p = params(mcmc={"enabled": True, "walkers": 24, "steps": 800, "burn": 300}, bootstrap={"enabled": True, "replicates": 20})
     row = runner.run_dataset(d, p)
     assert row["status"] == "ok", row
@@ -68,7 +67,7 @@ def test_the_script_writes_the_model_mcmc_and_bootstrap_results(tmp_path):
 
 
 def test_mcmc_for_t2d_without_the_model_is_skipped_with_a_reason(tmp_path):
-    d = copy(M1115, tmp_path / "d")
+    d = copy(T2D_NOISY, tmp_path / "d")
     row = runner.run_dataset(d, params(t2d_model={"enabled": False}, mcmc={"enabled": True, "steps": 300, "burn": 100}))
     assert row["status"] == "ok" and any("few-population model" in w for w in row["warnings"])
     names = {f.name for f in Path(row["output_dir"]).iterdir()}
@@ -77,7 +76,7 @@ def test_mcmc_for_t2d_without_the_model_is_skipped_with_a_reason(tmp_path):
 
 def test_a_batch_tabulates_each_population_over_time(tmp_path):
     root = tmp_path / "series"
-    for i, src in enumerate((S3115, S3115, M1115)):
+    for i, src in enumerate((T2D_CLEAN, T2D_CLEAN, T2D_NOISY)):
         d = copy(src, root / f"run{i}")
         for f in ("data2D_Cp.2d", "data2D.dat", "data.dat"):
             if (d / f).exists():
@@ -91,7 +90,7 @@ def test_a_batch_tabulates_each_population_over_time(tmp_path):
 
 
 def test_the_new_figure_has_per_figure_settings(tmp_path):
-    d = copy(S3115, tmp_path / "d")
+    d = copy(T2D_CLEAN, tmp_path / "d")
     p = params(output={"figure_format": "svg"}, style={"time_unit": "ms"})
     p["figures"] = {"t2d_populations": {"title": "Populations of my sample"}}
     row = runner.run_dataset(d, P.validate(p))
@@ -103,7 +102,7 @@ def test_the_populations_figure_tells_the_two_sampling_methods_apart(tmp_path):
     """Bootstrap and MCMC clouds use different markers, and the legend shows one neutral symbol for each."""
     from nmrdash import figures
     from nmrdash.pipeline import boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process, _STATE
-    load(S3115)
+    load(T2D_CLEAN)
     res = process({"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}, "t2d_model": {"enabled": True}})
     mcmc_start({"steps": 300, "burn": 100, "nwalkers": 24}); mcmc_step(300); mc = mcmc_finish({"fg": "#222", "grid": "#aaa"}, 0)
     boot_start({"replicates": 20}); boot_step(20); bs = boot_finish()

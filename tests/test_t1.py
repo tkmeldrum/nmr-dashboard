@@ -11,7 +11,7 @@ from nmrdash import multiexp, params as P, runner, sequences, uncertainty as u
 from nmrdash.pipeline import (boot_finish, boot_start, boot_step, get_provenance, load, mcmc_finish, mcmc_start, mcmc_step,
                               process)
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_NOISY, DATA, T1_CLEAN, T1_NOISY, TRUTH
 T1_SETTINGS = {"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": True}}
 
 
@@ -39,7 +39,7 @@ def test_supported_and_unsupported_sequences_explain_themselves():
 
 def test_a_cpmg_folder_with_a_wrong_sequence_name_is_not_processed_as_cpmg(tmp_path):
     d = tmp_path / "x"
-    shutil.copytree(DATA / "CPMG_EtGly" / "1", d)
+    shutil.copytree(CPMG_NOISY, d)
     par = (d / "acqu.par").read_text().replace('experiment = "CPMG"', 'experiment = "Mystery"')
     (d / "acqu.par").write_text(par)
     r = load(d)
@@ -86,10 +86,10 @@ def test_decay_fits_are_unchanged_by_the_generalisation():
     assert multiexp.fit(t, y, 1)["components"][0]["T2"] == pytest.approx(0.01, rel=0.05)
 
 
-# ── the real samples ─────────────────────────────────────────────────────────
+# ── the synthetic samples ─────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("d", [DATA / "T1SAT" / "1", DATA / "T1SAT_dopedwater" / "1", DATA / "T1SAT_dopedwater" / "2"], ids=lambda p: str(p.relative_to(DATA)))
-def test_real_t1_samples_process_and_prefer_one_component(d):
+@pytest.mark.parametrize("d", [T1_NOISY, T1_CLEAN, T1_CLEAN], ids=lambda p: str(p.relative_to(DATA)))
+def test_t1_samples_process_and_prefer_one_component(d):
     load(d)
     res = process(T1_SETTINGS)
     json.dumps(res, allow_nan=False)
@@ -99,14 +99,14 @@ def test_real_t1_samples_process_and_prefer_one_component(d):
     assert res["multiexp"]["recommended_n"] == 1                       # a second component is rare, as expected
 
 
-def test_real_t1_value_is_stable():
-    load(DATA / "T1SAT" / "1")
+def test_t1_fit_of_the_noisy_set_is_stable():
+    load(T1_NOISY)
     c = process(T1_SETTINGS)["multiexp"]["selected"]["components"][0]
-    assert c["T2"] == pytest.approx(0.3969, rel=1e-3) and c["T2_se"] == pytest.approx(0.0017, rel=0.05)
+    assert c["T2"] == pytest.approx(0.8057, rel=1e-3) and c["T2_se"] == pytest.approx(0.0062, rel=0.05) and abs(c["T2"] - TRUTH["t1"]["T1_s"]) < 3 * c["T2_se"]
 
 
 def test_t1_rejects_three_components():
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     with pytest.raises(ValueError, match="one or two"):
         process({**T1_SETTINGS, "multiexp": {**T1_SETTINGS["multiexp"], "n": 3}})
 
@@ -115,7 +115,7 @@ def test_t1_rejects_three_components():
 
 def test_mcmc_and_bootstrap_work_on_recovery_data_without_a_noise_channel():
     pytest.importorskip("emcee")
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     process(T1_SETTINGS)
     info = mcmc_start({"steps": 1500, "burn": 500, "nwalkers": 16})
     assert info["sigma_sampled"] and info["ndim"] == 4                 # A, T1, offset and the sampled sigma
@@ -123,7 +123,7 @@ def test_mcmc_and_bootstrap_work_on_recovery_data_without_a_noise_channel():
     r = mcmc_finish({"fg": "#222", "grid": "#aaa"})
     json.dumps(r, allow_nan=False)
     t1 = next(p for p in r["params"] if p["name"] == "T1")
-    assert r["symbol"] == "T1" and t1["lo"] < 0.3969 < t1["hi"] and t1["sd"] == pytest.approx(t1["ls_se"], rel=0.5)
+    assert r["symbol"] == "T1" and t1["lo"] < TRUTH["t1"]["T1_s"] < t1["hi"] and t1["sd"] == pytest.approx(t1["ls_se"], rel=0.5)
     b = boot_start({"replicates": 60, "do_ilt": False})
     assert b["method"] == "residual"                                   # nothing to resample but the residuals
     boot_step(60)
@@ -158,7 +158,7 @@ def test_params_t1_section_and_settings():
 
 def test_run_dataset_for_t1_writes_the_usual_files(tmp_path):
     d = tmp_path / "t1"
-    shutil.copytree(DATA / "T1SAT" / "1", d)
+    shutil.copytree(T1_NOISY, d)
     row = runner.run_dataset(d, P.defaults(), command="nmrdash run x")
     assert row["status"] == "ok" and row["kind"] == "t1", row.get("reason")
     out = Path(row["output_dir"])
@@ -168,7 +168,7 @@ def test_run_dataset_for_t1_writes_the_usual_files(tmp_path):
     head = open(out / "decay.csv").readline().strip().split(",")
     assert head[:2] == ["delay_s", "signal"] and "exp1_fit" in head
     comp = list(csv.DictReader(open(out / "multiexp_components.csv")))[0]
-    assert float(comp["T1_s"]) == pytest.approx(0.3969, rel=1e-3)
+    assert float(comp["T1_s"]) == pytest.approx(TRUTH["t1"]["T1_s"], rel=0.03)
     prov = json.loads((out / "provenance.json").read_text())
     assert [f["name"] for f in prov["inputs"]] == ["acqu.par", "data.dat"] and prov["settings"]["kind"] == "t1"
     assert "Saturation-recovery fit" in (out / "summary.md").read_text()
@@ -176,7 +176,7 @@ def test_run_dataset_for_t1_writes_the_usual_files(tmp_path):
 
 def test_a_mixed_batch_keeps_t2_and_t1_columns_apart(tmp_path):
     root = tmp_path / "mixed"
-    for name, src in (("cpmg", "CPMG_EtGly/1"), ("t1a", "T1SAT/1"), ("t1b", "T1SAT_dopedwater/1")):
+    for name, src in (("cpmg", "kea_cpmg_noisy"), ("t1a", "kea_t1_noisy"), ("t1b", "kea_t1_clean")):
         shutil.copytree(DATA / src, root / name)
     fast = P.defaults()
     fast["multiexp"]["compare"] = False
@@ -185,14 +185,14 @@ def test_a_mixed_batch_keeps_t2_and_t1_columns_apart(tmp_path):
     table = list(csv.DictReader(open(b / "batch_summary.csv")))
     by = {r["dataset"]: r for r in table}
     assert by["cpmg"]["kind"] == "cpmg" and by["cpmg"]["T2_1_s"] and not by["cpmg"]["T1_1_s"]
-    assert by["t1a"]["kind"] == "t1" and float(by["t1a"]["T1_1_s"]) == pytest.approx(0.3969, rel=1e-3) and not by["t1a"]["T2_1_s"]
+    assert by["t1a"]["kind"] == "t1" and float(by["t1a"]["T1_1_s"]) == pytest.approx(TRUTH["t1"]["T1_s"], rel=0.03) and not by["t1a"]["T2_1_s"]
     assert by["t1a"]["mean_T1_s"] == "" or float(by["t1a"]["mean_T1_s"]) > 0
     assert all(r["status"] == "ok" for r in table)
     assert (b / "timeseries_T1.png").read_bytes()[:4] == b"\x89PNG"      # two T1 datasets -> a T1 time series
 
 
 def test_page_provenance_for_t1():
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     process(T1_SETTINGS)
-    rec = get_provenance({"dataset": "sample: T1SAT/1"}, {})["record"]
+    rec = get_provenance({"dataset": "sample: kea_t1_noisy"}, {})["record"]
     assert {f["name"] for f in rec["inputs"]} == {"acqu.par", "data.dat"} and rec["settings"]["kind"] == "t1"

@@ -9,13 +9,12 @@ import pytest
 from nmrdash import figures
 from nmrdash.pipeline import load, process, save_bundle
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_NOISY, T1_NOISY, T2D_NOISY
 ROOT_DIR = Path(__file__).resolve().parent.parent
-ETGLY = DATA / "CPMG_EtGly" / "1"
 
 
 def run_cpmg(**extra):
-    r = load(ETGLY)
+    r = load(CPMG_NOISY)
     t = r["raw"]["echo_time_s"]
     return process({"echo": "integrate",
                     "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": False},
@@ -51,7 +50,7 @@ def test_formats_svg_and_pdf():
 
 def test_saving_needs_a_run_and_uncertainty_belongs_to_its_run():
     from nmrdash.pipeline import _STATE
-    load(ETGLY)
+    load(CPMG_NOISY)
     _STATE.pop("last_result", None)
     with pytest.raises(RuntimeError, match="Run the processing"):
         save_bundle({})
@@ -118,11 +117,11 @@ def _fake_t2d():
 
 
 def test_t2d_and_t1_results_save_too():
-    load(DATA / "M1115_rt_30phr" / "1")
+    load(T2D_NOISY)
     process({"kind": "t2d", "t2d": {"t2_steps": 12, "d_steps": 8}})
     out = save_bundle({"figure_format": "png", "dpi": 50, "style": {"cmap": "magma", "time_unit": "ms", "title": "none"}})
     assert {"t2d_spectrum.png", "t2d_fit.png", "summary.md"} <= set(out["files"])
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     process({"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}})
     assert "decay_fit.png" in save_bundle({"dpi": 50})["files"]
 
@@ -159,7 +158,7 @@ def test_bad_overrides_are_dropped():
 
 def test_every_figure_the_page_shows_is_saved():
     from nmrdash.pipeline import mcmc_finish, mcmc_start, mcmc_step
-    load(ETGLY)
+    load(CPMG_NOISY)
     process({"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": True},
              "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 0.3, "n_steps": 60, "alpha": 1e8, "sweep": True}})
     mcmc_start({"target": "bulk", "steps": 200, "burn": 50, "nwalkers": 16})
@@ -170,15 +169,15 @@ def test_every_figure_the_page_shows_is_saved():
 
 
 def test_ft_t1_and_t2d_save_their_own_extra_figures():
-    load(DATA / "paperstack_CPMG_40C" / "1")
+    load(CPMG_NOISY)
     process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 3, "z_min": None, "z_max": None, "spacing_um": None, "ilt_spacing_um": None, "min_signal_pct": 5.0},
              "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False},
              "ilt": {"enabled": True, "t2_min": 1e-5, "t2_max": 0.1, "n_steps": 40, "alpha": 1e8, "sweep": False}})
     assert {"ft_profile_map.png", "spatial.png", "spatial_extra.png", "raw_data.png"} <= set(save_bundle({"dpi": 40})["files"])
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     process({"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": True}})
     assert {"raw_data.png", "decay_fit.png", "model_comparison.png"} <= set(save_bundle({"dpi": 40})["files"])
-    load(DATA / "M1115_rt_30phr" / "1")
+    load(T2D_NOISY)
     process({"kind": "t2d", "t2d": {"t2_steps": 12, "d_steps": 8}})
     assert {"raw_data.png", "t2d_spectrum.png", "t2d_fit.png"} <= set(save_bundle({"dpi": 40})["files"])
 

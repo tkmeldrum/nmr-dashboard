@@ -11,8 +11,7 @@ pytest.importorskip("emcee")
 from nmrdash import ilt2d, t2d_model as M, t2d_uncertainty as U  # noqa: E402
 from nmrdash.pipeline import (_STATE, boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process)  # noqa: E402
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
-M1115, S3115 = DATA / "M1115_rt_30phr" / "1", DATA / "S3115_rt_100phr" / "1"
+from sample_data import T2D_NOISY, t2d_with_a_slow_population
 SIGMA, T2R = 10.0, (1e-5, 1.0)
 TWO = [(4000.0, 0.004, 3e-11), (2500.0, 0.03, 2e-12)]
 THEME = {"fg": "#222", "grid": "#aaa"}
@@ -20,7 +19,7 @@ THEME = {"fg": "#222", "grid": "#aaa"}
 
 @pytest.fixture(scope="module")
 def axes():
-    load(M1115)
+    load(T2D_NOISY)
     L = _STATE["t2d"]
     return np.asarray(L["echo_s"][:300], float), np.asarray(L["b_vec"], float), ilt2d.sensitive_d_window(L["b_vec"])
 
@@ -126,8 +125,8 @@ def test_the_bootstrap_checks_its_inputs(axes):
         U.Bootstrap2D(axes[0], axes[1], Y, f, T2R, axes[2], noise=None, sigma=SIGMA, method="nope", replicates=5)
 
 
-def test_through_the_pipeline_on_a_real_sample_and_strict_json():
-    load(S3115)
+def test_through_the_pipeline_and_strict_json(tmp_path):
+    load(t2d_with_a_slow_population(tmp_path / "ds"))
     process({"kind": "t2d", "t2d": {"t2_steps": 24, "d_steps": 12}, "t2d_model": {"enabled": True}})
     info = mcmc_start({"steps": 800, "burn": 300, "nwalkers": 24, "ci_level": 0.95})
     assert info["target"].startswith("3-population") and info["ndim"] == 9
@@ -143,7 +142,7 @@ def test_through_the_pipeline_on_a_real_sample_and_strict_json():
 
 
 def test_without_the_model_the_message_says_what_to_do():
-    load(M1115)
+    load(T2D_NOISY)
     process({"kind": "t2d", "t2d": {"t2_steps": 20, "d_steps": 10}})
     for start in (mcmc_start, boot_start):
         with pytest.raises(ValueError, match="few-population model"):

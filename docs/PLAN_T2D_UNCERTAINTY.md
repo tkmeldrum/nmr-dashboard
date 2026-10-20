@@ -24,7 +24,7 @@ Free diffusion in each population, one T₂ each. Noise σ comes from the imagin
 
 ## Choosing K
 
-1. Start from the regularised map: the number of regions above the threshold (3 on M1115, 5 on S3115) and their mean T₂ and D are the starting points.
+1. Start from the regularised map: the number of regions above the threshold (3 on sample A, 5 on sample B) and their mean T₂ and D are the starting points.
 2. Fit K = 1 … 4 (or up to the region count + 1) by least squares from several starts; report ΔAIC / ΔBIC like the 1D fit, and the χ²/point of each.
 3. The page proposes the K that BIC prefers; the user can override. Populations the data cannot support get the same "not supported by the data" warning as 1D.
 
@@ -61,7 +61,7 @@ Derived quantities with intervals: population fractions, mean T₂ and mean D.
 
 1. Synthetic data with known populations (inside the window, one near an edge, two close together): parameters recovered within their intervals; **coverage** of the 95% intervals over many noise seeds (as for the 1D MCMC).
 2. K recovered by BIC when the truth is K = 1, 2, 3; no phantom population when K is too large (warning fires).
-3. On M1115 and S3115: χ²/point at the noise level; the model's populations land on the map's regions; the fast-D population is reported as a bound.
+3. On sample A and sample B: χ²/point at the noise level; the model's populations land on the map's regions; the fast-D population is reported as a bound.
 4. Ordering and label stability across MCMC chains; speed budget checked.
 
 ## Risks
