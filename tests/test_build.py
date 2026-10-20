@@ -40,7 +40,7 @@ def test_build_bundles_site(tmp_path):
         for f in s["files"]:
             assert (out / s["path"] / f).is_file()
     # only the data the page needs is shipped, not figures/exports
-    assert not list(out.rglob("*.png")) and not list(out.rglob("*.npz"))
+    assert [p.name for p in out.rglob("*.png")] == ["logo.png"] and not list(out.rglob("*.npz"))      # the lab logo is the only image
     # a bundled sample loads
     s = next(s for s in manifest if s["label"] == "kea_cpmg_noisy")
     assert load(out / s["path"], None, fallback_to_mtime=False)["is_cpmg"]
