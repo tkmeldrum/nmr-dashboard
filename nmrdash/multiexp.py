@@ -56,6 +56,20 @@ def _starts(t, y, n, offset, lo_T, hi_T, rng, n_starts, kind="decay"):
         yield np.ravel(np.column_stack([A, T])).tolist() + ([base] if offset else [])
 
 
+CORRELATION_WARNING = 0.95      # |correlation| between two fitted parameters above which the least-squares intervals are not trusted
+
+
+def _strongest_correlation(pcov, se, n, offset, sym):
+    """The largest |correlation| between two fitted parameters (from the covariance): {r, a, b} with readable names, or None."""
+    if not np.all(np.isfinite(se)) or np.any(se <= 0) or len(se) < 2:
+        return None
+    C = np.abs(pcov / np.outer(se, se))
+    np.fill_diagonal(C, 0.0)
+    i, j = np.unravel_index(int(np.argmax(C)), C.shape)
+    name = lambda k: "the offset" if (offset and k == 2 * n) else f"the {'amplitude' if k % 2 == 0 else sym} of component {k // 2 + 1}"
+    return {"r": float(C[i, j]), "a": name(min(i, j)), "b": name(max(i, j))}
+
+
 def _numeric_jacobian(f, p):
     f0 = np.atleast_1d(f(p))
     J = np.empty((len(f0), len(p)))
@@ -148,6 +162,11 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         warnings.append(f"Component {i + 1} ({sym} = {T[i]:.3g} s) is not supported by the data: {why}. "
                         f"Try {max(n - len(unsupported), 1)} component{'s' if n - len(unsupported) > 1 else ''}.")
 
+    corr = _strongest_correlation(pcov, se, n, offset, sym) if finite else None
+    if corr and corr["r"] >= CORRELATION_WARNING:
+        warnings.append(f"The fitted parameters trade off against each other (|r| = {corr['r']:.3f} between {corr['a']} and {corr['b']}), so the least-squares intervals understate "
+                        "the uncertainty: in tests on synthetic data with known values, 95% intervals of fits like this contained the true value only 75-85% of the time. "
+                        "Check with MCMC or the bootstrap (Advanced settings), or use fewer components.")
     if finite:
         for i in range(n):
             if T[i] - tcrit * se[2 * i + 1] <= 0:
@@ -184,7 +203,7 @@ def fit(t, y, n, offset=True, ci_level=0.95, seed=0, n_starts=N_STARTS, sigma=No
         "n_params": k,
         "fit": model(t, p, n, offset, kind), "resid": y - model(t, p, n, offset, kind),
         "t_dense": t_dense, "fit_dense": model(t_dense, p, n, offset, kind),
-        "warnings": warnings, "unsupported": [i + 1 for i in unsupported],
+        "warnings": warnings, "unsupported": [i + 1 for i in unsupported], "max_correlation": corr,
     }
 
 

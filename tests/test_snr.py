@@ -64,12 +64,33 @@ def test_t2d_finds_both_populations_at_every_snr(fmt, sets, _c, _d, snr):
         assert p["T2"] == pytest.approx(T2, rel=tol[0]) and p["D"] == pytest.approx(D, rel=tol[1] * 1.5) and p["fraction"] == pytest.approx(f, abs=0.05)
 
 
-def test_a_two_component_t2_at_low_snr_is_flagged_or_wrong_by_more_than_its_interval_says():
-    """Documents a limit, not a feature: from SNR 30 down the two-component fit can be far from the truth while its least-squares intervals claim otherwise
-    (over many seeded realisations the 95% intervals covered the true T2 only about 70% of the time at SNR 30). The page's MCMC and bootstrap are the check."""
+def _decay(T2s, fractions, sigma=2.0, seed=1):
+    from nmrdash import multiexp
+    t = np.linspace(1e-4, 0.04, 200)
+    y = 1000 * sum(f * np.exp(-t / T) for f, T in zip(fractions, T2s)) + np.random.default_rng(seed).normal(0, sigma, t.size)
+    return t, y, multiexp
+
+
+def test_strongly_coupled_parameters_get_an_inline_warning_that_names_the_pair_and_the_check():
+    t, y, multiexp = _decay((0.005, 0.02), (0.4, 0.6))
+    f = multiexp.fit(t, y, 2, True)
+    corr = f["max_correlation"]
+    assert corr["r"] > 0.95 and corr["a"] and corr["b"]
+    (w,) = [w for w in f["warnings"] if "trade off" in w]                              # a message shown with the fit, not a dialog
+    assert f"{corr['r']:.3f}" in w and corr["a"] in w and "MCMC or the bootstrap" in w and "75-85%" in w
+
+
+def test_a_well_conditioned_fit_gets_no_such_warning():
+    t, y, multiexp = _decay((0.01,), (1.0,))
+    f = multiexp.fit(t, y, 1, False)
+    assert f["max_correlation"]["r"] < 0.95 and not any("trade off" in w for w in f["warnings"])
+
+
+def test_the_warning_reaches_the_pages_results_and_the_two_component_fit_at_snr_30_no_longer_passes_silently():
     c = TRUTH["tecmag_cpmg"]
     load(TECMAG[("cpmg", 30)])
     fit = process({**CPMG_MONO, "multiexp": {**CPMG_MONO["multiexp"], "n": 2, "offset": True}})["multiexp"]["selected"]
+    assert any("trade off" in w for w in fit["warnings"])                              # at SNR 30 this fit's intervals missed the truth, and used to say nothing
     mean = sum(x["fraction"] * x["T2"] for x in fit["components"])
     truth_mean = sum(f * T2 for f, T2 in zip(c["fraction"], c["T2_s"]))
     assert 0.5 * truth_mean < mean < 1.5 * truth_mean                                    # the amplitude-weighted T2 is still in the right place

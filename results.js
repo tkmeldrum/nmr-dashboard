@@ -302,6 +302,7 @@ function renderMultiexp(r) {
     notes.push(`BIC prefers ${r.multiexp.recommended_n} component${r.multiexp.recommended_n > 1 ? "s" : ""} over the ${me.n} chosen (see model comparison).`);
   }
   $("me-warnings").replaceChildren(...notes.map((text) => Object.assign(document.createElement("p"), { className: "message warn", textContent: text })));
+  if (me.warnings.length) $("me-results").open = true;          // a warning about the fit must not hide in a collapsed section
 
   const extra = [];
   if (me.offset) extra.push(`offset ${fmtPair(me.offset_value, me.offset_se)}`);
