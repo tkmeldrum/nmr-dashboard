@@ -145,6 +145,12 @@ details.section > summary h3 { margin:.7rem 0; }
 .t2d-maps .plot-card > div { height:16rem; }
 .busy button { margin-left:auto; padding:.2rem .8rem; }
 
+.brand { display:flex; align-items:center; gap:1rem; }
+.brand h1 { margin:0; }
+.logo { height:4.4rem; width:auto; display:block; color:var(--fg); }
+.logo-link { display:inline-flex; color:var(--fg); }
+.feedback a { color:var(--accent); }
+.lab-link { text-align:right; margin:.5rem 0 0; font-size:.9rem; }
 .feedback { max-width:72rem; margin:2rem auto 1.5rem; padding:0 1rem; }
 .feedback summary, .export-help summary { cursor:pointer; color:var(--muted, inherit); }
 .feedback textarea { width:100%; box-sizing:border-box; margin:.5rem 0; font:inherit; }
