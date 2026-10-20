@@ -254,16 +254,17 @@ def _md_table(header, rows):
 
 def _t2d_summary(res, prov, files, warnings, mcmc=None, boot=None):
     r, acq = res["t2d"], prov.get("acquisition", {})
-    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data2D_Cp.2d", "data2D.dat")), None)
+    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data2D_Cp.2d", "data2D.dat") or f["name"].lower().endswith(".tnt")), None)
+    tecmag = acq.get("source") == "tecmag"
     skip = res["decay"].get("skip", 0)
     L = [f"# nmrdash results: {prov['dataset']}", "",
          f"- Sequence: {acq.get('experiment', '?')} (T₂–D correlation), {acq.get('nrEchoes', '?')} echoes × {acq.get('nrPntsTau', '?')} diffusion delays, echo time {acq.get('echoTime', '?')} µs, Δ = {acq.get('DELTA', '?')} ms",
-         f"- 2D data written: {when or 'unknown'}"]
+         f"- {'2D data: experiment date stored in the .tnt file' if tecmag else '2D data written'}: {when or 'unknown'}"]
     if skip:
         L.append(f"- The first {skip} echoes are excluded from the inversion.")
     bi, bc = r["b_info"], r["b_check"]
     L += [f"- b-values calculated from the acquisition parameters, b = (γG)² τ² (Δ + 2τ/3): G = {F.fmt(bi['gradient_t_per_m'], 4)} T/m (your setting), "
-          f"Δ = {F.fmt(bi['delta_ms'])} ms, τ = {F.fmt(bi['tau_min_ms'])}–{F.fmt(bi['tau_max_ms'])} ms ({bi['n_tau']} log-spaced)."]
+          f"Δ = {F.fmt(bi['delta_ms'])} ms, τ = {F.fmt(bi['tau_min_ms'])}–{F.fmt(bi['tau_max_ms'])} ms ({bi['n_tau']} delays, " + ("from the sequence's delay table plus the pulse width" if tecmag else "log-spaced") + ")."]
     for c in bc["compared"]:
         if c["kind"] == "shape" and c["value"] is not None:
             L.append(f"  - The spectrometer's b-values ({c['file']}) have the same τ and Δ dependence as the calculation (deviation {F.fmt_sci(c['value'])}) and correspond to "
@@ -353,13 +354,15 @@ def summary_markdown(res, prov, mcmc=None, boot=None, files=(), warnings=()):
     acq = prov.get("acquisition", {})
     t1 = res.get("mode") == "t1"
     sym = "T1" if t1 else "T2"
-    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data.dat")), None)
+    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data.dat") or f["name"].lower().endswith(".tnt")), None)
+    tecmag = acq.get("source") == "tecmag"
+    written = "experiment date stored in the .tnt file" if tecmag else "written"
     if t1:
-        L += [f"- Sequence: {acq.get('experiment', '?')} (saturation recovery), {len(res['decay']['t'])} delays", f"- data.dat written: {when or 'unknown'}",
+        L += [f"- Sequence: {acq.get('experiment', '?')} (saturation recovery), {len(res['decay']['t'])} delays", f"- Data {written}: {when or 'unknown'}",
               "- No imaginary channel in these data, so there is no measured noise σ (reduced χ² is not available; MCMC samples σ, the bootstrap resamples residuals).", ""]
     else:
         L += [f"- Sequence: {acq.get('experiment', '?')}, echo time {acq.get('echoTime', '?')} µs, {acq.get('nrEchoes', '?')} echoes, {acq.get('nrPnts', '?')} points per echo",
-              f"- data.2d written: {when or 'unknown'}", f"- Echo processing: {'FT of each echo (signal vs z)' if res.get('mode') == 'ft' else 'integrate each echo'}; "
+              f"- Data {written}: {when or 'unknown'}", f"- Echo processing: {'FT of each echo (signal vs z)' if res.get('mode') == 'ft' else 'integrate each echo'}; "
               f"autophase rotation {F.fmt(res['decay']['phase_deg'], 4)}°; noise σ from the imaginary channel: {F.fmt(res['decay'].get('noise_sigma'))}", ""]
     skip = res["decay"].get("skip", 0)
     if skip:

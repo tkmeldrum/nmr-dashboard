@@ -31,7 +31,7 @@ export function renderT2d(r) {
   // how the b-values were obtained, and how they compare with the spectrometer's own files
   const bi = t.b_info, bc = t.b_check;
   const shape = bc.compared.find((c) => c.kind === "shape" && c.value !== null);
-  $("t2d-b-note").textContent = `b-values calculated as (γG)² τ² (Δ + 2τ/3) with G = ${bi.gradient_t_per_m} T/m, Δ = ${fmt(bi.delta_ms)} ms, τ = ${fmt(bi.tau_min_ms)}–${fmt(bi.tau_max_ms)} ms (${bi.n_tau}, log-spaced).` +
+  $("t2d-b-note").textContent = `b-values calculated as (γG)² τ² (Δ + 2τ/3) with G = ${bi.gradient_t_per_m} T/m, Δ = ${fmt(bi.delta_ms)} ms, τ = ${fmt(bi.tau_min_ms)}–${fmt(bi.tau_max_ms)} ms (${bi.n_tau}${bi.source === "tecmag" ? ", from the sequence's delay table plus the pulse width" : ", log-spaced"}).` +
     (shape ? ` The spectrometer's own b-values (${shape.file}) have the same τ and Δ dependence (deviation ${fmtSci(shape.value)}) and correspond to G = ${shape.implied_gradient_t_per_m.toFixed(2)} T/m.` : " There is no spectrometer file to compare with.");
 
   const msgs = [];

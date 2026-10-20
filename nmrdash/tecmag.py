@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from . import inference, physics
-from .tecmag_io import TntError, parse_value, read_tnt
+from .tecmag_io import TntError, parse_value, read_header, read_tnt
 
 SOURCE = "tecmag"
 GRADIENT_T_PER_M = 6.7                      # about this magnet's static gradient (Tyler, 2026-10-20); the user can change it in the processing settings
@@ -61,9 +61,9 @@ def find(path):
     return found[0] if found else None
 
 
-def _us(tnt, name):
-    v = tnt.value(name)
-    return None if v is None else v * 1e6
+def _r(x):
+    """A value converted from seconds without the float noise (59.99999999999999 µs -> 60)."""
+    return float(f"{x:.10g}")
 
 
 def _tables_in_delay_row(tnt):
@@ -118,9 +118,15 @@ def _centre_note(td):
     return None
 
 
+def experiment_date(path):
+    """(datetime or None, note or None) from a .tnt file's header alone (fast, for listing many files)."""
+    return _timestamp(read_header(path))
+
+
 def _timestamp(tnt):
-    """(datetime or None, note or None): the experiment date stored in the file, with a note when it cannot be right."""
-    m = re.match(r"\s*(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})", tnt.header.get("date", ""))
+    """(datetime or None, note or None): the experiment date stored in the file, with a note when it cannot be right. ``tnt``: a TntFile or a header dict."""
+    header = getattr(tnt, "header", tnt)
+    m = re.match(r"\s*(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})", header.get("date", ""))
     if not m:
         return None, "the file has no readable experiment date"
     dt = datetime(*(int(g) for g in m.groups()))
@@ -152,7 +158,7 @@ def load_tnt(path):
     for key, var, scale in (("pulseLength", "pw", 1e6), ("repTime", "trep", 1e3)):
         v = tnt.value(var)
         if v is not None:
-            params[key] = v * scale
+            params[key] = _r(v * scale)
     out = {"kind": kind, "reason": reason, "params": params, "warnings": warnings, "timestamp": ts, "file": path.name, "tnt": tnt}
     if kind is None:
         return out
@@ -171,7 +177,7 @@ def load_tnt(path):
     if tE is None:
         out["reason"] = "the sequence has no echo time variable (tE or tEcho)"
         return out
-    params.update(echoTime=tE * 1e6, nrEchoes=layout["n_echo"], nrPnts=layout["pts"], acqTime=layout["pts"] * dwell_us * 1e-6)
+    params.update(echoTime=_r(tE * 1e6), nrEchoes=layout["n_echo"], nrPnts=layout["pts"], acqTime=layout["pts"] * dwell_us * 1e-6)
     pw_s = (params.get("pulseLength") or 0.0) * 1e-6
 
     if kind == "cpmg":
@@ -215,7 +221,7 @@ def load_tnt(path):
     raw = np.stack([_td(r, layout).sum(axis=0) for r in records], axis=1)                   # (echoes, delays), complex: one number per echo, as Kea's data2D_Cp.2d
     order = np.argsort(delays_s)
     out["t2d"] = {"raw": raw[:, order], "tau_s": delays_s[order], "delta_s": delta, "echo_s": tE * np.arange(1, layout["n_echo"] + 1)}
-    params.update(nrPntsTau=len(delays_s), tauMin=float(delays_s.min() * 1e3), tauMax=float(delays_s.max() * 1e3), DELTA=delta * 1e3)
+    params.update(nrPntsTau=len(delays_s), tauMin=_r(delays_s.min() * 1e3), tauMax=_r(delays_s.max() * 1e3), DELTA=_r(delta * 1e3))
     out["delays_from"] = f"table {name} (the delay {setting}) plus the pulse width"
     note = _centre_note(_td(records[0], layout))
     if note:

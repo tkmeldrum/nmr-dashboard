@@ -347,13 +347,16 @@ def _compare_rows(mcmc, boot):
 def _header(res, prov, kind):
     acq = prov.get("acquisition", {})
     experiment = acq.get("experiment", "?")
+    tecmag = acq.get("source") == "tecmag"
+    if tecmag:
+        experiment = f"{experiment} (Tecmag: {acq.get('sequence_file') or '?'})"
     analysis = {"t1": "saturation recovery", "t2d": "T₂–D correlation (2D inversion and few-population model)", "ft": "FT of each echo (signal vs position)",
                 "integrate": "each echo integrated"}.get(res.get("mode") if res.get("mode") in ("t1", "t2d", "ft") else "integrate")
-    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat")), None)
+    when = next((f["modified_utc"] for f in prov["inputs"] if f["name"] in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat") or f["name"].lower().endswith(".tnt")), None)
     nm = prov.get("nmrdash", {})
     blocks = [title("Spinlab Data Analysis Report", prov.get("dataset")),
-              table(None, [["Sequence", f"{experiment}", "Data written", when or "unknown"], ["Analysis", analysis, "Processed", prov.get("created_utc", "?")],
-                           ["Tool", f"nmrdash {nm.get('version', '?')} ({(nm.get('commit') or 'unknown')[:10]})", "Dataset folder", prov.get("dataset") or "?"]], [1.0, 2.6, 1.0, 2.6], size="note")]
+              table(None, [["Sequence", f"{experiment}", "Data acquired" if tecmag else "Data written", when or "unknown"], ["Analysis", analysis, "Processed", prov.get("created_utc", "?")],
+                           ["Tool", f"nmrdash {nm.get('version', '?')} ({(nm.get('commit') or 'unknown')[:10]})", "Dataset file" if tecmag else "Dataset folder", prov.get("dataset") or "?"]], [1.0, 2.6, 1.0, 2.6], size="note")]
     return blocks
 
 

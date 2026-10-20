@@ -12,8 +12,10 @@ only code. The libraries are served from the site itself and a Content-Security-
 Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data** to try it without any files).
 
 **Tecmag data (`.tnt`).** `nmrdash` reads Tecmag files too (CPMG, T1 saturation recovery, stimulated-echo T₂–D), using the sequence's own variables and delay tables, so the
-same analyses apply. Status: the reader and the analysis path are done (`pipeline.load` takes a `.tnt` file or a folder holding one); the page, batch and command-line
-wiring is still being added. What is read and the assumptions made are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §9.
+same analyses apply. Drop a folder with `.tnt` files (each file is one dataset; a batch can mix Kea folders and `.tnt` files) or choose `.tnt` files on the Load tab (results then come as a .zip);
+the command-line tool takes `.tnt` files and folders too. The gradient is not in a Tecmag file: `ft.G` and `t2d.gradient` default to `"auto"`, which means 6.7 T/m for Tecmag data
+and 23.67 T/m for Kea data (set a number to override). The experiment date stored in the file is the time stamp. What is read and the assumptions made are in
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §9.
 
 ## Workflow (the tabs run left to right)
 

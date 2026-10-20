@@ -74,7 +74,7 @@ SPEC = {
     ],
     "ft": [
         ("nucleus", AUTO, "\"1H\", \"19F\" or \"auto\" (chosen from b1Freq in acqu.par).", _one_of(AUTO, "1H", "19F")),
-        ("G", constants.DEFAULT_G_T_PER_M, "Static field gradient, T/m (the same quantity as t2d.gradient).", _number(0, lo_open=True)),
+        ("G", AUTO, "Static field gradient, T/m (the same quantity as t2d.gradient). \"auto\" = 23.67 for Kea data, 6.7 for Tecmag data (the magnets of this lab).", _auto_or(_number(0, lo_open=True))),
         ("zero_fill", 4, "FFT length is the next power of two above points x 2^zero_fill.", _integer(0, 6)),
         ("z_min", -200.0, "Sample window, micrometres (+ z = + frequency = closer to the magnet). \"auto\" for both = where the\n# profile exceeds 10% of its maximum.", _auto_or(_number())),
         ("z_max", 200.0, "", _auto_or(_number())),
@@ -110,7 +110,7 @@ SPEC = {
         ("compare", True, "Also fit 1 and 2 components and compare them (Delta AIC / Delta BIC).", _boolean),
     ],
     "t2d": [
-        ("gradient", constants.DEFAULT_G_T_PER_M, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m. The b-values are calculated from it with the delays in acqu.par:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _number(0, lo_open=True)),
+        ("gradient", AUTO, "T2-D (sequence SSE-T2): the static field gradient G of the magnet, T/m (\"auto\" = 23.67 for Kea data, 6.7 for Tecmag data). The b-values are calculated from it with the delays of the data:\n# b = (gamma G)^2 tau^2 (Delta + 2 tau / 3). It is not read from the spectrometer's files, which only serve as a cross-check.", _auto_or(_number(0, lo_open=True))),
         ("t2_min", 1e-5, "T2 grid, seconds.", _number(0, lo_open=True)),
         ("t2_max", 1.0, "", _number(0, lo_open=True)),
         ("t2_steps", 50, "T2 grid points (never more than echoes). The solve is a dense problem of T2 x D unknowns: 50 x 25 takes seconds, 100 x 25 about a minute, in the browser several times longer.", _integer(10, 400)),
@@ -276,7 +276,7 @@ def _decade_range(t):
     return 10.0 ** math.floor(math.log10(t[0])), 10.0 ** math.ceil(math.log10(10 * t[-1]))
 
 
-def to_settings(params, echo_times_s, default_nucleus="1H"):
+def to_settings(params, echo_times_s, default_nucleus="1H", default_gradient=constants.DEFAULT_G_T_PER_M):
     """Resolve 'auto' values for one dataset. Returns (settings, uncertainty_options).
 
     settings has exactly the structure pipeline.process takes; uncertainty_options has what the chunked
@@ -289,7 +289,7 @@ def to_settings(params, echo_times_s, default_nucleus="1H"):
     settings = {
         "exclude_first": p["processing"]["exclude_first"],
         "echo": p["processing"]["echo"],
-        "ft": {"nucleus": default_nucleus if ft["nucleus"] == AUTO else ft["nucleus"], "G": ft["G"], "zero_fill": ft["zero_fill"],
+        "ft": {"nucleus": default_nucleus if ft["nucleus"] == AUTO else ft["nucleus"], "G": default_gradient if ft["G"] == AUTO else ft["G"], "zero_fill": ft["zero_fill"],
                "z_min": nz(ft["z_min"]), "z_max": nz(ft["z_max"]), "spacing_um": nz(ft["spacing_um"]),
                "ilt_spacing_um": nz(ft["ilt_spacing_um"]), "min_signal_pct": ft["min_signal_pct"]},
         "multiexp": {"enabled": me["enabled"], "n": me["n"], "offset": me["offset"], "ci_level": un["ci_level"], "compare": me["compare"]},
@@ -324,11 +324,11 @@ def to_settings_t1(params):
     return settings, options
 
 
-def to_settings_t2d(params):
+def to_settings_t2d(params, default_gradient=constants.DEFAULT_G_T_PER_M):
     """Settings for a T2-D (SSE-T2) dataset, and the uncertainty options (MCMC / bootstrap sample the few-population model)."""
     p = validate(params)
     tm, un, mc, bs = p["t2d_model"], p["uncertainty"], p["mcmc"], p["bootstrap"]
-    settings = {"kind": "t2d", "exclude_first": p["processing"]["exclude_first"], "t2d": dict(p["t2d"]),
+    settings = {"kind": "t2d", "exclude_first": p["processing"]["exclude_first"], "t2d": {**p["t2d"], "gradient": default_gradient if p["t2d"]["gradient"] == AUTO else p["t2d"]["gradient"]},
                 "t2d_model": {"enabled": tm["enabled"], "k": None if tm["populations"] == AUTO else tm["populations"], "d_window": tm["d_window"], "seed": tm["seed"]}}
     target = {"target": "bulk", "z_um": None, "ci_level": un["ci_level"]}
     options = {
