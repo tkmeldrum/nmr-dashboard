@@ -7,7 +7,7 @@ import pytest
 from nmrdash import echoes, ilt_tools, multiexp
 from nmrdash.pipeline import _STATE, load, process
 
-from sample_data import CPMG_NOISY
+from sample_data import CPMG_SNR100
 SIGMA = 4.0
 
 
@@ -87,7 +87,7 @@ def test_ilt_statistics():
 
 
 def test_noise_from_the_imaginary_channel_gives_a_sensible_chi2():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     sigma = echoes.integrate_noise(_STATE["td"])
     assert sigma and sigma > 0
     res = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 2, "offset": True, "compare": False},
@@ -104,7 +104,7 @@ def test_real_valued_data_has_no_noise_estimate():
 
 
 def test_spatial_fits_carry_chi2_per_position():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -100, "z_max": 100},
                    "multiexp": {"enabled": True, "n": 1, "offset": True}, "ilt": {"enabled": False}})
     chi2 = [c for c in res["spatial"]["multiexp"]["chi2_red"] if c is not None]
@@ -140,7 +140,7 @@ def test_exp_markers_without_an_ilt_peak_have_no_height():
 
 
 def test_process_attaches_markers_only_when_both_analyses_ran():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     both = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "compare": False}, "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})
     assert len(both["ilt"]["exp_markers"]) == 1
     only = process({"echo": "integrate", "multiexp": {"enabled": False}, "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}})

@@ -78,6 +78,13 @@ def _common(experiment, name, **kw):
     return dict(sorted(p.items(), key=lambda kv: kv[0].lower()))
 
 
+def noise_sigma(noise, c, reference, norm=1.0):
+    """The noise level (per point, per channel). noise: False (none), True (the dataset's own noise_sigma: used by tests that want a fixed level) or a target
+    SNR: the reference amplitude (the first point of the decay, or the plateau of a recovery) divided by the SNR, and by `norm`: the factor by which the noise grows
+    when the points that make up that amplitude are summed (sqrt of their number)."""
+    return c["noise_sigma"] if noise is True else float(reference) / (float(noise) * norm)
+
+
 # ── signal models ────────────────────────────────────────────────────────────────────────────────────────────────────────
 def cpmg_echoes(noise, rng, c=None):
     """Complex echo train (n_points x n_echoes): a slab of two layers with different T2, read out in a static gradient."""
@@ -95,7 +102,8 @@ def cpmg_echoes(noise, rng, c=None):
         td += np.outer(shape, np.exp(-te / T2))
     td *= 3000.0 * np.exp(1j * np.radians(c["phase_deg"]))
     if noise:
-        td = td + c["noise_sigma"] * (rng.standard_normal(td.shape) + 1j * rng.standard_normal(td.shape))
+        sigma = noise_sigma(noise, c, np.real(td[:, 0] * np.exp(-1j * np.radians(c["phase_deg"]))).sum(), np.sqrt(n_pts))        # SNR of the first echo's integral
+        td = td + sigma * (rng.standard_normal(td.shape) + 1j * rng.standard_normal(td.shape))
     return td
 
 
@@ -115,7 +123,7 @@ def write_t1(d, noise, rng, name):
     t = physics.geometric_grid(c["t_min_s"], c["t_max_s"], c["n_delays"])
     y = c["amplitude"] * (c["offset_fraction"] + (1 - c["offset_fraction"]) * (1 - np.exp(-t / c["T1_s"])))
     if noise:
-        y = y + c["noise_sigma"] * rng.standard_normal(t.size)
+        y = y + noise_sigma(noise, c, y[-1]) * rng.standard_normal(t.size)                                  # SNR of the recovered plateau
     write_acqu_par(d / "acqu.par", _common(
         "T1Sat", name, echoTime=100, nrEchoes=64, nrPnts=16, nrPntsT1=c["n_delays"], nrScans=16, repTime=300, t1Est=500, tMax=2500, index="exp"))
     np.savetxt(d / "data.dat", np.column_stack([t, y]), fmt="%.6g", delimiter="\t")
@@ -135,7 +143,8 @@ def write_t2d(d, noise, rng, name, **override):
         sig += f * np.exp(-te[:, None] / T2) * np.exp(-b[None, :] * D)
     sig = c["amplitude"] * sig * np.exp(1j * np.radians(c["phase_deg"]))
     if noise:
-        sig = sig + c["noise_sigma"] * (rng.standard_normal(sig.shape) + 1j * rng.standard_normal(sig.shape))
+        sigma = noise_sigma(noise, c, abs(sig[0, 0]))                                                         # SNR of the first echo at the shortest delay
+        sig = sig + sigma * (rng.standard_normal(sig.shape) + 1j * rng.standard_normal(sig.shape))
     write_acqu_par(d / "acqu.par", _common(
         "SSE-T2", name, acqTime=0.016, DELTA=c["DELTA_ms"], echoTime=c["echo_time_us"], gradient=c["gradient_khz_per_mm"], index="log", nrEchoes=n_echo,
         nrPnts=16, nrPntsTau=n_tau, nrScans=128, repTime=1500, tauMax=c["tau_ms"][1], tauMin=c["tau_ms"][0], usePhaseCycle="yes"))
@@ -163,6 +172,9 @@ def write_tecmag_t2d(path, noise, rng, name, **override):
     return _tecmag().write_t2d(path, noise, rng, {**TRUTH["tecmag_t2d"], **override})
 
 
+# each kind comes noise-free and at a signal-to-noise ratio of 100, 30 and 10: the first point of the decay (first echo; for T1 the recovered plateau; for T2-D the
+# first echo at the shortest delay) over the noise standard deviation of that value (what the page measures from the imaginary channel)
+LEVELS = (("clean", False), ("snr100", 100), ("snr30", 30), ("snr10", 10))
 NAMES = {"cpmg": ("kea_cpmg", write_cpmg), "t1": ("kea_t1", write_t1), "t2d": ("kea_t2d", write_t2d)}
 TECMAG_NAMES = {"cpmg": ("tecmag_cpmg", write_tecmag_cpmg), "t1": ("tecmag_t1", write_tecmag_t1), "t2d": ("tecmag_t2d", write_tecmag_t2d)}
 
@@ -171,13 +183,13 @@ def generate(out):
     out = Path(out)
     made = []
     for kind, (prefix, writer) in NAMES.items():
-        for variant, noise in (("clean", False), ("noisy", True)):
+        for variant, noise in LEVELS:
             name = f"{prefix}_{variant}"
             rng = np.random.default_rng([SEED, list(NAMES).index(kind), int(noise)])
             writer(out / name, noise, rng, name)
             made.append(name)
     for kind, (prefix, writer) in TECMAG_NAMES.items():                                  # Tecmag: one .tnt file per dataset
-        for variant, noise in (("clean", False), ("noisy", True)):
+        for variant, noise in LEVELS:
             name = f"{prefix}_{variant}.tnt"
             rng = np.random.default_rng([SEED, 10 + list(TECMAG_NAMES).index(kind), int(noise)])
             writer(out / name, noise, rng, name)

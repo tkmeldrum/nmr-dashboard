@@ -8,12 +8,12 @@ from make_synthetic_data import TRUTH, write_kea_binary   # noqa: E402,F401  (th
 
 DATA = ROOT / "test_data"
 
-TECMAG_CPMG_CLEAN, TECMAG_CPMG_NOISY = DATA / "tecmag_cpmg_clean.tnt", DATA / "tecmag_cpmg_noisy.tnt"
-TECMAG_T1_CLEAN, TECMAG_T1_NOISY = DATA / "tecmag_t1_clean.tnt", DATA / "tecmag_t1_noisy.tnt"
-TECMAG_T2D_CLEAN, TECMAG_T2D_NOISY = DATA / "tecmag_t2d_clean.tnt", DATA / "tecmag_t2d_noisy.tnt"
-CPMG_CLEAN, CPMG_NOISY = DATA / "kea_cpmg_clean", DATA / "kea_cpmg_noisy"
-T1_CLEAN, T1_NOISY = DATA / "kea_t1_clean", DATA / "kea_t1_noisy"
-T2D_CLEAN, T2D_NOISY = DATA / "kea_t2d_clean", DATA / "kea_t2d_noisy"
+TECMAG_CPMG_CLEAN, TECMAG_CPMG_SNR100 = DATA / "tecmag_cpmg_clean.tnt", DATA / "tecmag_cpmg_snr100.tnt"
+TECMAG_T1_CLEAN, TECMAG_T1_SNR100 = DATA / "tecmag_t1_clean.tnt", DATA / "tecmag_t1_snr100.tnt"
+TECMAG_T2D_CLEAN, TECMAG_T2D_SNR100 = DATA / "tecmag_t2d_clean.tnt", DATA / "tecmag_t2d_snr100.tnt"
+CPMG_CLEAN, CPMG_SNR100 = DATA / "kea_cpmg_clean", DATA / "kea_cpmg_snr100"
+T1_CLEAN, T1_SNR100 = DATA / "kea_t1_clean", DATA / "kea_t1_snr100"
+T2D_CLEAN, T2D_SNR100 = DATA / "kea_t2d_clean", DATA / "kea_t2d_snr100"
 
 
 def t2d_with_a_slow_population(d):
@@ -39,3 +39,9 @@ def tecmag_variant(path, kind, noisy=True, **override):
     write = {"cpmg": write_tecmag_cpmg, "t1": write_tecmag_t1, "t2d": write_tecmag_t2d}[kind]
     write(path, noisy, np.random.default_rng(11), path.name, **override)
     return path
+
+
+# every kind at signal-to-noise ratios of 30 and 10 (SNR100 is the one most tests use); see tools/make_synthetic_data.py for how the SNR is defined
+SNR_LEVELS = (100, 30, 10)
+KEA = {(kind, snr): DATA / f"kea_{kind}_snr{snr}" for kind in ("cpmg", "t1", "t2d") for snr in SNR_LEVELS}
+TECMAG = {(kind, snr): DATA / f"tecmag_{kind}_snr{snr}.tnt" for kind in ("cpmg", "t1", "t2d") for snr in SNR_LEVELS}

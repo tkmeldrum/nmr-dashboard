@@ -8,7 +8,7 @@ from datetime import datetime
 
 import numpy as np
 
-from make_synthetic_data import cpmg_echoes
+from make_synthetic_data import cpmg_echoes, noise_sigma
 from nmrdash import physics
 from tnt_writer import write_tnt
 
@@ -48,11 +48,13 @@ def write_t1(path, noise, rng, c):
     shape /= shape.sum()
     te = c["echo_time_us"] * 1e-6 * np.arange(1, n_echo + 1)
     recs = []
+    plateau = c["amplitude"] * (c["offset_fraction"] + (1 - c["offset_fraction"]) * (1 - np.exp(-t[-1] / c["T1_s"]))) * shape.sum() * np.exp(-te / c["T2_s"]).sum()   # the recovered amplitude: sum over the echo train
+    sigma = noise_sigma(noise, c, plateau, np.sqrt(n_pts * n_echo)) if noise else 0.0
     for ti in t:
         amp = c["amplitude"] * (c["offset_fraction"] + (1 - c["offset_fraction"]) * (1 - np.exp(-ti / c["T1_s"])))
         td = amp * np.outer(shape, np.exp(-te / c["T2_s"])) * np.exp(1j * np.radians(30.0))
         if noise:
-            td = td + c["noise_sigma"] * (rng.standard_normal(td.shape) + 1j * rng.standard_normal(td.shape))
+            td = td + sigma * (rng.standard_normal(td.shape) + 1j * rng.standard_normal(td.shape))
         recs.append(np.conj(td.T.reshape(-1)))
     rows = _row_delay([("=T1Wait", {"delay": "de02"}), ("=pw", {}), ("=d1", {}), ("=pw", {}), ("=d2", {})])
     return write_tnt(path, np.array(recs), points_per_window=n_pts, dwell_s=c["dwell_us"] * 1e-6, scans=32, date=DATE, sequence_file="T1_SaturationRecovery",
@@ -74,6 +76,8 @@ def write_t2d(path, noise, rng, c):
     shape /= shape.sum()
     te = c["echo_time_us"] * 1e-6 * np.arange(0, n_echo + 1)         # window 0 is the stimulated echo
     recs = []
+    first = c["amplitude"] * sum(f * np.exp(-te[1] / T2) * np.exp(-b[0] * D) for f, T2, D in zip(c["fraction"], c["T2_s"], c["D_m2s"]))          # first CPMG echo, shortest delay
+    sigma = noise_sigma(noise, c, first, np.sqrt(wp)) if noise else 0.0
     for j in range(n_tau):
         amp = np.zeros(n_echo + 1)
         for f, T2, D in zip(c["fraction"], c["T2_s"], c["D_m2s"]):
@@ -83,7 +87,7 @@ def write_t2d(path, noise, rng, c):
             rec[w * step:w * step + wp] = c["amplitude"] * amp[w] * shape
         rec *= np.exp(1j * np.radians(c["phase_deg"]))
         if noise:
-            rec = rec + c["noise_sigma"] * (rng.standard_normal(rec.shape) + 1j * rng.standard_normal(rec.shape))
+            rec = rec + sigma * (rng.standard_normal(rec.shape) + 1j * rng.standard_normal(rec.shape))
         recs.append(np.conj(rec))
     rows = _row_delay([("=d1", {"delay": "de02"}), ("=pw", {}), ("=d2", {}), ("=pw", {}), ("=d3", {"delay": "de12"}), ("=EchoAcqTime", {})])
     variables = _vars(c, nrEchoes=str(n_echo), tE=_fmt_us(c["echo_time_us"]), DELTA=f"{c['DELTA_ms'] * 1e3:g}u", EchoAcqTime=_fmt_us(c["window_us"]), d1="1n", d2="=[DELTA]-[pw]")

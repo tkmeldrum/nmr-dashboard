@@ -7,7 +7,7 @@ import pytest
 from nmrdash import constants, echoes
 from nmrdash.pipeline import _STATE, load, process
 
-from sample_data import CPMG_NOISY, DATA
+from sample_data import CPMG_SNR100, DATA
 G, GAMMA = 23.7, 42.577          # T/m, MHz/T
 DWELL_US = 1.0
 
@@ -67,7 +67,7 @@ def test_nucleus_from_b1freq():
 
 
 def test_load_reports_default_nucleus():
-    r = load(CPMG_NOISY)
+    r = load(CPMG_SNR100)
     assert r["defaults"]["nucleus"] == "1H" and "19.44" in r["defaults"]["nucleus_reason"]
 
 
@@ -91,7 +91,7 @@ def test_ft_runs_on_every_sample_including_two_point_data(d):
 
 
 def test_ft_decay_tracks_integrated_decay_on_good_data():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     td = _STATE["td"]
     integ, _ = echoes.integrate(td)
     r = echoes.ft(td, 1.0, GAMMA, G)
@@ -100,7 +100,7 @@ def test_ft_decay_tracks_integrated_decay_on_good_data():
 
 
 def test_user_window_and_bad_gradient():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     ok = process({"echo": "ft", "ft": {"nucleus": "19F", "G": 20, "z_min": -100, "z_max": 100},
                   "multiexp": {"enabled": False}, "ilt": {"enabled": False}})
     assert ok["ft"]["window"] == [-100.0, 100.0] and not ok["ft"]["window_auto"] and ok["ft"]["nucleus"] == "19F"

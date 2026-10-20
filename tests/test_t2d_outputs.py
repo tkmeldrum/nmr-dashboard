@@ -11,7 +11,7 @@ pytest.importorskip("emcee")
 
 from nmrdash import params as P, runner  # noqa: E402
 
-from sample_data import T2D_CLEAN, T2D_NOISY, t2d_with_a_slow_population
+from sample_data import T2D_CLEAN, T2D_SNR100, t2d_with_a_slow_population
 
 
 def params(**over):
@@ -67,7 +67,7 @@ def test_the_script_writes_the_model_mcmc_and_bootstrap_results(tmp_path):
 
 
 def test_mcmc_for_t2d_without_the_model_is_skipped_with_a_reason(tmp_path):
-    d = copy(T2D_NOISY, tmp_path / "d")
+    d = copy(T2D_SNR100, tmp_path / "d")
     row = runner.run_dataset(d, params(t2d_model={"enabled": False}, mcmc={"enabled": True, "steps": 300, "burn": 100}))
     assert row["status"] == "ok" and any("few-population model" in w for w in row["warnings"])
     names = {f.name for f in Path(row["output_dir"]).iterdir()}
@@ -76,7 +76,7 @@ def test_mcmc_for_t2d_without_the_model_is_skipped_with_a_reason(tmp_path):
 
 def test_a_batch_tabulates_each_population_over_time(tmp_path):
     root = tmp_path / "series"
-    for i, src in enumerate((T2D_CLEAN, T2D_CLEAN, T2D_NOISY)):
+    for i, src in enumerate((T2D_CLEAN, T2D_CLEAN, T2D_SNR100)):
         d = copy(src, root / f"run{i}")
         for f in ("data2D_Cp.2d", "data2D.dat", "data.dat"):
             if (d / f).exists():

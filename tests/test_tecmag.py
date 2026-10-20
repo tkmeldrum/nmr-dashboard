@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import pytest
-from sample_data import (CPMG_NOISY, DATA, TECMAG_CPMG_CLEAN, TECMAG_CPMG_NOISY, TECMAG_T1_CLEAN, TECMAG_T1_NOISY, TECMAG_T2D_CLEAN, TECMAG_T2D_NOISY, TRUTH,
+from sample_data import (CPMG_SNR100, DATA, TECMAG_CPMG_CLEAN, TECMAG_CPMG_SNR100, TECMAG_T1_CLEAN, TECMAG_T1_SNR100, TECMAG_T2D_CLEAN, TECMAG_T2D_SNR100, TRUTH,
                          tecmag_variant)
 from tnt_writer import write_tnt
 
@@ -47,9 +47,9 @@ def test_find_takes_a_file_or_the_only_tnt_in_a_folder(tmp_path):
 # ── what each sequence becomes ───────────────────────────────────────────────
 
 @pytest.mark.parametrize("path,kind,expect", [
-    (TECMAG_CPMG_NOISY, "cpmg", {"echoTime": 150.0, "nrEchoes": 256, "nrPnts": 32, "dwellTime": 2.0, "pulseLength": 6.0, "repTime": 1000.0, "nrScans": 64}),
-    (TECMAG_T1_NOISY, "t1", {"echoTime": 150.0, "nrEchoes": 16, "nrPnts": 16, "nrPntsT1": 16, "dwellTime": 2.0, "repTime": 1000.0}),
-    (TECMAG_T2D_NOISY, "t2d", {"echoTime": 60.0, "nrEchoes": 300, "nrPnts": 20, "nrPntsTau": 16, "DELTA": 10.0, "dwellTime": 2.0, "nrScans": 128}),
+    (TECMAG_CPMG_SNR100, "cpmg", {"echoTime": 150.0, "nrEchoes": 256, "nrPnts": 32, "dwellTime": 2.0, "pulseLength": 6.0, "repTime": 1000.0, "nrScans": 64}),
+    (TECMAG_T1_SNR100, "t1", {"echoTime": 150.0, "nrEchoes": 16, "nrPnts": 16, "nrPntsT1": 16, "dwellTime": 2.0, "repTime": 1000.0}),
+    (TECMAG_T2D_SNR100, "t2d", {"echoTime": 60.0, "nrEchoes": 300, "nrPnts": 20, "nrPntsTau": 16, "DELTA": 10.0, "dwellTime": 2.0, "nrScans": 128}),
 ])
 def test_each_sequence_loads_with_kea_style_parameters(path, kind, expect):
     r = load(path)
@@ -63,24 +63,24 @@ def test_each_sequence_loads_with_kea_style_parameters(path, kind, expect):
 
 
 def test_the_gradient_default_follows_the_instrument_not_the_kind_of_data():
-    assert load(TECMAG_CPMG_NOISY)["defaults"]["G"] == 6.59 and load(TECMAG_T2D_NOISY)["defaults"]["gradient"] == 6.59
-    assert load(DATA / "kea_cpmg_noisy")["defaults"]["G"] == 23.67 and load(DATA / "kea_t2d_noisy")["defaults"]["gradient"] == 23.67
+    assert load(TECMAG_CPMG_SNR100)["defaults"]["G"] == 6.59 and load(TECMAG_T2D_SNR100)["defaults"]["gradient"] == 6.59
+    assert load(DATA / "kea_cpmg_snr100")["defaults"]["G"] == 23.67 and load(DATA / "kea_t2d_snr100")["defaults"]["gradient"] == 23.67
 
 
 def test_the_nucleus_comes_from_the_file_header():
-    r = load(TECMAG_CPMG_NOISY)
+    r = load(TECMAG_CPMG_SNR100)
     assert r["defaults"]["nucleus"] == "1H" and "from the file header" in r["defaults"]["nucleus_reason"]
-    assert "from the file header" not in load(CPMG_NOISY)["defaults"]["nucleus_reason"]               # Kea: from b1Freq
+    assert "from the file header" not in load(CPMG_SNR100)["defaults"]["nucleus_reason"]               # Kea: from b1Freq
 
 
 def test_the_timestamp_is_the_experiment_date_in_the_file_not_the_file_time():
-    load(TECMAG_CPMG_NOISY, 1_700_000_000_000)                                                      # a file time the browser reports: not used
+    load(TECMAG_CPMG_SNR100, 1_700_000_000_000)                                                      # a file time the browser reports: not used
     assert datetime.fromtimestamp(_STATE["source"]["timestamp_ms"] / 1000) == datetime(2026, 1, 15, 10, 30, 0)
 
 
 # ── the known truth comes back ───────────────────────────────────────────────
 
-@pytest.mark.parametrize("path,tol", [(TECMAG_CPMG_CLEAN, 0.01), (TECMAG_CPMG_NOISY, 0.1)])
+@pytest.mark.parametrize("path,tol", [(TECMAG_CPMG_CLEAN, 0.01), (TECMAG_CPMG_SNR100, 0.15)])
 def test_cpmg_recovers_both_t2_by_integration_and_by_ft(path, tol):
     c = TRUTH["tecmag_cpmg"]
     load(path)
@@ -91,12 +91,12 @@ def test_cpmg_recovers_both_t2_by_integration_and_by_ft(path, tol):
 
 
 def test_cpmg_noise_is_measured_from_the_imaginary_channel():
-    load(TECMAG_CPMG_NOISY)
-    sigma = process(CPMG_FIT)["decay"]["noise_sigma"]
-    assert sigma == pytest.approx(TRUTH["tecmag_cpmg"]["noise_sigma"] * np.sqrt(TRUTH["tecmag_cpmg"]["n_points"]), rel=0.2)       # the sum of 32 points per echo
+    load(TECMAG_CPMG_SNR100)
+    r = process(CPMG_FIT)
+    assert r["decay"]["noise_sigma"] == pytest.approx(r["decay"]["y"][0] / 100, rel=0.3)                    # the file was made with an SNR of 100 at the first echo
 
 
-@pytest.mark.parametrize("path,tol", [(TECMAG_T1_CLEAN, 1e-3), (TECMAG_T1_NOISY, 0.03)])
+@pytest.mark.parametrize("path,tol", [(TECMAG_T1_CLEAN, 1e-3), (TECMAG_T1_SNR100, 0.05)])
 def test_t1_is_recovered(path, tol):
     load(path)
     c = process(T1_FIT)["multiexp"]["selected"]["components"][0]
@@ -110,7 +110,7 @@ def test_t1_delays_are_the_table_plus_the_pulse_width():
     assert r["raw"]["t"] == pytest.approx(list(want), abs=1.5e-6)                                           # the table is rounded to a microsecond
 
 
-@pytest.mark.parametrize("path,chi_max", [(TECMAG_T2D_CLEAN, 5.0), (TECMAG_T2D_NOISY, 1.15)])
+@pytest.mark.parametrize("path,chi_max", [(TECMAG_T2D_CLEAN, 5.0), (TECMAG_T2D_SNR100, 1.15)])
 def test_t2d_recovers_both_populations(path, chi_max):
     c = TRUTH["tecmag_t2d"]
     load(path)
@@ -141,7 +141,7 @@ def test_t2d_tau_is_the_table_plus_the_pulse_width_and_delta_is_as_stored():
 
 
 def test_t2d_b_values_follow_the_gradient_setting():
-    load(TECMAG_T2D_NOISY)
+    load(TECMAG_T2D_SNR100)
     from nmrdash.pipeline import t2d_axes
     a, b = t2d_axes({"t2d": {"gradient": 6.59}}), t2d_axes({"t2d": {"gradient": 13.18}})
     assert np.allclose(np.array(b["b_vec"]) / np.array(a["b_vec"]), 4.0) and a["b_check"]["compared"] == []              # no spectrometer files to compare with
@@ -237,10 +237,10 @@ def test_an_implausible_experiment_date_is_flagged_not_corrected(tmp_path, when,
 
 
 def test_provenance_lists_the_tnt_file_as_the_input():
-    load(TECMAG_CPMG_NOISY)
+    load(TECMAG_CPMG_SNR100)
     process(CPMG_FIT)
-    rec = get_provenance({"dataset": "sample: tecmag_cpmg_noisy"}, {})["record"]
-    assert [f["name"] for f in rec["inputs"]] == ["tecmag_cpmg_noisy.tnt"] and rec["acquisition"].get("nrEchoes") == 256
+    rec = get_provenance({"dataset": "sample: tecmag_cpmg_snr100"}, {})["record"]
+    assert [f["name"] for f in rec["inputs"]] == ["tecmag_cpmg_snr100.tnt"] and rec["acquisition"].get("nrEchoes") == 256
     json.dumps(rec)
 
 
@@ -255,7 +255,7 @@ def _fast():
     return p
 
 
-@pytest.mark.parametrize("path,kind", [(TECMAG_CPMG_NOISY, "cpmg"), (TECMAG_T1_NOISY, "t1"), (TECMAG_T2D_NOISY, "t2d")])
+@pytest.mark.parametrize("path,kind", [(TECMAG_CPMG_SNR100, "cpmg"), (TECMAG_T1_SNR100, "t1"), (TECMAG_T2D_SNR100, "t2d")])
 def test_the_script_runs_a_tnt_file_and_writes_its_results_next_to_it(tmp_path, path, kind):
     from nmrdash import runner
     f = tmp_path / path.name
@@ -274,11 +274,11 @@ def test_the_script_runs_a_tnt_file_and_writes_its_results_next_to_it(tmp_path, 
 def test_the_script_uses_the_instrument_gradient_when_the_params_say_auto(tmp_path):
     from nmrdash import runner
     f = tmp_path / "t.tnt"
-    shutil.copy(TECMAG_T2D_NOISY, f)
+    shutil.copy(TECMAG_T2D_SNR100, f)
     row = runner.run_dataset(f, _fast())
     assert row["settings"]["t2d"]["gradient"] == 6.59
     k = tmp_path / "kea"
-    shutil.copytree(DATA / "kea_t2d_noisy", k)
+    shutil.copytree(DATA / "kea_t2d_snr100", k)
     assert runner.run_dataset(k, _fast())["settings"]["t2d"]["gradient"] == 23.67
     explicit = _fast()
     explicit["t2d"]["gradient"] = 7.5
@@ -287,11 +287,11 @@ def test_the_script_uses_the_instrument_gradient_when_the_params_say_auto(tmp_pa
 
 def test_a_batch_mixes_kea_folders_and_tnt_files_in_time_order(tmp_path):
     from nmrdash import runner
-    shutil.copytree(DATA / "kea_cpmg_noisy", tmp_path / "kea_a")
+    shutil.copytree(DATA / "kea_cpmg_snr100", tmp_path / "kea_a")
     (tmp_path / "sub").mkdir()
-    shutil.copy(TECMAG_CPMG_NOISY, tmp_path / "sub" / "tec_b.tnt")
+    shutil.copy(TECMAG_CPMG_SNR100, tmp_path / "sub" / "tec_b.tnt")
     shutil.copy(TECMAG_CPMG_CLEAN, tmp_path / "sub" / "tec_a.tnt")
-    shutil.copy(TECMAG_T1_NOISY, tmp_path / "sub" / "tec_t1.tnt")
+    shutil.copy(TECMAG_T1_SNR100, tmp_path / "sub" / "tec_t1.tnt")
     assert [p.name for p in runner.discover(tmp_path)] == ["kea_a", "tec_a.tnt", "tec_b.tnt", "tec_t1.tnt"]
     rows, bdir = runner.run_batch(tmp_path, _fast(), quiet=True)
     by = {r["dataset"]: r for r in rows}
@@ -316,11 +316,11 @@ def test_a_tnt_in_a_folder_is_one_dataset_for_the_page_batch(tmp_path):
                     "output": {"figure_format": "png", "dpi": 50, "samples": False}})
     import os
     os.makedirs(f"{webbatch.ROOT}/0")
-    shutil.copy(TECMAG_CPMG_NOISY, f"{webbatch.ROOT}/0/{TECMAG_CPMG_NOISY.name}")
+    shutil.copy(TECMAG_CPMG_SNR100, f"{webbatch.ROOT}/0/{TECMAG_CPMG_SNR100.name}")
     out = webbatch.run_one({"i": 0, "label": "tec/1", "timestamp_ms": 1_700_000_000_000})
     assert out["status"] == "ok" and "provenance.json" in out["files"]
     prov = json.loads(base64.b64decode(out["files"]["provenance.json"]))
-    assert [i["name"] for i in prov["inputs"]] == [TECMAG_CPMG_NOISY.name] and prov["inputs"][0]["modified_utc"].startswith("2026-01-15")
+    assert [i["name"] for i in prov["inputs"]] == [TECMAG_CPMG_SNR100.name] and prov["inputs"][0]["modified_utc"].startswith("2026-01-15")
     webbatch.finish()
 
 

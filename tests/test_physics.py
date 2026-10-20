@@ -9,7 +9,7 @@ from nmrdash import physics as ph, t2d
 from nmrdash.kea_io import read_kea_params
 from nmrdash.pipeline import _STATE, load, process, t2d_axes
 
-from sample_data import T2D_CLEAN, T2D_NOISY
+from sample_data import T2D_CLEAN, T2D_SNR100
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -35,7 +35,7 @@ def test_the_tau_grid_is_geometric_and_hits_both_ends():
     assert np.allclose(g[1:] / g[:-1], g[1] / g[0])
 
 
-@pytest.mark.parametrize("sample", [T2D_NOISY, T2D_CLEAN])
+@pytest.mark.parametrize("sample", [T2D_SNR100, T2D_CLEAN])
 def test_the_calculated_b_values_have_the_spectrometers_shape_and_scale(sample):
     """The spectrometer's own b-values follow exactly tau^2 (Delta + 2 tau / 3) (shape deviation ~1e-6) and correspond to the gradient implied by its `gradient` parameter."""
     params = read_kea_params(sample / "acqu.par")
@@ -60,7 +60,7 @@ def test_the_default_gradient_is_one_constant_used_for_the_profile_and_the_diffu
 
 
 def test_the_gradient_setting_rescales_b_and_the_resolvable_range_in_processing():
-    load(T2D_NOISY)
+    load(T2D_SNR100)
     a, b = t2d_axes({"t2d": {"gradient": 23.67}}), t2d_axes({"t2d": {"gradient": 2 * 23.67}})
     assert np.allclose(np.array(b["b_vec"]) / np.array(a["b_vec"]), 4.0)
     assert b["d_window"][1] == pytest.approx(a["d_window"][1] / 4)                                 # 5 / b_min
@@ -75,7 +75,7 @@ def test_the_gradient_setting_rescales_b_and_the_resolvable_range_in_processing(
 
 def test_missing_acquisition_parameters_are_named(tmp_path):
     d = tmp_path / "ds"
-    shutil.copytree(T2D_NOISY, d)
+    shutil.copytree(T2D_SNR100, d)
     text = (d / "acqu.par").read_text().replace("DELTA = 5", "")
     (d / "acqu.par").write_text(text)
     info = load(d)
@@ -84,7 +84,7 @@ def test_missing_acquisition_parameters_are_named(tmp_path):
 
 def test_a_spectrometer_file_with_the_wrong_shape_is_flagged(tmp_path):
     d = tmp_path / "ds"
-    shutil.copytree(T2D_NOISY, d)
+    shutil.copytree(T2D_SNR100, d)
     a = np.loadtxt(d / "data.dat", ndmin=2)
     a[:, 1] *= np.linspace(1.0, 1.5, len(a))                                                       # not tau^2 (Delta + 2 tau / 3) any more
     np.savetxt(d / "data.dat", a)

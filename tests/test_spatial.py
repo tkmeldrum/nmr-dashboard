@@ -7,7 +7,7 @@ import pytest
 from nmrdash import echoes, spatial
 from nmrdash.pipeline import load, process
 
-from sample_data import CPMG_NOISY, DATA
+from sample_data import CPMG_SNR100, DATA
 G, GAMMA, DWELL = 23.7, 42.577, 1.0
 
 
@@ -78,7 +78,7 @@ def test_progress_callback_reports_every_position():
 
 
 def test_process_ft_adds_spatial_results_on_real_data():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({
         "echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4},
         "multiexp": {"enabled": True, "n": 2, "offset": True, "ci_level": 0.95, "compare": False},
@@ -94,7 +94,7 @@ def test_process_ft_adds_spatial_results_on_real_data():
 
 
 def test_integrate_mode_has_no_spatial():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True}, "ilt": {"enabled": False}})
     assert res["spatial"] is None
 
@@ -115,7 +115,7 @@ def test_spatial_runs_on_every_sample(d):
 
 
 def test_heat_map_uses_full_zero_filled_grid():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     res = process({"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4},
                    "multiexp": {"enabled": False}, "ilt": {"enabled": False}})
     ft = res["ft"]
@@ -155,7 +155,7 @@ def test_grid_indices_and_99pct_ci():
 
 
 def test_default_window_is_plus_minus_200_and_exposed_to_ui():
-    r = load(CPMG_NOISY)
+    r = load(CPMG_SNR100)
     assert r["defaults"]["z_window_um"] == [-200.0, 200.0]
 
 
@@ -175,7 +175,7 @@ def test_noise_only_positions_are_skipped_and_progress_counts_only_fits():
 
 
 def test_pipeline_threshold_and_error_when_nothing_has_signal():
-    load(CPMG_NOISY)
+    load(CPMG_SNR100)
     base = {"echo": "ft", "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -200, "z_max": 200},
             "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95}, "ilt": {"enabled": False}}
     res = process(base)
