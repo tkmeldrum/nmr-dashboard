@@ -11,6 +11,10 @@ only code. The libraries are served from the site itself and a Content-Security-
 
 Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data** to try it without any files).
 
+**Tecmag data (`.tnt`).** `nmrdash` reads Tecmag files too (CPMG, T1 saturation recovery, stimulated-echo T₂–D), using the sequence's own variables and delay tables, so the
+same analyses apply. Status: the reader and the analysis path are done (`pipeline.load` takes a `.tnt` file or a folder holding one); the page, batch and command-line
+wiring is still being added. What is read and the assumptions made are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §9.
+
 ## Workflow (the tabs run left to right)
 
 0. **The sequence decides the analysis.** The `experiment` entry in `acqu.par` is read (spelling variants tolerated): **CPMG**

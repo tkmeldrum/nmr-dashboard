@@ -7,7 +7,7 @@ import numpy as np
 import scipy
 
 from . import __version__
-from . import constants, echoes, export, ilt2d, ilt_tools, multiexp, provenance, sequences, spatial, t2d, t2d_model, uncertainty
+from . import constants, echoes, export, ilt2d, ilt_tools, multiexp, provenance, sequences, spatial, t2d, t2d_model, tecmag, uncertainty
 from .display_params import build_display
 from .kea_io import read_kea_binary, read_kea_params
 
@@ -44,7 +44,7 @@ def check_cpmg(params, header):
     return True, ""
 
 
-def _load_t1(d, params, out, timestamp_ms):
+def _load_t1(d, params, out, source):
     """Saturation-recovery data: Kea writes data.dat with two columns, the delay (s) and the amplitude."""
     path = d / "data.dat"
     if not path.is_file():
@@ -53,27 +53,95 @@ def _load_t1(d, params, out, timestamp_ms):
         arr = np.loadtxt(path, ndmin=2)
     except ValueError as exc:
         raise ValueError(f"data.dat could not be read as two numeric columns: {exc}") from None
-    if arr.shape[1] < 2 or arr.shape[0] < 4:
+    if arr.shape[1] < 2:
         raise ValueError("data.dat needs at least 4 rows of (delay, amplitude)")
-    t, y = arr[:, 0].astype(float), arr[:, 1].astype(float)
+    _set_t1(arr[:, 0].astype(float), arr[:, 1].astype(float), params, out, source)
+
+
+def _set_t1(t, y, params, out, source):
+    if len(t) < 4:
+        raise ValueError("data.dat needs at least 4 rows of (delay, amplitude)" if source.get("format") != "tecmag" else "a T1 curve needs at least 4 delays")
     if np.any(t <= 0) or np.any(np.diff(t) <= 0):
-        raise ValueError("the delays in data.dat must be positive and increasing")
-    _STATE.update(t1={"t": t, "y": y}, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
+        raise ValueError("the delays in data.dat must be positive and increasing" if source.get("format") != "tecmag" else "the T1 delays must be positive and increasing")
+    _STATE.update(t1={"t": t, "y": y}, params=params, source=source)
     out["raw"] = {"n_points": len(t), "t": _clean(t), "y": _clean(y)}
     out["defaults"] = {"t1_components": 1, "t1_offset": constants.T1_DEFAULT_OFFSET}
 
 
-def _load_t2d(d, params, out, timestamp_ms):
+def _load_t2d(d, params, out, source):
     """T2-D (SSE-T2): echo trains for every diffusion delay; see t2d.py for the files."""
-    L = t2d.load(d, params)
+    _set_t2d(t2d.load(d, params), params, out, source)
+
+
+def _set_t2d(L, params, out, source):
     skip_noise = L["noise"]
-    _STATE.update(t2d=L, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
+    _STATE.update(t2d=L, params=params, source=source)
     n_echo, n_tau = L["data"].shape
     out["raw"] = {"n_echoes": n_echo, "n_tau": n_tau, "echo_time_s": _clean(L["echo_s"]), "b_vec": _clean(L["b_vec"]),
                   "tau_s": _clean(L["tau_s"]), "b_info": L["b_info"], "b_check": L["b_check"],
                   "data": _clean(L["data"].T),                       # rows = diffusion delay, columns = echo
                   "noise_sigma": t2d.noise_sigma(skip_noise)}
-    out["defaults"] = dict(constants.T2D_DEFAULTS)
+    out["defaults"] = {**constants.T2D_DEFAULTS, "gradient": constants.default_gradient(params)}
+
+
+def _set_cpmg(td, params, out, source):
+    """The CPMG echo array (points per echo x echoes) and what the Raw data tab shows of it."""
+    n_pts, n_echo = td.shape
+    echo_s = 1e-6 * float(params["echoTime"]) * np.arange(1, n_echo + 1)
+    summed, _phase = echoes.integrate(td)
+    re, im = (td.real, td.imag) if np.iscomplexobj(td) else (td, np.zeros_like(td))
+    _STATE.clear()
+    _STATE.update(td=td, echo_s=echo_s, params=params, source=source)
+    nucleus, why = constants.nucleus_of(params)
+    out["defaults"] = {"nucleus": nucleus, "nucleus_reason": why,
+                       "G": constants.default_gradient(params), "zero_fill": constants.DEFAULT_ZERO_FILL,
+                       "z_window_um": list(constants.DEFAULT_Z_WINDOW_UM)}
+    out["raw"] = {
+        "n_points": n_pts,
+        "n_echoes": n_echo,
+        "echo_time_s": _clean(echo_s),
+        "real": _clean(re),   # [point][echo]
+        "imag": _clean(im),
+        "summed": _clean(summed),
+    }
+
+
+def _load_tecmag(path, timestamp_ms):
+    """A Tecmag .tnt file as a dataset: see tecmag.py for what is read from it and how."""
+    r = tecmag.load_tnt(path)
+    params, kind = r["params"], r["kind"]
+    ts = r["timestamp"] or (datetime.fromtimestamp(timestamp_ms / 1000) if timestamp_ms is not None else None)
+    ts_ms = int(ts.timestamp() * 1000) if ts is not None else timestamp_ms
+    source = {"dir": str(path.parent), "file": path.name, "format": "tecmag", "timestamp_ms": ts_ms}
+    seq = sequences.describe(params)
+    seq["kind"] = kind
+    seq["reason"] = r["reason"] or ("" if kind else seq["reason"])
+    seq["supported"] = bool(kind) and not r["reason"]
+    if kind:
+        seq["analysis"] = sequences.ANALYSIS[kind]
+    _STATE.clear()
+    out = {
+        "version": __version__,
+        "display": build_display(params, ts, from_file=True),
+        "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
+        "is_cpmg": False, "kind": kind, "supported": seq["supported"], "analysis": seq["analysis"], "reason": seq["reason"], "raw": None,
+        "source_format": "tecmag", "warnings": list(r["warnings"]),
+    }
+    if seq["supported"]:
+        try:
+            if kind == "cpmg":
+                out["is_cpmg"] = True
+                _set_cpmg(r["td"], params, out, source)
+            elif kind == "t1":
+                _set_t1(r["t1"]["t"], r["t1"]["y"], params, out, source)
+            else:
+                d = r["t2d"]
+                _set_t2d(t2d.prepare(d["raw"], params, axes=d), params, out, source)
+        except ValueError as exc:
+            out.update(supported=False, is_cpmg=False, reason=str(exc), raw=None)
+    if out.get("raw") is not None and out.get("supported"):
+        _STATE["raw_out"] = out["raw"]
+    return out
 
 
 def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
@@ -87,7 +155,10 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
     d = Path(dirpath)
     par_path = d / "acqu.par"
     if not par_path.is_file():
-        raise FileNotFoundError("acqu.par not found in the selected folder")
+        tnt = tecmag.find(d)
+        if tnt is not None:
+            return _load_tecmag(tnt, timestamp_ms)
+        raise FileNotFoundError("neither acqu.par (Kea) nor a .tnt file (Tecmag) was found in the selected folder")
     params = read_kea_params(par_path)
 
     header = spec = None
@@ -123,9 +194,74 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         "reason": reason,
         "raw": None,
     }
+    source = {"dir": str(d), "timestamp_ms": timestamp_ms}
     if seq["kind"] in ("t1", "t2d") and seq["supported"]:
         try:
-            (_load_t1 if seq["kind"] == "t1" else _load_t2d)(d, params, out, timestamp_ms)
+            (_load_t1 if seq["kind"] == "t1" else _load_t2d)(d, params, out, source)
+        except (ValueError, OSError, KeyError) as exc:   # a malformed or incomplete folder: say so instead of crashing
+            out.update(supported=False, reason=f"{exc}" if not isinstance(exc, KeyError) else f"acqu.par has no {exc} entry")
+    if is_cpmg:
+        td = spec[: header["xDim"] * header["yDim"]].reshape((header["xDim"], header["yDim"]), order="F")
+        _set_cpmg(td, params, out, source)
+    if out.get("raw") is not None and out.get("supported"):
+        _STATE["raw_out"] = out["raw"]
+    return out
+
+
+def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
+    """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
+
+    timestamp_ms : file modification time in ms since epoch (from the browser's
+        File.lastModified). If None: with fallback_to_mtime the data file's mtime
+        on disk is used (desktop use); otherwise no timestamp is shown (the browser's
+        in-memory files have no meaningful mtime, e.g. for bundled sample data).
+    """
+    d = Path(dirpath)
+    par_path = d / "acqu.par"
+    if not par_path.is_file():
+        tnt = tecmag.find(d)
+        if tnt is not None:
+            return _load_tecmag(tnt, timestamp_ms)
+        raise FileNotFoundError("neither acqu.par (Kea) nor a .tnt file (Tecmag) was found in the selected folder")
+    params = read_kea_params(par_path)
+
+    header = spec = None
+    data_path = d / "data.2d"
+    if data_path.is_file():
+        header, spec = read_kea_binary(data_path)
+
+    if timestamp_ms is not None:
+        ts = datetime.fromtimestamp(timestamp_ms / 1000)
+    elif fallback_to_mtime and data_path.is_file():
+        ts = datetime.fromtimestamp(data_path.stat().st_mtime)
+    elif fallback_to_mtime and (d / "data2D_Cp.2d").is_file():
+        ts = datetime.fromtimestamp((d / "data2D_Cp.2d").stat().st_mtime)
+    elif fallback_to_mtime and (d / "data.dat").is_file():
+        ts = datetime.fromtimestamp((d / "data.dat").stat().st_mtime)
+    else:
+        ts = None
+
+    seq = sequences.describe(params)
+    if seq["kind"] == "cpmg":
+        is_cpmg, reason = check_cpmg(params, header)
+        seq["supported"] = is_cpmg
+        seq["reason"] = reason
+    else:
+        is_cpmg, reason = False, seq["reason"]
+    _STATE.clear()
+    out = {
+        "version": __version__,
+        "display": build_display(params, ts),
+        "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
+        "is_cpmg": is_cpmg,
+        "kind": seq["kind"], "supported": seq["supported"], "analysis": seq["analysis"],
+        "reason": reason,
+        "raw": None,
+    }
+    source = {"dir": str(d), "timestamp_ms": timestamp_ms}
+    if seq["kind"] in ("t1", "t2d") and seq["supported"]:
+        try:
+            (_load_t1 if seq["kind"] == "t1" else _load_t2d)(d, params, out, source)
         except (ValueError, OSError, KeyError) as exc:   # a malformed or incomplete folder: say so instead of crashing
             out.update(supported=False, reason=f"{exc}" if not isinstance(exc, KeyError) else f"acqu.par has no {exc} entry")
     if is_cpmg:
@@ -516,8 +652,9 @@ def _provenance_record(page=None, options=None, outputs=None):
     extra = dict(page.get("browser") or {})
     if page.get("uncertainty"):
         extra["uncertainty_runs"] = page["uncertainty"]
+    names = {"input_names": (src["file"],)} if src.get("file") else {}
     return provenance.build(src["dir"], pr["settings"], options or {}, params_text=text, command=None, dataset=page.get("dataset"),
-                            acquisition=_STATE["params"], notes=notes, extra=extra or None, outputs=outputs, modified_ms=src["timestamp_ms"]), text
+                            acquisition=_STATE["params"], notes=notes, extra=extra or None, outputs=outputs, modified_ms=src["timestamp_ms"], **names), text
 
 
 def get_provenance(page=None, options=None):

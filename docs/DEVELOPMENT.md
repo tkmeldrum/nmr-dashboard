@@ -144,23 +144,30 @@ Agreed with Tyler on 2026-10-19, in this order:
 Backlog (not started): batch timestamp override on the page; T₂(z, t) maps for FT batches; SLURM example for the script; stopping inside a long batch dataset; auto-open the uncertainty section when MCMC/bootstrap finish
 (superseded by item 2); regularised inversion with other penalties (needs unpublished colleague work, see §10); optionally correct the echo-train diffusion term when D is known.
 
-## 9. Tecmag notes (for later)
+## 9. Tecmag (.tnt) support
 
-The lab's **second magnet is a single-sided (static-gradient) magnet run by a Tecmag spectrometer, with a gradient of about 6.7 T/m** (Tyler, 2026-10-19; to be confirmed more precisely).
-Because it is also a static-gradient magnet, the physics carries over with different numbers:
-- Position relations use the same `z = f/(γG)`; at 6.7 T/m the native resolution Δz ∝ 1/G is about 3.5× coarser than at 23.67 T/m for the same dwell and points.
-- The stimulated-echo b-value `b = (γG)²τ²(Δ + 2τ/3)` applies if the diffusion sequence is the same kind; `G` is already a setting. G² is ~12.5× smaller, so b-values and the echo-train diffusion term are far smaller.
-- The Larmor frequency, the nucleus and `REF_B1FREQ_1H_MHZ` (in `constants.py`) are specific to the Kea magnet and must be set separately for this one (`guess_nucleus` assumes the Kea magnet).
+The lab's **second magnet is a single-sided (static-gradient) magnet run by a Tecmag spectrometer, gradient about 6.7 T/m, ¹H at 13.235 MHz** (Tyler, 2026-10-19/20). Status 2026-10-20: reader and adapter done and tested on synthetic files
+(and checked locally against six real files, not committed); the page, batch, CLI and report wiring is the next step (§8).
 
-What is needed before building anything:
-1. **Sample files** from the Tecmag software, one per experiment of interest, plus a reference analysis of the same data from the existing workflow to compare against.
-2. **The file format and where each acquisition parameter lives** (echo time, number of echoes, points per echo, dwell, scans, frequency, gradient/τ/Δ for diffusion). Tecmag's native format is binary with a header; sequence parameters
-   may be in the pulse program rather than the header, so some may have to be entered on the page.
-3. **Which analyses apply** (CPMG and T1 only, or diffusion too; whether the FT profile is used).
-4. **Phase and data-layout conventions** (complex storage, point/echo ordering, phase cycling): the most likely source of silent errors.
+**How it works.** `tecmag_io.py` reads a `.tnt` file faithfully (header, data, pulse-sequence rows, tables, dashboard variables); `tecmag.py` decides what the sequence is and turns it into the same objects a Kea folder gives (a params dict in
+Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everything downstream is shared. `pipeline.load(path)` takes a `.tnt` file or a folder holding exactly one. Format sources: Tyler's MATLAB readers
+(`MeldrumLabCode/TecmagFunctions/readTecmag_new.m`, `OtherFunctions/Read_TNT_pseq_delays.m`, which follows Tecmag's own format notes).
 
-Plan: a new `tecmag_io.py` that returns the same structures as `kea_io.py` and `t2d.py`; format detection in `pipeline.load`; a "magnet" setting for the constants; tests with a public sample; validation against the reference analysis.
-Suggested model for the reader and its validation: one of the more capable models (Opus 5.5 or Fable 5.1), then Sonnet 5.5 for the integration.
+**Things the real files taught (keep these in mind):**
+- A `.tnt` is tagged sections: TMAG header (1024 bytes, absolute offsets), DATA (float32 re/im from byte 1056), TMG2, PSEQ (rows, tables, dashboard variables), LOCV, TMG4, PEAK/INTG/CMNT/TMG3 and, from TNMR 3, INFO.
+- **Every dashboard variable is stored twice**: the value used for this run and the sequence's saved default. A text scan that keeps the later occurrence (as the MATLAB "fuzzy" parser does) returns the *default* (nrEchoes 64 instead of the 128
+  used, tE 100 µs instead of 150 µs, trep 1 s instead of 300 ms). The reader keeps both; the value used is the first. This was confirmed by the data length (4096 points = 128 windows × 32 points).
+- The header's point count (`points`) is the length of one acquisition *window*; the length of a whole record is separate (TMG4 / `points_done`). One record per step of the indirect dimension (T1 delays, diffusion delays).
+- CPMG, T1: records are `nrEchoes` windows one after the other. **T₂–D (single-acquisition sequence): one continuous record through the whole train**; window 0 is the stimulated echo, windows 1..nrEchoes are the CPMG echoes `tE` apart (start at k·tE),
+  each `EchoAcqTime` long, with dead time between. The stimulated echo is left out (Kea convention: the first echo is at one echo time). Echo centres sit mid-window in all six files.
+- Delay tables (the T1 recovery delays, the T₂–D encoding delays τ) are lists of numbers **in microseconds** attached to a delay cell of the Delay row (the reader keeps which table each cell uses). The delay between pulse centres is the table value plus the
+  pulse width; for T₂–D the stored `DELTA` is already centre to centre. (Assumptions to confirm with the person who wrote the sequences: table units are µs; τ = table + pw.)
+- Data are conjugated on reading (re − i·im), as `readTecmag_new.m` does; the orientation of an FT profile on the real magnet is not verified (a sample with a known position would settle it).
+- Sequences are recognised by the sequence file name TNMR stores (`CPMG…`, `T1_Saturation…`, `StimEchoDiffusion…`); anything else (e.g. a plain diffusion series, `SEDiff…`) is declined with that name in the message.
+- The gradient is not in the file: the default is 6.7 T/m for Tecmag data (23.67 T/m for Kea), a setting like any other. The nucleus comes from the header (`H1`), not from a frequency lookup.
+- The experiment date stored in the file is used as the time stamp (file times change when files are copied). A date before 2000 or in the future is flagged for the user, never corrected.
+
+**Still to do:** the page (accept `.tnt` files and folders, `Tecmag` rows and warnings shown, batch and report), the params file/CLI (`gradient = "auto"`), and the open questions above.
 
 ## 10. Kept out of this public repo
 

@@ -24,7 +24,7 @@ def _axis(path):
 
 
 def load(d, params):
-    """Return dict: data (n_echo, n_tau) phased real part, noise (same shape or None), echo_s, tau_s, b_vec, complex (bool)."""
+    """Kea: read the data2D file(s) in folder d. Returns the dict of prepare()."""
     d = Path(d)
     n_echo, n_tau = int(params["nrEchoes"]), int(params["nrPntsTau"])
     cp, txt = d / "data2D_Cp.2d", d / "data2D.dat"
@@ -40,7 +40,17 @@ def load(d, params):
         raw = arr.T
     else:
         raise ValueError("neither data2D_Cp.2d nor data2D.dat was found next to acqu.par")
+    return prepare(raw, params, d=d)
 
+
+def prepare(raw, params, d=None, axes=None):
+    """Phase the (echoes x delays) data and set up the axes. Returns dict: data (n_echo, n_tau) phased real part, noise (same shape or None), echo_s, tau_s, b_vec, complex (bool).
+
+    raw  : (n_echo, n_tau), complex (or real)
+    d    : Kea folder, for the spectrometer's own axis files (only compared with the calculated axes)
+    axes : for data that do not come from Kea: {tau_s, delta_s, echo_s} given explicitly (Tecmag: from the sequence's delay table, DELTA and tE)
+    """
+    n_echo, n_tau = raw.shape
     if np.iscomplexobj(raw):
         theta = -np.angle(raw[:, 0].sum())                 # one phase from the first delay's echo train, applied to all (as in pythonic)
         rot = raw * np.exp(1j * theta)
@@ -50,32 +60,42 @@ def load(d, params):
 
     # The axes are calculated from the acquisition parameters (physics.py), not taken from the spectrometer's files; those files, when
     # present, are only compared against the calculation (check_axes). The gradient is a setting, so b is calculated when processing.
-    need = ("DELTA", "tauMin", "tauMax", "nrPntsTau", "echoTime")
-    missing = [k for k in need if k not in params]
-    if missing:
-        raise ValueError("acqu.par has no " + ", ".join(missing) + ", which the diffusion delays and b-values are calculated from (DELTA, tauMin, tauMax, nrPntsTau) "
-                         "and the echo times from (echoTime)")
-    nucleus, _why = constants.guess_nucleus(params.get("b1Freq"))
-    tau_s = physics.geometric_grid(float(params["tauMin"]) * 1e-3, float(params["tauMax"]) * 1e-3, n_tau)
-    echo_s = 1e-6 * float(params["echoTime"]) * np.arange(1, n_echo + 1)
+    nucleus, _why = constants.nucleus_of(params)
     files = {"tau": [], "b": [], "echo": []}                                                                    # (file name, the spectrometer's values)
-    if (d / "DiffAxis.dat").is_file():
-        files["b"].append(("DiffAxis.dat", _axis(d / "DiffAxis.dat")))
-    if (d / "data.dat").is_file():
-        a = np.loadtxt(d / "data.dat", ndmin=2)
-        if a.shape[0] == n_tau and a.shape[1] >= 2:
-            files["tau"].append(("data.dat", a[:, 0] * 1e-3))
-            files["b"].append(("data.dat", a[:, 1] * 1e9))
-    if (d / "T2Axis.dat").is_file():
-        files["echo"].append(("T2Axis.dat", _axis(d / "T2Axis.dat") * 1e-3))
+    if axes is not None:                                                                                        # Tecmag: the delays are the sequence's own table
+        tau_s, echo_s, delta_s = np.asarray(axes["tau_s"], float), np.asarray(axes["echo_s"], float), float(axes["delta_s"])
+        if len(tau_s) != n_tau or len(echo_s) != n_echo:
+            raise ValueError("the delay or echo axis does not match the data")
+    else:
+        need = ("DELTA", "tauMin", "tauMax", "nrPntsTau", "echoTime")
+        missing = [k for k in need if k not in params]
+        if missing:
+            raise ValueError("acqu.par has no " + ", ".join(missing) + ", which the diffusion delays and b-values are calculated from (DELTA, tauMin, tauMax, nrPntsTau) "
+                             "and the echo times from (echoTime)")
+        tau_s = physics.geometric_grid(float(params["tauMin"]) * 1e-3, float(params["tauMax"]) * 1e-3, n_tau)
+        echo_s = 1e-6 * float(params["echoTime"]) * np.arange(1, n_echo + 1)
+        delta_s = float(params["DELTA"]) * 1e-3
+    if d is not None:
+        d = Path(d)
+        if (d / "DiffAxis.dat").is_file():
+            files["b"].append(("DiffAxis.dat", _axis(d / "DiffAxis.dat")))
+        if (d / "data.dat").is_file():
+            a = np.loadtxt(d / "data.dat", ndmin=2)
+            if a.shape[0] == n_tau and a.shape[1] >= 2:
+                files["tau"].append(("data.dat", a[:, 0] * 1e-3))
+                files["b"].append(("data.dat", a[:, 1] * 1e9))
+        if (d / "T2Axis.dat").is_file():
+            files["echo"].append(("T2Axis.dat", _axis(d / "T2Axis.dat") * 1e-3))
     kea_g = physics.gradient_implied_by_kea(params["gradient"]) if "gradient" in params else None
-    info = {"nucleus": nucleus, "delta_ms": float(params["DELTA"]), "tau_min_ms": float(params["tauMin"]), "tau_max_ms": float(params["tauMax"]), "n_tau": n_tau,
-            "echo_time_us": float(params["echoTime"]), "kea_gradient_khz_per_mm": float(params["gradient"]) if kea_g is not None else None, "kea_gradient_t_per_m": kea_g}
+    info = {"nucleus": nucleus, "delta_ms": delta_s * 1e3, "tau_min_ms": float(tau_s.min() * 1e3), "tau_max_ms": float(tau_s.max() * 1e3), "n_tau": n_tau,
+            "echo_time_us": float(echo_s[0] * 1e6), "kea_gradient_khz_per_mm": float(params["gradient"]) if kea_g is not None else None, "kea_gradient_t_per_m": kea_g,
+            "source": params.get("source", "kea")}
     if np.any(np.diff(echo_s) <= 0) or np.any(echo_s <= 0):
         raise ValueError("the echo times must be positive and increasing")
-    L = {"data": data, "noise": noise, "echo_s": echo_s, "tau_s": tau_s, "delta_s": float(params["DELTA"]) * 1e-3, "complex": noise is not None, "b_info": info, "files": files}
-    L["b_vec"] = b_values(L, physics.DEFAULT_GRADIENT_T_PER_M)                 # at the default gradient: what the Raw data tab shows; processing recalculates it
-    L["b_check"] = check_axes(L, physics.DEFAULT_GRADIENT_T_PER_M)
+    L = {"data": data, "noise": noise, "echo_s": echo_s, "tau_s": tau_s, "delta_s": delta_s, "complex": noise is not None, "b_info": info, "files": files}
+    g0 = constants.default_gradient(params)
+    L["b_vec"] = b_values(L, g0)                                               # at the default gradient: what the Raw data tab shows; processing recalculates it
+    L["b_check"] = check_axes(L, g0)
     return L
 
 
