@@ -10,8 +10,8 @@ def build_tau_grid(tau_min, tau_max, n_steps):
     Build a logarithmically spaced grid of relaxation times (tau values).
 
     This matches the tau grid construction in upnnlsmooth1D.m:
-        pas = (log10(Tamax) - log10(Tamin)) / (steps - 1)
-        tau = 10.^(log10(Tamin) : pas : log10(Tamax))
+        step = (log10(Tamax) - log10(Tamin)) / (steps - 1)        (called pas in the Matlab source)
+        tau = 10.^(log10(Tamin) : step : log10(Tamax))
 
     Parameters
     ----------
@@ -63,7 +63,7 @@ def run_1dilt(data, echo_vec, params, alpha=None):
       also included alpha*I and alpha*D1 terms, which are NOT present in
       the Matlab 1D solver and produced over-regularized results.
     - The weighting scalar is computed from the log-spacings of the tau
-      and echo grids (pas and pasdata), exactly as in upnnlsmooth1D.m.
+      and echo grids (step_grid and step_data), exactly as in upnnlsmooth1D.m.
     - No column normalization is applied (unlike some earlier versions),
       to keep the numerical path as close to Matlab as possible.
     - The thin SVD compression step from nnlsmooth1Dsvd.m is replicated:
@@ -84,7 +84,7 @@ def run_1dilt(data, echo_vec, params, alpha=None):
         Measured echo amplitudes.
     echo_vec : array-like of shape (n_echoes,)
         Echo times, in the same units as ILTminmax. Must be positive
-        and strictly increasing (required for pasdata calculation).
+        and strictly increasing (required for the step_data calculation).
     params : dict with keys:
         'ILTminmax' : sequence of two floats
             [tau_min, tau_max] — range of the tau grid.
@@ -96,7 +96,7 @@ def run_1dilt(data, echo_vec, params, alpha=None):
     alpha : float, optional
         Regularization strength. Overrides params['alpha'] if provided.
         Must be positive. Larger values produce smoother spectra.
-        Matlab enforces that 1/sqrt(pasdata^2 * pas^3 * alpha) <= 300;
+        Matlab enforces that 1/sqrt(step_data^2 * step_grid^3 * alpha) <= 300;
         values of alpha that violate this are too small to be meaningful.
 
     Returns
@@ -116,7 +116,7 @@ def run_1dilt(data, echo_vec, params, alpha=None):
     echo_vec = np.asarray(echo_vec, dtype=float).ravel()
 
     # Drop t=0 points: exp(-0/tau)=1 for all tau, so they add no information
-    # and cause log10(0) -> -inf in the pasdata calculation.
+    # and cause log10(0) -> -inf in the step_data calculation.
     pos_mask = echo_vec > 0
     if not np.all(pos_mask):
         echo_vec = echo_vec[pos_mask]
@@ -134,17 +134,17 @@ def run_1dilt(data, echo_vec, params, alpha=None):
     tau = build_tau_grid(tau_min, tau_max, n_steps)
     n = len(tau)
 
-    # Compute log-spacings matching Matlab's pas and pasdata variables.
-    # pas: spacing of the tau grid in log10 space.
-    # pasdata: spacing of the echo grid in log10 space.
+    # Compute the log-spacings (Matlab's pas and pasdata).
+    # step_grid: spacing of the tau grid in log10 space.
+    # step_data: spacing of the echo grid in log10 space.
     # These appear in the Matlab weighting formula:
-    #   weighting = 1 / sqrt(pasdata^2 * pas^3 * alpha)
-    pas = (np.log10(tau_max) - np.log10(tau_min)) / (n_steps - 1)
+    #   weighting = 1 / sqrt(step_data^2 * step_grid^3 * alpha)
+    step_grid = (np.log10(tau_max) - np.log10(tau_min)) / (n_steps - 1)
     echo_pos = echo_vec[echo_vec > 0]
     if len(echo_pos) < 2:
-        raise ValueError("echo_vec must contain at least two positive values for pasdata calculation.")
-    pasdata = (np.log10(echo_pos[-1]) - np.log10(echo_pos[0])) / (len(echo_pos) - 1)
-    weighting = inference.tikhonov_weighting(alpha, pas, pasdata)
+        raise ValueError("echo_vec must contain at least two positive values for the step_data calculation.")
+    step_data = (np.log10(echo_pos[-1]) - np.log10(echo_pos[0])) / (len(echo_pos) - 1)
+    weighting = inference.tikhonov_weighting(alpha, step_grid, step_data)
 
     K = build_kernel(echo_vec, tau)
 

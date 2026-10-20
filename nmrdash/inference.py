@@ -91,9 +91,10 @@ def second_derivative_matrix(n):
 
 
 def tikhonov_weighting(alpha, log10_step_grid, log10_step_data):
-    """The weight on the curvature rows: w = 1 / sqrt(pasdata^2 * pas^3 * alpha), as in upnnlsmooth1D.m (Matlab).
+    """The weight on the curvature rows: w = 1 / sqrt(step_data^2 * step_grid^3 * alpha), as in upnnlsmooth1D.m (Matlab).
 
-    pas is the spacing of the T2 (or D) grid in log10, pasdata that of the echo grid; larger alpha means a smaller w, i.e. less smoothing.
+    step_grid is the spacing of the T2 (or D) grid in log10, step_data that of the echo grid (the Matlab code calls them pas and pasdata: French for "step");
+    larger alpha means a smaller w, i.e. less smoothing.
     The inversion solves  min ||K x - y||^2 + w^2 ||D2 x||^2  subject to  x >= 0  (after compressing K and y with the SVD of K).
     References: docs/REFERENCES.md (regularisation).
     """
@@ -118,7 +119,7 @@ METHODS = [
     {"id": "interval", "name": "Confidence intervals from least squares", "equation": "estimate ± t(level, dof) · SE",
      "describes": "Intervals from the least-squares covariance with a Student-t multiplier (derived quantities such as fractions use the delta method).",
      "functions": [student_t_critical]},
-    {"id": "regularisation", "name": "Regularisation of the inversions", "equation": "min ‖K x − y‖² + w² ‖D₂ x‖²,  x ≥ 0;   w = 1/√(pasdata² · pas³ · α)",
+    {"id": "regularisation", "name": "Regularisation of the inversions", "equation": "min ‖K x − y‖² + w² ‖D₂ x‖²,  x ≥ 0;   w = 1/√(δ_data² · δ_grid³ · α), δ = spacing in log10 of the echo grid / the T₂ (or D) grid",
      "describes": "The smoothness-penalised, non-negative least-squares problem the 1D and 2D inversions solve; larger α means less smoothing.",
      "functions": [second_derivative_matrix, tikhonov_weighting]},
 ]
