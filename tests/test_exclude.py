@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 
 from nmrdash import echoes, multiexp, params as P, runner
+from nmrdash.kea_io import read_kea_binary
 from nmrdash.pipeline import _STATE, _skip_count, boot_finish, boot_start, boot_step, load, mcmc_finish, mcmc_start, mcmc_step, process
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
-ETGLY = DATA / "CPMG_EtGly" / "1"
+from sample_data import CPMG_CLEAN, CPMG_NOISY, T1_CLEAN, TRUTH, write_kea_binary
 CPMG = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False},
         "ilt": {"enabled": True, "t2_min": 1e-4, "t2_max": 1.0, "n_steps": 60, "alpha": 1e8}}
 T1 = {"kind": "t1", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": True}}
@@ -28,7 +28,7 @@ def test_skip_count_is_validated():
 
 
 def test_fits_use_only_the_included_echoes_and_the_full_decay_is_still_returned():
-    load(ETGLY)
+    load(CPMG_NOISY)
     base = process(CPMG)
     res = process({**CPMG, "exclude_first": 3})
     n = len(base["decay"]["t"])
@@ -45,20 +45,26 @@ def test_fits_use_only_the_included_echoes_and_the_full_decay_is_still_returned(
     assert me["dof"] == base["multiexp"]["selected"]["dof"] - 3
 
 
-def test_excluding_a_distorted_first_echo_improves_the_fit():
-    """On CPMG_EtGly (FT window sum) the first echo sits ~1e6 below the trend; leaving it out changes the answer a lot."""
-    load(ETGLY)
+def test_excluding_a_distorted_first_echo_improves_the_fit(tmp_path):
+    """A first echo far off the trend (a real instrument artefact; made here by scaling it in a copy) ruins the fit; leaving it out repairs it."""
+    d = tmp_path / "ds"
+    shutil.copytree(CPMG_CLEAN, d)
+    h, spec = read_kea_binary(d / "data.2d")
+    td = spec.reshape((h["xDim"], h["yDim"]), order="F").copy()
+    td[:, 0] *= 0.3
+    write_kea_binary(d / "data.2d", td, 501)
+    load(d)
     ft = {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -200.0, "z_max": 200.0}
-    cfg = {"echo": "ft", "ft": ft, "multiexp": CPMG["multiexp"], "ilt": {"enabled": False}}
+    cfg = {"echo": "ft", "ft": ft, "multiexp": {**CPMG["multiexp"], "n": 2}, "ilt": {"enabled": False}}
     a = process(cfg)["multiexp"]["selected"]
     b = process({**cfg, "exclude_first": 1})["multiexp"]["selected"]
-    assert a["resid"][0] < -5e5                                                          # the outlier is real
-    assert b["mse"] < a["mse"] / 3 and b["components"][0]["T2_se"] < a["components"][0]["T2_se"] / 2
-    assert abs(b["components"][0]["T2"] - a["components"][0]["T2"]) > 2 * b["components"][0]["T2_se"]
+    assert a["resid"][0] < 0 and abs(a["resid"][0]) > 1e5                               # the outlier is real
+    assert b["mse"] < a["mse"] / 100
+    assert b["components"][0]["T2"] == pytest.approx(TRUTH["cpmg"]["T2_s"][0], rel=0.05) and abs(a["components"][0]["T2"] - b["components"][0]["T2"]) > 0.05 * b["components"][0]["T2"]
 
 
 def test_ft_mode_spatial_fits_and_profile_ignore_the_excluded_echoes_but_the_map_keeps_them():
-    load(ETGLY)
+    load(CPMG_NOISY)
     res = process({"echo": "ft", "exclude_first": 2, "ft": {"nucleus": "1H", "G": 23.7, "zero_fill": 4, "z_min": -100.0, "z_max": 100.0},
                    "multiexp": CPMG["multiexp"], "ilt": CPMG["ilt"]})
     n = len(res["decay"]["t"])
@@ -71,7 +77,7 @@ def test_ft_mode_spatial_fits_and_profile_ignore_the_excluded_echoes_but_the_map
 
 
 def test_t1_excludes_leading_delays():
-    load(DATA / "T1SAT_dopedwater" / "1")
+    load(T1_CLEAN)
     base = process(T1)
     res = process({**T1, "exclude_first": 2})
     n = len(res["decay"]["t"])
@@ -83,7 +89,7 @@ def test_t1_excludes_leading_delays():
 
 def test_mcmc_and_bootstrap_use_the_included_points_only():
     pytest.importorskip("emcee")
-    load(ETGLY)
+    load(CPMG_NOISY)
     res = process({**CPMG, "exclude_first": 4, "ilt": {"enabled": False}})
     n = len(res["decay"]["t"])
     mcmc_start({"steps": 400, "burn": 100, "nwalkers": 16})
@@ -112,7 +118,7 @@ def test_params_file_carries_the_setting_in_both_directions():
 
 def test_script_outputs_show_what_was_excluded(tmp_path):
     d = tmp_path / "ds"
-    shutil.copytree(ETGLY, d)
+    shutil.copytree(CPMG_NOISY, d)
     p = P.defaults()
     p["processing"]["exclude_first"] = 2
     p["multiexp"]["compare"] = False
@@ -121,7 +127,7 @@ def test_script_outputs_show_what_was_excluded(tmp_path):
     assert row["status"] == "ok", row.get("reason")
     out = Path(row["output_dir"])
     rows = list(csv.DictReader(open(out / "decay.csv")))
-    assert len(rows) == 128 and [r["included_in_fits"] for r in rows[:3]] == ["0", "0", "1"]
+    assert len(rows) == 256 and [r["included_in_fits"] for r in rows[:3]] == ["0", "0", "1"]
     assert rows[0]["exp2_fit"] == "" and rows[2]["exp2_fit"] != ""                        # no fit or residual for excluded points
     assert "first 2 echoes are excluded" in (out / "summary.md").read_text()
     assert json.loads((out / "provenance.json").read_text())["settings"]["exclude_first"] == 2

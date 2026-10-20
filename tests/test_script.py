@@ -16,7 +16,7 @@ import pytest
 from nmrdash import formatting as F, params as P, provenance, runner
 from nmrdash.pipeline import load
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_NOISY, DATA, T1_NOISY
 FAST = {"multiexp": {"compare": False}, "ilt": {"max_grid_points": 50}}      # keeps the tests quick
 
 
@@ -29,10 +29,10 @@ def fast(**extra):
 
 @pytest.fixture
 def ds(tmp_path):
-    d = tmp_path / "data" / "etgly"
+    d = tmp_path / "data" / "cpmg"
     d.mkdir(parents=True)
     for f in ("acqu.par", "data.2d"):
-        shutil.copy(DATA / "CPMG_EtGly" / "1" / f, d / f)
+        shutil.copy(CPMG_NOISY / f, d / f)
     return d
 
 
@@ -101,7 +101,7 @@ def test_run_dataset_writes_results_and_a_checkable_provenance(ds):
     names = {p.name for p in out.iterdir()}
     assert {"decay.csv", "multiexp_components.csv", "multiexp_fit_quality.csv", "ilt_spectrum.csv", "ilt_peaks.csv", "decay_fit.png", "ilt_spectrum.png",
             "params_used.toml", "provenance.json", "summary.md"} <= names
-    assert len(read_csv(out / "decay.csv")) == 128 and (out / "decay_fit.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(read_csv(out / "decay.csv")) == 256 and (out / "decay_fit.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     prov = json.loads((out / "provenance.json").read_text())
     by = {f["name"]: f for f in prov["inputs"]}
     assert by["data.2d"]["sha256"] == hashlib.sha256((ds / "data.2d").read_bytes()).hexdigest() and by["acqu.par"]["bytes"] == (ds / "acqu.par").stat().st_size
@@ -158,9 +158,9 @@ def test_mcmc_and_bootstrap_outputs_and_seeds_in_provenance(ds):
 def mystery(d):
     """A folder whose sequence nmrdash does not analyse."""
     d.mkdir(parents=True)
-    shutil.copy(DATA / "T1SAT" / "1" / "acqu.par", d / "acqu.par")
+    shutil.copy(T1_NOISY / "acqu.par", d / "acqu.par")
     (d / "acqu.par").write_text((d / "acqu.par").read_text().replace('experiment = "T1Sat"', 'experiment = "Mystery"'))
-    shutil.copy(DATA / "T1SAT" / "1" / "data.1d", d / "data.1d")
+    shutil.copy(T1_NOISY / "data.1d", d / "data.1d")
 
 
 def test_unsupported_sequences_are_skipped_not_crashed(tmp_path):
@@ -176,7 +176,7 @@ def test_unsupported_sequences_are_skipped_not_crashed(tmp_path):
 def series(tmp_path):
     root = tmp_path / "series"
     base = datetime.datetime(2026, 10, 1, 9, 0, 0, tzinfo=datetime.timezone.utc).timestamp()
-    for name, src, minutes in (("c_third", "CPMG_EtGly/2", 90), ("a_first", "CPMG_EtGly/1", 0), ("b_second", "CPMG_EtGly/1", 30)):
+    for name, src, minutes in (("c_third", "kea_cpmg_clean", 90), ("a_first", "kea_cpmg_noisy", 0), ("b_second", "kea_cpmg_noisy", 30)):
         d = root / "samples" / name
         d.mkdir(parents=True)
         for f in ("acqu.par", "data.2d"):
@@ -267,7 +267,7 @@ def test_cli_reports_a_bad_params_file_without_a_traceback(tmp_path, ds):
 # ── provenance record itself ─────────────────────────────────────────────────
 
 def test_provenance_build_for_a_page_style_run():
-    rec = provenance.build(DATA / "CPMG_EtGly" / "1", {"echo": "integrate"}, {"mcmc": {"enabled": True, "seed": 3}}, dataset="sample: x",
+    rec = provenance.build(CPMG_NOISY, {"echo": "integrate"}, {"mcmc": {"enabled": True, "seed": 3}}, dataset="sample: x",
                            acquisition={"echoTime": 200, "junk": 1}, modified_ms=1760000000000, extra={"userAgent": "UA"})
     assert rec["acquisition"] == {"echoTime": 200} and rec["random_seeds"] == {"mcmc": 3} and rec["browser"] == {"userAgent": "UA"}
     d2d = next(f for f in rec["inputs"] if f["name"] == "data.2d")
@@ -279,16 +279,16 @@ def test_provenance_build_for_a_page_style_run():
 
 def test_page_provenance_and_export_round_trip():
     from nmrdash import pipeline
-    load(DATA / "CPMG_EtGly" / "1")
+    load(CPMG_NOISY)
     settings, options = P.to_settings(fast(mcmc={"enabled": True, "steps": 800, "burn": 200}), 2e-4 * np.arange(1, 129), "1H")
     with pytest.raises(RuntimeError, match="Run the processing first"):
         pipeline.get_provenance()
     pipeline.process(settings)
-    out = pipeline.get_provenance({"dataset": "sample: CPMG_EtGly/1", "browser": {"userAgent": "UA"}, "uncertainty": {"mcmc": {"steps_run": 800}}}, options)
+    out = pipeline.get_provenance({"dataset": "sample: kea_cpmg_noisy", "browser": {"userAgent": "UA"}, "uncertainty": {"mcmc": {"steps_run": 800}}}, options)
     rec = out["record"]
     json.dumps(out, allow_nan=False)
-    assert rec["dataset"] == "sample: CPMG_EtGly/1" and rec["browser"]["userAgent"] == "UA" and rec["browser"]["uncertainty_runs"]["mcmc"]["steps_run"] == 800
-    assert rec["inputs"][1]["sha256"] == hashlib.sha256((DATA / "CPMG_EtGly" / "1" / "data.2d").read_bytes()).hexdigest()
+    assert rec["dataset"] == "sample: kea_cpmg_noisy" and rec["browser"]["userAgent"] == "UA" and rec["browser"]["uncertainty_runs"]["mcmc"]["steps_run"] == 800
+    assert rec["inputs"][1]["sha256"] == hashlib.sha256((CPMG_NOISY / "data.2d").read_bytes()).hexdigest()
     assert rec["random_seeds"] == {"mcmc": 0} and any("never left" in n for n in rec["notes"]) and out["lines"]
     # the params the page would export reproduce the same settings
     text = pipeline.export_params(settings, options, "sample")
@@ -332,7 +332,7 @@ def test_style_and_figure_overrides_round_trip_and_validate():
 def test_the_script_applies_the_style_to_its_figures(tmp_path):
     import shutil
     d = tmp_path / "d"
-    shutil.copytree(DATA / "CPMG_EtGly" / "1", d)
+    shutil.copytree(CPMG_NOISY, d)
     p = P.defaults()
     p["multiexp"].update({"enabled": True, "n": 1})
     p["output"].update({"figure_format": "svg", "samples": False})
@@ -344,7 +344,7 @@ def test_the_script_applies_the_style_to_its_figures(tmp_path):
 
 def test_params_for_page_fills_settings_for_the_loaded_dataset():
     from nmrdash.pipeline import load, params_for_page
-    load(DATA / "CPMG_EtGly" / "1")
+    load(CPMG_NOISY)
     p = P.defaults()
     p["processing"]["exclude_first"] = 2
     p["multiexp"].update({"enabled": True, "n": 3}); p["style"]["font_size"] = 13
@@ -353,7 +353,7 @@ def test_params_for_page_fills_settings_for_the_loaded_dataset():
     assert out["kind"] == "cpmg" and out["settings"]["exclude_first"] == 2 and out["settings"]["multiexp"]["n"] == 3
     assert out["settings"]["ilt"]["t2_min"] > 0 and out["style"]["font_size"] == 13 and out["style"]["figures"]["ilt_spectrum"]["xlim"] == [None, 5.0]
     json.dumps(out, allow_nan=False)
-    load(DATA / "T1SAT" / "1")
+    load(T1_NOISY)
     assert params_for_page(P.dump_toml(p), "my.toml")["kind"] == "t1"
     with pytest.raises(ValueError, match="my.toml"):
         params_for_page("this is = not [toml", "my.toml")

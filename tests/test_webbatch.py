@@ -9,7 +9,7 @@ import pytest
 
 from nmrdash import webbatch
 
-DATA = Path(__file__).resolve().parent.parent / "test_data"
+from sample_data import CPMG_CLEAN, CPMG_NOISY, T1_NOISY, T2D_CLEAN, T2D_NOISY
 SETTINGS = {"echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False},
             "ilt": {"enabled": False, "t2_min": 1e-5, "t2_max": 0.1, "n_steps": 40, "alpha": 1e8, "sweep": False}}
 OPTIONS = {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}
@@ -32,8 +32,8 @@ def test_a_batch_runs_every_dataset_like_the_script_and_summarises_them():
     webbatch.start({"settings": SETTINGS, "options": OPTIONS, "style": {}, "kind": "cpmg", "root_name": "demo",
                     "output": {"figure_format": "png", "dpi": 20, "samples": False}})
     runs = []
-    for i, (label, src, ts) in enumerate([("a/2", DATA / "CPMG_EtGly" / "2", 1_700_000_600_000), ("a/1", DATA / "CPMG_EtGly" / "1", 1_700_000_000_000),
-                                           ("b/T1", DATA / "T1SAT" / "1", 1_700_001_000_000)]):
+    for i, (label, src, ts) in enumerate([("a/2", CPMG_CLEAN, 1_700_000_600_000), ("a/1", CPMG_NOISY, 1_700_000_000_000),
+                                           ("b/T1", T1_NOISY, 1_700_001_000_000)]):
         stage(i, src)
         runs.append(webbatch.run_one({"i": i, "label": label, "timestamp_ms": ts}))
     assert [r["status"] for r in runs] == ["ok", "ok", "skipped"] and "t1" in runs[2]["reason"] and not runs[2]["files"]
@@ -63,7 +63,7 @@ def test_a_t2d_batch_from_the_page_carries_the_model_and_the_population_columns(
                 "t2d_model": {"enabled": True, "k": None, "d_window": "resolvable"}}
     webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "t2d", "root_name": "demo",
                     "output": {"figure_format": "png", "dpi": 50, "samples": False}})
-    for i, (label, src, ts) in enumerate([("a", DATA / "S3115_rt_100phr" / "1", 1_700_000_000_000), ("b", DATA / "M1115_rt_30phr" / "1", 1_700_000_900_000)]):
+    for i, (label, src, ts) in enumerate([("a", T2D_CLEAN, 1_700_000_000_000), ("b", T2D_NOISY, 1_700_000_900_000)]):
         stage(i, src)
         out = webbatch.run_one({"i": i, "label": label, "timestamp_ms": ts})
         assert out["status"] == "ok" and {"t2d_model_populations.csv", "t2d_populations.png", "t2d_spectrum.png"} <= set(out["files"])
@@ -72,4 +72,4 @@ def test_a_t2d_batch_from_the_page_carries_the_model_and_the_population_columns(
     head = lines[0].split(",")
     assert "t2d_pop1_T2_s" in head and "t2d_model_populations" in head and "timeseries_T2D.png" in fin["files"]
     rows = [dict(zip(head, ln.split(","))) for ln in lines[1:]]
-    assert float(rows[1]["elapsed_min"]) == pytest.approx(15) and int(rows[0]["t2d_model_populations"]) == 3
+    assert float(rows[1]["elapsed_min"]) == pytest.approx(15) and int(rows[1]["t2d_model_populations"]) == 2

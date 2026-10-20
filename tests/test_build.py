@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_manifest_lists_samples():
     m = sample_manifest()
-    assert any(s["label"] == "CPMG_EtGly/1" for s in m)
+    assert any(s["label"] == "kea_cpmg_noisy" for s in m)
     for s in m:
         assert "acqu.par" in s["files"]
         assert s["path"].startswith("test_data/")
@@ -40,12 +40,12 @@ def test_build_bundles_site(tmp_path):
     # only the data the page needs is shipped, not figures/exports
     assert not list(out.rglob("*.png")) and not list(out.rglob("*.npz"))
     # a bundled sample loads
-    s = next(s for s in manifest if s["label"] == "CPMG_EtGly/1")
+    s = next(s for s in manifest if s["label"] == "kea_cpmg_noisy")
     assert load(out / s["path"], None, fallback_to_mtime=False)["is_cpmg"]
 
 
 def test_no_timestamp_mode():
-    r = load(ROOT / "test_data" / "CPMG_EtGly" / "1", None, fallback_to_mtime=False)
+    r = load(ROOT / "test_data" / "kea_cpmg_noisy", None, fallback_to_mtime=False)
     row = next(x for x in r["display"] if x["label"] == "File timestamp")
     assert row["value"] == "not available"
 
