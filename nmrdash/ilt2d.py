@@ -47,9 +47,9 @@ def run_2dilt(data, echo_vec, b_vec, params, alpha=None):
     T2_grid = build_tau_grid(T2_min, T2_max, n_T2)
     D_grid = build_tau_grid(D_min, D_max, n_D)
 
-    pas = (np.log10(T2_max) - np.log10(T2_min)) / (n_T2 - 1)
-    pasdata = (np.log10(echo_vec[-1]) - np.log10(echo_vec[0])) / (len(echo_vec) - 1)
-    weighting = inference.tikhonov_weighting(alpha, pas, pasdata)
+    step_grid = (np.log10(T2_max) - np.log10(T2_min)) / (n_T2 - 1)
+    step_data = (np.log10(echo_vec[-1]) - np.log10(echo_vec[0])) / (len(echo_vec) - 1)
+    weighting = inference.tikhonov_weighting(alpha, step_grid, step_data)
 
     Ea = build_kernel(echo_vec, T2_grid)            # (n_echo, n_T2)
     Eb = build_kernel_diffusion(b_vec, D_grid)       # (n_bval, n_D)
