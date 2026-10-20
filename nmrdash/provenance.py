@@ -16,7 +16,7 @@ from . import __version__
 SCHEMA = 1
 PACKAGES = ("numpy", "scipy", "matplotlib", "emcee")
 ACQUISITION_KEYS = ("experiment", "expName", "echoTime", "nrEchoes", "nrPnts", "nrPntsT1", "nrPntsTau", "DELTA", "gradient", "dwellTime", "acqTime", "repTime", "nrScans",
-                    "pulseLength", "amp90", "amp180", "b1Freq", "bandwidth", "rxGain", "rxPhase", "dataDirectory")
+                    "pulseLength", "amp90", "amp180", "b1Freq", "bandwidth", "rxGain", "rxPhase", "dataDirectory", "sequence_file", "source", "nucleus", "software")
 
 
 def sha256(path, chunk=1 << 20):
@@ -82,14 +82,15 @@ def build(data_dir, settings, options=None, *, params_text=None, params_path=Non
     data_dir : folder holding the input files (the script's data folder, or the browser's in-memory copy)
     settings / options : the resolved settings passed to pipeline.process and the uncertainty options
     params_text : the params file as run (stored verbatim, with its hash)
-    modified_ms : the original modification time of data.2d (the browser cannot see it on its in-memory copy)
+    modified_ms : the original modification time of data.2d (the browser cannot see it on its in-memory copy); for a Tecmag .tnt, the experiment date stored in the file
     """
     data_dir = Path(data_dir)
     inputs = []
     for name in input_names:
         if (data_dir / name).is_file():
             rec = file_record(data_dir / name)
-            if name == next((n for n in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat") if (data_dir / n).is_file()), None) and modified_ms:
+            main = next((n for n in input_names if n.lower().endswith(".tnt")), None) or next((n for n in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat") if (data_dir / n).is_file()), None)
+            if name == main and modified_ms:
                 rec["modified_utc"] = datetime.datetime.fromtimestamp(modified_ms / 1000, datetime.timezone.utc).isoformat(timespec="seconds")
             inputs.append(rec)
     acq = {k: acquisition[k] for k in ACQUISITION_KEYS if acquisition and k in acquisition}

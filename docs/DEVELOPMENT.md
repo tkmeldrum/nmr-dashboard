@@ -146,8 +146,8 @@ Backlog (not started): batch timestamp override on the page; T₂(z, t) maps for
 
 ## 9. Tecmag (.tnt) support
 
-The lab's **second magnet is a single-sided (static-gradient) magnet run by a Tecmag spectrometer, gradient about 6.7 T/m, ¹H at 13.235 MHz** (Tyler, 2026-10-19/20). Status 2026-10-20: reader and adapter done and tested on synthetic files
-(and checked locally against six real files, not committed); the page, batch, CLI and report wiring is the next step (§8).
+The lab's **second magnet is a single-sided (static-gradient) magnet run by a Tecmag spectrometer, gradient about 6.7 T/m, ¹H at 13.235 MHz** (Tyler, 2026-10-19/20). Status 2026-10-20: reader, adapter, page, batch, CLI, outputs and report done and tested on synthetic files
+(and checked locally against six real files, not committed).
 
 **How it works.** `tecmag_io.py` reads a `.tnt` file faithfully (header, data, pulse-sequence rows, tables, dashboard variables); `tecmag.py` decides what the sequence is and turns it into the same objects a Kea folder gives (a params dict in
 Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everything downstream is shared. `pipeline.load(path)` takes a `.tnt` file or a folder holding exactly one. Format sources: Tyler's MATLAB readers
@@ -167,7 +167,11 @@ Kea's vocabulary, the echo array, the T1 curve, the T₂–D matrix), so everyth
 - The gradient is not in the file: the default is 6.7 T/m for Tecmag data (23.67 T/m for Kea), a setting like any other. The nucleus comes from the header (`H1`), not from a frequency lookup.
 - The experiment date stored in the file is used as the time stamp (file times change when files are copied). A date before 2000 or in the future is flagged for the user, never corrected.
 
-**Still to do:** the page (accept `.tnt` files and folders, `Tecmag` rows and warnings shown, batch and report), the params file/CLI (`gradient = "auto"`), and the open questions above.
+**In the page and scripts:** each `.tnt` is a dataset (folders are searched up to 3 levels; loose files dropped or chosen give no folder handle, so results come as a zip); the display shows the sequence file and the experiment
+date stored in the file; warnings (odd date, echo layout notes) show above the analysis; results folders are `processed_<file stem>_<time>`; `ft.G` and `t2d.gradient` are `"auto"` by default (23.67 Kea, 6.7 Tecmag);
+the batch time stamp is the experiment date (read from the header alone, so large files are cheap to list). No time-stamp override (decided 2026-10-20): odd dates are flagged for the user to deal with.
+
+**Still open:** the assumptions listed above (µs tables, τ = table + pw, conjugation/orientation), what to do with the stimulated echo, a plain diffusion series (`SEDiff…`), and whether T1 amplitudes should be the echo-train sum (as now) or the first echo.
 
 ## 10. Kept out of this public repo
 

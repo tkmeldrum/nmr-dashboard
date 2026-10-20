@@ -142,11 +142,19 @@ function dirFromFileList(fileList) {   // <input webkitdirectory> fallback
   return build(arr[0].webkitRelativePath.split("/")[0], arr, 0);
 }
 
-// Find every folder (up to maxDepth below `dir`) that directly contains acqu.par.
+// A folder of loose files (what dropping or choosing .tnt files gives); no folder handle, so results come as a zip.
+function dirFromFiles(name, fileObjects) {
+  return { name, async list() { return { files: fileObjects.map((f) => ({ name: f.name, getFile: async () => f })), dirs: [] }; } };
+}
+
+const isTnt = (f) => /\.tnt$/i.test(f.name);
+
+// Find every dataset (up to maxDepth below `dir`): each folder that directly contains acqu.par (Kea), and each .tnt file (Tecmag) in a folder that does not.
 async function findDatasets(dir, prefix = "", depth = 0, maxDepth = 3) {
   const { files, dirs } = await dir.list();
   const here = [];
   if (files.some((f) => f.name === "acqu.par")) here.push({ label: prefix || dir.name, dir, files });
+  else for (const f of files.filter(isTnt)) here.push({ label: (prefix || dir.name) + "/" + f.name, dir, files: [f], tnt: f });
   if (depth < maxDepth) {
     for (const d of dirs) here.push(...await findDatasets(d, (prefix || dir.name) + "/" + d.name, depth + 1, maxDepth));
   }
@@ -182,7 +190,7 @@ async function openFolder(dir) {
   }
   if (!datasets.length) {
     setBusy(null);
-    return showMessage("No acqu.par found in that folder or the folders inside it. Is it a Kea data folder?", "warn");
+    return showMessage("No acqu.par (Kea) or .tnt file (Tecmag) found in that folder or the folders inside it. Is it a data folder?", "warn");
   }
   const sel = $("dataset-select");
   sel.replaceChildren(...datasets.map((d, i) => Object.assign(document.createElement("option"), { value: i, textContent: d.label })));
@@ -195,6 +203,10 @@ const DATA_FILES = ["acqu.par", "data.2d", "data.dat", "data2D_Cp.2d", "data2D.d
 // The files of one dataset, and when the data were written (the main data file of whichever sequence this is).
 async function readDatasetFiles(ds) {
   const files = {}, written = {};
+  if (ds.tnt) {                                           // Tecmag: the one .tnt file is the dataset (its experiment date is read from inside it)
+    const file = await ds.tnt.getFile();
+    return { files: { [ds.tnt.name]: await file.arrayBuffer() }, timestampMs: file.lastModified };
+  }
   for (const name of DATA_FILES) {
     const entry = ds.files.find((f) => f.name === name);
     if (!entry) continue;
@@ -281,10 +293,21 @@ const drop = $("drop");
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => e.preventDefault());
 
+function openLooseFiles(fileList) {
+  const tnts = [...fileList].filter(isTnt);
+  if (!tnts.length) return showMessage("Please drop a data folder, or Tecmag .tnt files.", "warn");
+  return openFolder(dirFromFiles("dropped files", tnts));
+}
+
 drop.addEventListener("drop", async (e) => {
   e.preventDefault();
   const item = e.dataTransfer.items && e.dataTransfer.items[0];
   if (!item) return;
+  const asEntry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;       // looked up synchronously, before any await
+  if (item.kind === "file" && !(asEntry && asEntry.isDirectory)) {                // files, not a folder
+    const dropped = [...e.dataTransfer.files];
+    if (dropped.length) return openLooseFiles(dropped);
+  }
   // Both lookups must start synchronously, before any await.
   const handleP = item.getAsFileSystemHandle ? item.getAsFileSystemHandle() : null;
   const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
@@ -295,7 +318,13 @@ drop.addEventListener("drop", async (e) => {
   } catch (err) {
     return showMessage("Could not read the dropped item: " + err.message, "error");
   }
-  showMessage("Please drop a folder, not a file.", "warn");
+  showMessage("Please drop a data folder, or Tecmag .tnt files.", "warn");
+});
+
+$("browse-tnt").addEventListener("click", () => {
+  const input = Object.assign(document.createElement("input"), { type: "file", multiple: true, accept: ".tnt" });
+  input.onchange = () => input.files.length && openLooseFiles(input.files);
+  input.click();
 });
 
 async function browse() {
@@ -338,6 +367,7 @@ function showResult(r) {
     return showMessage("This dataset cannot be analysed: " + r.reason + ". Its parameters are shown above.", "warn");
   }
   applyKind(r.kind);                                  // the sequence name decides which analysis the page offers
+  if (r.warnings && r.warnings.length) showMessage("Check this dataset: " + r.warnings.join(" "), "warn");   // Tecmag: odd time stamp, echo layout notes
   if (r.kind === "t2d") {
     const idx = $("echo-idx");
     idx.max = r.raw.n_echoes - 1;

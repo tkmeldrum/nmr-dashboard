@@ -12,7 +12,7 @@ import time
 import traceback
 from pathlib import Path
 
-from . import outputs, params as P, pipeline, provenance
+from . import outputs, params as P, pipeline, provenance, tecmag
 
 CHUNK_STEPS, CHUNK_REPS = 500, 25
 LIGHT_THEME = {"fg": "#1a1a1a", "grid": "#bbbbbb"}
@@ -24,6 +24,14 @@ DATA_FILES = ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat")      # the ma
 def _data_file(folder):
     """The file whose modification time says when the data were written: the first of DATA_FILES that exists."""
     return next((f for f in (Path(folder) / n for n in DATA_FILES) if f.is_file()), None)
+
+
+def _resolve(path):
+    """(folder, .tnt file or None) for a dataset path: a Kea folder, a Tecmag .tnt file, or a folder holding one .tnt (and no acqu.par)."""
+    p = Path(path)
+    if p.is_file():
+        return p.parent, p
+    return p, (None if (p / "acqu.par").is_file() else tecmag.find(p))
 
 
 def _utc(ts):
@@ -54,17 +62,20 @@ def _log(quiet, *a):
 def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_name=None, command=None, quiet=True, only_kind=None):
     """Process one data folder (acqu.par + data.2d). Returns a summary dict; never raises for bad data (status says why)."""
     t_start = time.perf_counter()
-    folder = Path(folder)
+    folder, tnt = _resolve(folder)
     p = P.validate(params) if params is not None else P.defaults()
-    row = {"dataset": rel_name or folder.name, "folder": str(folder), "status": "failed", "reason": "", "timestamp_utc": None,
+    row = {"dataset": rel_name or (tnt.name if tnt else folder.name), "folder": str(folder), "status": "failed", "reason": "", "timestamp_utc": None,
            "timestamp_local": None, "mode": p["processing"]["echo"], "output_dir": None, "warnings": []}
     try:
-        data2d = _data_file(folder)
+        data2d = tnt or _data_file(folder)
         mtime = data2d.stat().st_mtime if data2d else None
+        info = pipeline.load(tnt or folder, mtime * 1000 if mtime else None, fallback_to_mtime=True)
+        if info.get("source_format") == "tecmag":                 # Tecmag: the experiment date stored in the file, not the file's time
+            mtime = pipeline._STATE["source"]["timestamp_ms"] / 1000 if info["supported"] and pipeline._STATE.get("source") else mtime
+            row["warnings"] += info.get("warnings", [])
         if mtime:
             row["timestamp_utc"] = _utc(mtime).isoformat(timespec="seconds")
             row["timestamp_local"] = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
-        info = pipeline.load(folder, mtime * 1000 if mtime else None, fallback_to_mtime=True)
         row["kind"] = info["kind"]
         if only_kind and info["kind"] != only_kind:               # a batch uses one sequence's settings; other sequences are left alone
             row.update(status="skipped", reason=f"a {info['kind']} dataset; this batch is {only_kind}")
@@ -79,10 +90,10 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
             settings, options = P.to_settings_t1(p)
         elif info["kind"] == "t2d":
             row.update(n_echoes=raw["n_echoes"], n_points=raw["n_tau"], mode="t2d")
-            settings, options = P.to_settings_t2d(p)
+            settings, options = P.to_settings_t2d(p, info["defaults"]["gradient"])
         else:
             row.update(n_echoes=raw["n_echoes"], n_points=raw["n_points"], echo_time_us=info["params_all"].get("echoTime"))
-            settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"])
+            settings, options = P.to_settings(p, raw["echo_time_s"], info["defaults"]["nucleus"], info["defaults"]["G"])
         row["exclude_first"] = settings.get("exclude_first", 0)
         res = pipeline.process(settings)
         warnings = []
@@ -109,8 +120,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
 
         # ── write everything ──
         out_cfg = p["output"]
-        base = f"processed_{_stamp()}"
-        parent = folder if not out_cfg["directory"] else Path(out_cfg["directory"]) / (rel_name or folder.name)
+        base = f"processed_{tnt.stem + '_' if tnt else ''}{_stamp()}"
+        parent = folder if not out_cfg["directory"] else Path(out_cfg["directory"]) / (rel_name or (tnt.name if tnt else folder.name))
         parent.mkdir(parents=True, exist_ok=True)
         out_dir = _unique_dir(parent, base)
         files = []
@@ -125,7 +136,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
         files.append("params_used.toml")
         names = files + ["provenance.json", "summary.md"] + (["report.pdf"] if out_cfg["report"] else [])
         prov = provenance.build(folder, settings, options, params_text=text, params_path=params_path, command=command, dataset=row["dataset"],
-                                acquisition=info["params_all"], notes=warnings, outputs=names)
+                                acquisition=info["params_all"], notes=warnings, outputs=names,
+                                **({"input_names": (tnt.name,), "modified_ms": pipeline._STATE["source"]["timestamp_ms"]} if tnt else {}))
         (out_dir / "provenance.json").write_text(json.dumps(prov, indent=2, default=str))
         (out_dir / "summary.md").write_text(outputs.summary_markdown(res, prov, mcmc, boot, names, warnings))
         if out_cfg["report"]:
@@ -185,12 +197,15 @@ def _key_results(res, mcmc, boot):
 # ── batch ────────────────────────────────────────────────────────────────────
 
 def discover(root):
-    """Every folder under root holding acqu.par, except results folders (processed_*, batch_*). Sorted by path."""
+    """Every dataset under root, except in results folders (processed_*, batch_*): each folder holding acqu.par (Kea), and each .tnt file (Tecmag) in a folder without one.
+    Folders are returned as folders, Tecmag datasets as the .tnt file paths. Sorted by path."""
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if not (d.startswith("processed_") or d.startswith("batch_")))
         if "acqu.par" in filenames:
             found.append(Path(dirpath))
+        else:
+            found += [Path(dirpath) / f for f in sorted(filenames) if f.lower().endswith(".tnt")]
     return found
 
 
@@ -218,6 +233,9 @@ def _timestamp(folder, overrides):
     if key in overrides:
         t = overrides[key]
         return t if t.tzinfo else t.astimezone()
+    if Path(folder).is_file() and Path(folder).suffix.lower() == ".tnt":      # Tecmag: the experiment date stored in the file
+        dt, _note = tecmag.experiment_date(folder)
+        return dt.astimezone().astimezone(datetime.timezone.utc) if dt else None
     f = _data_file(folder)
     return _utc(f.stat().st_mtime) if f else None
 
@@ -322,7 +340,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     prov = {"schema": provenance.SCHEMA, "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"), "kind": "batch",
             "root": str(root), "command": command, "nmrdash": provenance.nmrdash_build(), "environment": provenance.environment(),
             "params_file": {"path": str(params_path) if params_path else None, "text": params_text},
-            "timestamps": {"source": "modification time of the main data file (data.2d, else data2D_Cp.2d, data2D.dat or data.dat)" + (f", overridden from {p['batch']['timestamps_file']}" if p["batch"]["timestamps_file"] else ""),
+            "timestamps": {"source": "modification time of the main data file (data.2d, else data2D_Cp.2d, data2D.dat or data.dat); for Tecmag .tnt files the experiment date stored in the file" + (f", overridden from {p['batch']['timestamps_file']}" if p["batch"]["timestamps_file"] else ""),
                            "t0": t0.isoformat() if t0 else None, "t0_rule": p["batch"]["t0"]},
             "datasets": [{"dataset": r["dataset"], "status": r["status"], "reason": r["reason"], "timestamp_utc": r["timestamp_utc"], "elapsed_min": r.get("elapsed_min"),
                           "output_dir": r["output_dir"]} for r in rows]}

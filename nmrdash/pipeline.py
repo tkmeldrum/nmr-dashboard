@@ -704,7 +704,8 @@ def save_bundle(opts):
     band = mcmc if (mcmc and _STATE.get("mcmc_target", "bulk") == "bulk") else None
     notes += list((res.get("multiexp") or {}).get("selected", {}).get("warnings", []) or [])
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    folder = f"processed_{stamp}"
+    src_file = (_STATE.get("source") or {}).get("file")
+    folder = f"processed_{Path(src_file).stem + '_' if src_file else ''}{stamp}"                 # a Tecmag file is one dataset of many in its folder: its name keeps results apart
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         files = []
@@ -747,12 +748,13 @@ def params_for_page(text, name="params.toml"):
     except Exception as exc:
         raise ValueError(f"could not read {name}: {exc}") from None
     p = P.validate(raw)
+    g0 = constants.default_gradient(_STATE.get("params") or {})                   # "auto" gradient: the instrument of the loaded data
     if "t1" in _STATE:
         kind, (settings, options) = "t1", P.to_settings_t1(p)
     elif "t2d" in _STATE:
-        kind, (settings, options) = "t2d", P.to_settings_t2d(p)
+        kind, (settings, options) = "t2d", P.to_settings_t2d(p, g0)
     elif "echo_s" in _STATE:
-        kind, (settings, options) = "cpmg", P.to_settings(p, np.asarray(_STATE["echo_s"], float), default_nucleus=None)
+        kind, (settings, options) = "cpmg", P.to_settings(p, np.asarray(_STATE["echo_s"], float), default_nucleus=None, default_gradient=g0)
     else:
         raise RuntimeError("Load a dataset first.")
     notes = []

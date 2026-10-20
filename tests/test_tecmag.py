@@ -242,3 +242,83 @@ def test_provenance_lists_the_tnt_file_as_the_input():
     rec = get_provenance({"dataset": "sample: tecmag_cpmg_noisy"}, {})["record"]
     assert [f["name"] for f in rec["inputs"]] == ["tecmag_cpmg_noisy.tnt"] and rec["acquisition"].get("nrEchoes") == 256
     json.dumps(rec)
+
+
+# ── scripts, batches and the page's batch ────────────────────────────────────
+
+def _fast():
+    from nmrdash import params as P
+    p = P.defaults()
+    p["multiexp"]["compare"] = False
+    p["ilt"]["max_grid_points"] = 40
+    p["t2d"].update({"t2_steps": 20, "d_steps": 10})
+    return p
+
+
+@pytest.mark.parametrize("path,kind", [(TECMAG_CPMG_NOISY, "cpmg"), (TECMAG_T1_NOISY, "t1"), (TECMAG_T2D_NOISY, "t2d")])
+def test_the_script_runs_a_tnt_file_and_writes_its_results_next_to_it(tmp_path, path, kind):
+    from nmrdash import runner
+    f = tmp_path / path.name
+    shutil.copy(path, f)
+    row = runner.run_dataset(f, _fast())
+    assert row["status"] == "ok" and row["kind"] == kind, row.get("reason")
+    assert row["dataset"] == path.name and row["timestamp_local"] == "2026-01-15T10:30:00"            # the experiment date in the file, not the copy's file time
+    out = tmp_path / row["output_dir"].split("/")[-1]
+    assert out.parent == tmp_path and out.name.startswith(f"processed_{path.stem}_")
+    prov = json.loads((out / "provenance.json").read_text())
+    assert [i["name"] for i in prov["inputs"]] == [path.name] and prov["inputs"][0]["modified_utc"].startswith("2026-01-15") and prov["acquisition"]["source"] == "tecmag"
+    md = (out / "summary.md").read_text()
+    assert "experiment date stored in the .tnt file" in md and ("from the sequence's delay table" in md) == (kind == "t2d") and (out / "report.pdf").read_bytes()[:5] == b"%PDF-"
+
+
+def test_the_script_uses_the_instrument_gradient_when_the_params_say_auto(tmp_path):
+    from nmrdash import runner
+    f = tmp_path / "t.tnt"
+    shutil.copy(TECMAG_T2D_NOISY, f)
+    row = runner.run_dataset(f, _fast())
+    assert row["settings"]["t2d"]["gradient"] == 6.7
+    k = tmp_path / "kea"
+    shutil.copytree(DATA / "kea_t2d_noisy", k)
+    assert runner.run_dataset(k, _fast())["settings"]["t2d"]["gradient"] == 23.67
+    explicit = _fast()
+    explicit["t2d"]["gradient"] = 7.5
+    assert runner.run_dataset(f, explicit)["settings"]["t2d"]["gradient"] == 7.5
+
+
+def test_a_batch_mixes_kea_folders_and_tnt_files_in_time_order(tmp_path):
+    from nmrdash import runner
+    shutil.copytree(DATA / "kea_cpmg_noisy", tmp_path / "kea_a")
+    (tmp_path / "sub").mkdir()
+    shutil.copy(TECMAG_CPMG_NOISY, tmp_path / "sub" / "tec_b.tnt")
+    shutil.copy(TECMAG_CPMG_CLEAN, tmp_path / "sub" / "tec_a.tnt")
+    shutil.copy(TECMAG_T1_NOISY, tmp_path / "sub" / "tec_t1.tnt")
+    assert [p.name for p in runner.discover(tmp_path)] == ["kea_a", "tec_a.tnt", "tec_b.tnt", "tec_t1.tnt"]
+    rows, bdir = runner.run_batch(tmp_path, _fast(), quiet=True)
+    by = {r["dataset"]: r for r in rows}
+    assert set(by) == {"kea_a", "sub/tec_a.tnt", "sub/tec_b.tnt", "sub/tec_t1.tnt"} and all(r["status"] == "ok" for r in rows)
+    assert by["sub/tec_a.tnt"]["timestamp_local"] == "2026-01-15T10:30:00" and by["sub/tec_b.tnt"]["kind"] == "cpmg" and by["sub/tec_t1.tnt"]["kind"] == "t1"
+    assert (bdir / "batch_summary.csv").is_file()
+
+
+def test_a_declined_tnt_is_skipped_with_its_reason_in_a_batch(tmp_path):
+    from nmrdash import runner
+    write_tnt(tmp_path / "diff.tnt", np.ones((5, 64), complex), points_per_window=8, dwell_s=2e-6, sequence_file="SEDiff_test", variables={"nrEchoes": "8", "tE": "100u"}, locv=("tE",))
+    row = runner.run_dataset(tmp_path / "diff.tnt", _fast())
+    assert row["status"] == "skipped" and "diffusion series" in row["reason"]
+
+
+def test_a_tnt_in_a_folder_is_one_dataset_for_the_page_batch(tmp_path):
+    """The page stages one dataset's files in a folder; a folder holding one .tnt is that dataset."""
+    import base64
+    from nmrdash import webbatch
+    settings = {"kind": "cpmg", "echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}, "ilt": {"enabled": False}}
+    webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "cpmg", "root_name": "demo",
+                    "output": {"figure_format": "png", "dpi": 50, "samples": False}})
+    import os
+    os.makedirs(f"{webbatch.ROOT}/0")
+    shutil.copy(TECMAG_CPMG_NOISY, f"{webbatch.ROOT}/0/{TECMAG_CPMG_NOISY.name}")
+    out = webbatch.run_one({"i": 0, "label": "tec/1", "timestamp_ms": 1_700_000_000_000})
+    assert out["status"] == "ok" and "provenance.json" in out["files"]
+    prov = json.loads(base64.b64decode(out["files"]["provenance.json"]))
+    assert [i["name"] for i in prov["inputs"]] == [TECMAG_CPMG_NOISY.name] and prov["inputs"][0]["modified_utc"].startswith("2026-01-15")
+    webbatch.finish()

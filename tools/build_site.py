@@ -17,9 +17,12 @@ SAMPLE_FILES = ("acqu.par", "data.2d", "data.1d", "data.dat", "data2D_Cp.2d", "d
 
 
 def sample_manifest(root=ROOT):
-    """[{label, path, files}] for every folder under test_data/ that has an acqu.par."""
+    """[{label, path, files}] for every folder under test_data/ that has an acqu.par, and for every Tecmag .tnt file there."""
     base = Path(root) / "test_data"
     out = []
+    for tnt in sorted(base.rglob("*.tnt")):
+        rel = tnt.parent.relative_to(base).as_posix()
+        out.append({"label": tnt.stem, "path": "test_data" + ("" if rel == "." else "/" + rel), "files": [tnt.name]})
     for par in sorted(base.rglob("acqu.par")):
         d = par.parent
         out.append({

@@ -14,10 +14,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_manifest_lists_samples():
     m = sample_manifest()
-    assert any(s["label"] == "kea_cpmg_noisy" for s in m)
+    assert any(s["label"] == "kea_cpmg_noisy" for s in m) and any(s["label"] == "tecmag_t2d_noisy" for s in m)
     for s in m:
-        assert "acqu.par" in s["files"]
-        assert s["path"].startswith("test_data/")
+        assert ("acqu.par" in s["files"]) or (len(s["files"]) == 1 and s["files"][0].endswith(".tnt"))      # a Kea folder, or one Tecmag file
+        assert s["path"].startswith("test_data")
+    tnt = next(s for s in m if s["label"] == "tecmag_cpmg_clean")
+    assert tnt == {"label": "tecmag_cpmg_clean", "path": "test_data", "files": ["tecmag_cpmg_clean.tnt"]}
 
 
 def test_build_bundles_site(tmp_path):
@@ -42,6 +44,8 @@ def test_build_bundles_site(tmp_path):
     # a bundled sample loads
     s = next(s for s in manifest if s["label"] == "kea_cpmg_noisy")
     assert load(out / s["path"], None, fallback_to_mtime=False)["is_cpmg"]
+    t = next(s for s in manifest if s["label"] == "tecmag_cpmg_clean")
+    assert load(out / t["path"] / t["files"][0], None, fallback_to_mtime=False)["is_cpmg"]
 
 
 def test_no_timestamp_mode():
