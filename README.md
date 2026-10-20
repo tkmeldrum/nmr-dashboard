@@ -9,7 +9,7 @@ into a Web Worker and runs the code in `nmrdash/` locally. Your data is never up
 only code. The libraries are served from the site itself and a Content-Security-Policy in `index.html` allows connections to the site only
 (see "Self-hosted libraries" below); the page has no analytics.
 
-Live site: https://tkmeldrum.github.io/nmr-dashboard/ (use **Explore test data** to try it without any files).
+Live site: https://dashboard.meldrumlab.org/ (use **Explore test data** to try it without any files).
 
 **Tecmag data (`.tnt`).** `nmrdash` reads Tecmag files too (CPMG, T1 saturation recovery, stimulated-echo T₂–D), using the sequence's own variables and delay tables, so the
 same analyses apply. Drop a folder with `.tnt` files (each file is one dataset; a batch can mix Kea folders and `.tnt` files) or drop `.tnt` files onto the drop zone directly (results then come as a .zip);

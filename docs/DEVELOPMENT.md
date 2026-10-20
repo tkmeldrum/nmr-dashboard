@@ -14,7 +14,7 @@ data folder, sees the parameters and raw data, picks processing options, and sav
 **All computation runs in the browser** (Python via Pyodide in a Web Worker); nothing is uploaded; the repository holds only code (plus synthetic sample data).
 The same Python package also runs on a desktop and on a cluster (`nmrdash run | batch | params`).
 
-- Live: https://tkmeldrum.github.io/nmr-dashboard/ (GitHub Pages, deployed by an Action on every merge to `main`)
+- Live: https://dashboard.meldrumlab.org/ (GitHub Pages at the custom domain dashboard.meldrumlab.org, deployed by an Action on every merge to `main`; DNS is a CNAME `dashboard` -> `tkmeldrum.github.io` at Squarespace Domains, the domain is set under Settings > Pages, not by a CNAME file, because the deploy is an Actions artifact; the old github.io address redirects)
 - Repo: https://github.com/tkmeldrum/nmr-dashboard (public; Apache-2.0)
 - Owner: Tyler Meldrum (PI, Chemistry, William & Mary). Users so far: his research group.
 
