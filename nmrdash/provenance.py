@@ -16,7 +16,7 @@ from . import __version__
 SCHEMA = 1
 PACKAGES = ("numpy", "scipy", "matplotlib", "emcee")
 ACQUISITION_KEYS = ("experiment", "expName", "echoTime", "nrEchoes", "nrPnts", "nrPntsT1", "nrPntsTau", "DELTA", "gradient", "dwellTime", "acqTime", "repTime", "nrScans",
-                    "pulseLength", "amp90", "amp180", "b1Freq", "bandwidth", "rxGain", "rxPhase", "dataDirectory", "sequence_file", "source", "nucleus", "software", "record", "records", "array_label")
+                    "pulseLength", "amp90", "amp180", "b1Freq", "bandwidth", "rxGain", "rxPhase", "dataDirectory", "sequence_file", "source", "nucleus", "software", "record", "records", "array_label", "array_description")
 
 
 def sha256(path, chunk=1 << 20):

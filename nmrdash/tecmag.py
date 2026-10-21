@@ -136,9 +136,9 @@ def _timestamp(tnt):
 
 
 def _array_labels(tnt, n):
-    """How to name the n records of an arrayed CPMG: from the pulse-amplitude tables of the sequence (a linear scale of 0-100, i.e. percent amplitude), else by number.
+    """How to name the n records of an arrayed CPMG: from the pulse-power tables of the sequence (TNMR's own 0-100 numbers, shown as they are: no unit), else by number.
 
-    Returns (labels, description): e.g. (['90°: 20%, 180°: 40%', ...], 'pulse amplitude (%)'). The table of each amplitude cell of the sequence is used when it holds one value
+    Returns (labels, description): e.g. (['90°: 20, 180°: 40', ...], 'pulse power (0-100, as in TNMR) ...'). The table of each amplitude cell of the sequence is used when it holds one value
     per record, the first as the 90° pulse and the second as the 180° pulse (a CPMG's order); the user remains responsible for knowing which record is which.
     """
     cols = []
@@ -154,8 +154,8 @@ def _array_labels(tnt, n):
     if not cols:
         return [f"record {k + 1}" for k in range(n)], "record number"
     names = ["90°", "180°"] if len(cols) == 2 else ["pulse"] if len(cols) == 1 else [f"table {c[0]}" for c in cols]
-    labels = [", ".join(f"{nm}: {c[1][k]:g}%" for nm, c in zip(names, cols)) for k in range(n)]
-    return labels, "pulse amplitude (%) " + " / ".join(f"{nm} {c[0]}" for nm, c in zip(names, cols))
+    labels = [", ".join(f"{nm}: {c[1][k]:g}" for nm, c in zip(names, cols)) for k in range(n)]
+    return labels, "pulse power (0-100, as in TNMR), from the tables " + " / ".join(f"{nm} {c[0]}" for nm, c in zip(names, cols))
 
 
 def record_count(path):
@@ -225,7 +225,7 @@ def load_tnt(path, record=None):
         if n_rec > 1:
             labels, desc = _array_labels(tnt, n_rec)
             out["records"] = {"n": n_rec, "labels": labels, "index": k, "description": desc}
-            params.update(record=k + 1, records=n_rec, array_label=labels[k])
+            params.update(record=k + 1, records=n_rec, array_label=labels[k], array_description=desc)
         td = _td(records[k], layout)
         out["td"] = td
         note = _centre_note(td)

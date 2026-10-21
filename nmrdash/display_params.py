@@ -50,6 +50,7 @@ def build_display(params, timestamp=None, from_file=False):
         rows.append({"label": "Sequence file", "value": str(params["sequence_file"])})
     if params.get("records"):                                  # an arrayed experiment: one dataset per record
         rows.append({"label": "Record", "value": f"{params['record']} of {params['records']}: {params.get('array_label', '')}"})
+        rows.append({"label": "Array", "value": str(params.get("array_description", ""))})
     rows.append({
         "label": "Experiment date (stored in the file)" if from_file else "File timestamp",
         "value": timestamp.strftime("%Y-%m-%d %H:%M:%S") if timestamp is not None else "not available",

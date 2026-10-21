@@ -307,10 +307,11 @@ def test_a_declined_tnt_is_skipped_with_its_reason_in_a_batch(tmp_path):
     assert row["status"] == "skipped" and "diffusion series" in row["reason"]
 
 
-def test_a_tnt_in_a_folder_is_one_dataset_for_the_page_batch(tmp_path):
+def test_a_tnt_in_a_folder_is_one_dataset_for_the_page_batch(tmp_path, monkeypatch):
     """The page stages one dataset's files in a folder; a folder holding one .tnt is that dataset."""
     import base64
     from nmrdash import webbatch
+    monkeypatch.setattr(webbatch, "ROOT", str(tmp_path / "batch"))                    # not the shared /tmp folder: tests run in parallel
     settings = {"kind": "cpmg", "echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}, "ilt": {"enabled": False}}
     webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "cpmg", "root_name": "demo",
                     "output": {"figure_format": "png", "dpi": 50, "samples": False}})
@@ -371,13 +372,13 @@ def test_the_new_options_travel_through_the_params_file():
 
 # ── an arrayed CPMG: one .tnt with an echo train per pulse amplitude ───────────
 
-LABELS = [f"90°: {a}%, 180°: {b}%" for a, b in zip((10, 14, 18, 22, 26, 30), (20, 28, 36, 44, 52, 60))]          # what the sample file's tables say
+LABELS = [f"90°: {a}, 180°: {b}" for a, b in zip((10, 14, 18, 22, 26, 30), (20, 28, 36, 44, 52, 60))]          # what the sample file's tables say
 
 
 def test_an_arrayed_cpmg_is_one_dataset_per_record_named_from_the_amplitude_tables():
     r = load(TECMAG_SERIES_CLEAN)
     assert r["supported"] and r["kind"] == "cpmg" and r["records"]["n"] == 6 and r["records"]["labels"] == LABELS and r["records"]["index"] == 0
-    assert "rf182" in r["records"]["description"] and "rf192" in r["records"]["description"] and "%" in r["records"]["description"]
+    assert "rf182" in r["records"]["description"] and "rf192" in r["records"]["description"] and "0-100" in r["records"]["description"] and "%" not in "".join(r["records"]["labels"]) + r["records"]["description"]
     assert {x["label"]: x["value"] for x in r["display"]}["Record"] == "1 of 6: " + LABELS[0]
     for k in (0, 3, 5):
         rk = load(TECMAG_SERIES_CLEAN, None, False, record=k)
@@ -428,10 +429,11 @@ def test_a_batch_expands_an_arrayed_file_into_its_records_in_order_and_plots_the
     assert len(outs) == 6
 
 
-def test_the_page_batch_runs_one_record_of_an_arrayed_file(tmp_path):
+def test_the_page_batch_runs_one_record_of_an_arrayed_file(tmp_path, monkeypatch):
     import base64
     import os
     from nmrdash import webbatch
+    monkeypatch.setattr(webbatch, "ROOT", str(tmp_path / "batch"))                    # not the shared /tmp folder: tests run in parallel
     settings = {"kind": "cpmg", "echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}, "ilt": {"enabled": False}}
     webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "cpmg", "root_name": "demo",
                     "output": {"figure_format": "png", "dpi": 50, "samples": False}})
