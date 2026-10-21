@@ -49,6 +49,29 @@ function log(text, cls = "") {
   li.scrollIntoView({ block: "nearest" });
 }
 
+// The fitted parameters of every run, under the log when the batch is done (the same tables as in the batch report).
+function showFitTables(tables) {
+  const box = $("batch-fits");
+  box.replaceChildren();
+  for (const t of tables || []) {
+    const table = document.createElement("table");
+    const head = table.createTHead().insertRow();
+    for (const h of t.header) head.append(Object.assign(document.createElement("th"), { textContent: h }));
+    const body = table.createTBody();
+    for (const row of t.rows) {
+      const tr = body.insertRow();
+      for (const cell of row) tr.insertCell().textContent = cell;
+    }
+    box.append(
+      Object.assign(document.createElement("h4"), { textContent: t.title }),
+      Object.assign(document.createElement("p"), { className: "note", textContent: t.note }),
+      Object.assign(document.createElement("div"), { className: "table-wrap" }),
+    );
+    box.lastChild.append(table);
+  }
+  box.hidden = !box.childElementCount;
+}
+
 async function runBatch() {
   if (run.active || state.running) return;
   const msg = $("process-msg");
@@ -69,6 +92,7 @@ async function runBatch() {
 
   run.active = true; run.stop = false;
   $("batch-log").replaceChildren();
+  $("batch-fits").hidden = true;
   for (const id of ["batch-run", "run-btn"]) $(id).disabled = true;
   $("batch-stop").hidden = false; $("batch-stop").disabled = false;
   const bar = $("batch-progress"), status = $("batch-status");
@@ -103,6 +127,7 @@ async function runBatch() {
     }
     status.textContent = "Writing the batch summary…";
     const fin = await rpc("batch_finish", {});
+    showFitTables(fin.fit_tables);
     if (folderMode) await writeInto(state.dirHandle, fin.folder, fin.files);
     else for (const [name, b64] of Object.entries(fin.files)) zipEntries.push({ path: `${fin.folder}/${name}`, bytes: bytes(b64) });
     if (!folderMode) {

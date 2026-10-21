@@ -448,3 +448,5 @@ def test_the_page_batch_runs_one_record_of_an_arrayed_file(tmp_path, monkeypatch
     import io
     table = list(_csv.DictReader(io.StringIO(base64.b64decode(fin["files"]["batch_summary.csv"]).decode())))
     assert [r["record"] for r in table] == ["1", "2"] and table[0]["array_value"] == LABELS[0]
+    (fit,) = fin["fit_tables"]                                                            # the page shows the same per-run fit parameters as the report
+    assert fit["title"].startswith("Multi-exponential T₂ fits") and fit["header"][0] == "run" and len(fit["rows"]) == 2 and fit["rows"][0][0].endswith(LABELS[0])

@@ -10,7 +10,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import outputs, params as P, runner
+from . import outputs, params as P, report, runner
 
 ROOT = "/tmp/nmrdash_batch"
 _B = {}
@@ -72,6 +72,7 @@ def finish(a=None):
     bdir.mkdir(parents=True, exist_ok=True)
     runner.write_batch(bdir, rows, p, _B["text"], None, "nmrdash web page (batch)", _B["root_name"], t0)
     out = {"folder": f"batch_{runner._stamp()}", "files": {f.name: _b64(f) for f in sorted(bdir.iterdir()) if f.is_file()},
-           "counts": {k: sum(r["status"] == k for r in rows) for k in ("ok", "skipped", "failed")}}
+           "counts": {k: sum(r["status"] == k for r in rows) for k in ("ok", "skipped", "failed")},
+           "fit_tables": [{k: t[k] for k in ("title", "note", "header", "rows")} for t in report.fit_table_data([r for r in rows if r["status"] == "ok"])]}      # shown on the page when the batch is done
     shutil.rmtree(ROOT, ignore_errors=True)
     return out
