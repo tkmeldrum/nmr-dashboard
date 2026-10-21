@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:                      # lets a deploy be started by hand (e.g. when GitHub drops the push event, as during the 2026-10-21 webhook degradation)
 permissions:
   contents: read
   pages: write
