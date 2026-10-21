@@ -176,6 +176,11 @@ the batch time stamp is the experiment date (read from the header alone, so larg
 
 **Options added 2026-10-20 at Tyler's request:** T1 recovery amplitude from the echo-train sum (default) or the first echo only (Advanced settings, Tecmag data only; `t1.amplitude`); "flip z" (above); the open dataset's name under the tab bar on every tab; `.tnt` files dropped directly on the drop zone (clicking the zone browses for a folder only: a browser cannot pick a file or a folder in one dialog).
 
+**Arrayed CPMG (2026-10-21):** a `.tnt` with several echo trains (the 2nd dimension is, for example, pulse power) is one dataset per record. The page replaces the dataset list by one entry per record once the file is read; `load(path, record=k)` and
+`tecmag.load_tnt(path, record=k)` (0-based) pick one; the batch (script and page) runs every record in record order and writes `record` / `array_value` columns plus `array_series_<file>.png` (fits against the array). Records are named from the tables attached to the
+amplitude cells of the `F1_Ampl` row (first = 90 degrees, second = 180 degrees; Tecmag amplitudes are a linear 0-100 scale, i.e. percent), else "record k"; the user is responsible for knowing which record is which. Checked on a real 6-record file (90 amplitude 10:4:30,
+180 amplitude 20:8:60: the tables `rf182` / `rf192`). Results folders: `processed_<file>_rec<k>_<time>`. Also fixed: a leftover duplicate `load` in `pipeline.py` (from the Tecmag page PR) that silently overrode the new one for Kea CPMG.
+
 **Still open:** the stimulated echo is left out of T₂–D (explained to Tyler; he has not decided otherwise), orientation of the Tecmag profile (above), a plain diffusion series (`SEDiff…`, later).
 
 ## 10. Kept out of this public repo

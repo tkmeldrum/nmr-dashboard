@@ -17,6 +17,9 @@ that script, and the tests check that the analyses recover them.
 | `tecmag_t1_<level>.tnt` | T1 saturation recovery | 16 delays (10 ms – 5 s, a table in µs), each a 16-echo train | T₁ 0.8 s, offset 3% of the plateau; echo train T₂ 20 ms |
 | `tecmag_t2d_<level>.tnt` | stimulated-echo T₂–D | 16 delays (τ table 40 – 400 µs, linear), one continuous 300-echo record each (echo time 60 µs, window 40 µs, dwell 2 µs); Δ = 10 ms, G = 6.59 T/m | T₂ 3 ms / D 1.5e-9 m²/s (40%) and T₂ 12 ms / D 3e-10 m²/s (60%) |
 
+`tecmag_cpmg_power_series_clean.tnt` and `tecmag_cpmg_power_series_snr30.tnt` are an arrayed CPMG: one file, six echo trains (128 echoes × 32 points) at 90° pulse amplitudes 10, 14, … 30 (and 180° amplitudes 20, 28, … 60; a linear 0-100 scale), the signal following
+sin(π/2 · p₉₀/20), the same two layers and T₂ (5 and 20 ms) at every amplitude; SNR 30 is that of the strongest record.
+
 Noise-free sets are almost exactly noise-free (float32 rounding only), so statistics that compare a fit with the noise level (χ²) are only meaningful on the noisy sets.
 
 Tests that need a variation (a population too slow to resolve, a single exponential) generate it in a temporary folder with the `**override` arguments of the writers

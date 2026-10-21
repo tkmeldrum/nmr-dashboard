@@ -40,11 +40,12 @@ def run_one(a):
     """a: {i, label, timestamp_ms}. Returns the outcome and the files this dataset produced."""
     folder = Path(ROOT) / str(a["i"])
     ts = a.get("timestamp_ms")
+    record = a.get("record")
     if ts:                                                      # the page knows when the data were written; the files here are fresh copies
         for name in ("data.2d", "data2D_Cp.2d", "data2D.dat", "data.dat"):
             if (folder / name).is_file():
                 os.utime(folder / name, (ts / 1000.0, ts / 1000.0))
-    row = runner.run_dataset(folder, _B["params"], params_text=_B["text"], rel_name=a["label"], command="nmrdash web page (batch)", only_kind=_B["kind"])
+    row = runner.run_dataset(folder, _B["params"], params_text=_B["text"], rel_name=a["label"], command="nmrdash web page (batch)", only_kind=_B["kind"], record=record)
     files, name = {}, None
     if row.get("output_dir"):
         od = Path(row["output_dir"])
@@ -61,7 +62,7 @@ def finish(a=None):
     """The combined summary: batch_summary.csv, params_used.toml, provenance.json and the time-series figure(s)."""
     rows, p = _B["rows"], _B["params"]
     stamps = [datetime.datetime.fromisoformat(r["timestamp_utc"]) if r.get("timestamp_utc") else None for r in rows]
-    order = sorted(range(len(rows)), key=lambda i: (stamps[i] is None, stamps[i] or datetime.datetime.max.replace(tzinfo=datetime.timezone.utc), rows[i]["dataset"]))
+    order = sorted(range(len(rows)), key=lambda i: (stamps[i] is None, stamps[i] or datetime.datetime.max.replace(tzinfo=datetime.timezone.utc), rows[i].get("record") or 0, rows[i]["dataset"]))
     rows = [rows[i] for i in order]
     stamps = [stamps[i] for i in order]
     t0 = runner._parse_t0(p["batch"]["t0"], stamps)

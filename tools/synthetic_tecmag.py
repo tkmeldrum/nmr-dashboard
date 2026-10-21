@@ -37,6 +37,29 @@ def write_cpmg(path, noise, rng, c):
                      variables=_vars(c, nrEchoes=str(c["n_echoes"]), tE=_fmt_us(c["echo_time_us"])), defaults={"nrEchoes": "64", "tE": "100u"}, locv=("tE",))
 
 
+def write_cpmg_series(path, noise, rng, c):
+    """An arrayed CPMG: one record per pulse amplitude. The 90/180 amplitudes sit in the tables rf182 / rf192, attached to the two pulses of the F1_Ampl row (as in
+    TNMR sequences that array the power); the signal follows sin(pi/2 * p90 / power_for_90)."""
+    n = len(c["power90"])
+    amp = np.sin(np.pi / 2 * np.array(c["power90"], float) / c["power_for_90"])
+    clean = cpmg_echoes(False, rng, c)                                                       # unit signal; each record is scaled by its nutation factor
+    sigma = 0.0
+    if noise:
+        ref = np.real(clean[:, 0] * np.exp(-1j * np.radians(c["phase_deg"]))).sum() * amp.max()
+        sigma = noise_sigma(noise, c, ref, np.sqrt(c["n_points"]))
+    recs = []
+    for a in amp:
+        td = clean * a
+        if noise:
+            td = td + sigma * (rng.standard_normal(td.shape) + 1j * rng.standard_normal(td.shape))
+        recs.append(np.conj(td.T.reshape(-1)))
+    rows = [("Delay", [("5u", {}), ("=pw", {}), ("=tEwait1", {}), ("=pw", {}), ("=tEwait2", {}), ("=trep", {})]),
+            ("F1_Ampl", [("0", {}), ("=90pwr", {"gradient_amplitude": "rf182"}), ("0", {}), ("=180pwr", {"gradient_amplitude": "rf192"}), ("0", {}), ("0", {})])]
+    tables = {"ph0": (["0", "2"], "phase"), "rf182": ([f"{v:g}" for v in c["power90"]], "delay"), "rf192": ([f"{v:g}" for v in c["power180"]], "delay")}
+    return write_tnt(path, np.array(recs), points_per_window=c["n_points"], dwell_s=c["dwell_us"] * 1e-6, scans=128, date=DATE, sequence_file="CPMG_power_series", rows=rows, tables=tables,
+                     variables=_vars(c, nrEchoes=str(c["n_echoes"]), tE=_fmt_us(c["echo_time_us"]), **{"90pwr": "0", "180pwr": "=[90pwr]*2"}), locv=("tE",))
+
+
 def write_t1(path, noise, rng, c):
     n_pts, n_echo, n_del = c["n_points"], c["n_echoes"], c["n_delays"]
     t = physics.geometric_grid(c["t_min_s"], c["t_max_s"], n_del)

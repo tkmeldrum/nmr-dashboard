@@ -29,6 +29,13 @@ TRUTH = {
         "T2_s": (0.005, 0.020), "fraction": (0.4, 0.6), "layers_um": ((-431.0, 108.0), (-108.0, 431.0)), "G_t_per_m": 6.59,       # the same layers as the Kea set, scaled by 23.67 / 6.59
         "echo_time_us": 150, "n_echoes": 256, "n_points": 32, "dwell_us": 2.0, "noise_sigma": 12.0, "phase_deg": 35.0, "pulse_us": 6.0, "trep_ms": 1000.0,
     },
+    # an arrayed CPMG in one .tnt file: six echo trains at different pulse amplitudes (linear 0-100 scale, 180 pulse = twice the 90), the signal following a nutation curve
+    # (flip angle 90 degrees at power_for_90), the same two layers and T2 values at every power
+    "tecmag_cpmg_series": {
+        "T2_s": (0.005, 0.020), "fraction": (0.4, 0.6), "layers_um": ((-431.0, 108.0), (-108.0, 431.0)), "G_t_per_m": 6.59,
+        "echo_time_us": 150, "n_echoes": 128, "n_points": 32, "dwell_us": 2.0, "noise_sigma": 12.0, "phase_deg": 35.0, "pulse_us": 4.0, "trep_ms": 400.0,
+        "power90": (10, 14, 18, 22, 26, 30), "power180": (20, 28, 36, 44, 52, 60), "power_for_90": 20.0,
+    },
     "tecmag_t1": {"T1_s": 0.8, "offset_fraction": 0.03, "n_delays": 16, "t_min_s": 0.01, "t_max_s": 5.0, "noise_sigma": 3.0, "amplitude": 300.0, "T2_s": 0.02,
                   "echo_time_us": 150, "n_echoes": 16, "n_points": 16, "dwell_us": 2.0, "pulse_us": 6.0, "trep_ms": 1000.0},
     "tecmag_t2d": {
@@ -164,6 +171,10 @@ def write_tecmag_cpmg(path, noise, rng, name, **override):
     return _tecmag().write_cpmg(path, noise, rng, {**TRUTH["tecmag_cpmg"], **override})
 
 
+def write_tecmag_cpmg_series(path, noise, rng, name, **override):
+    return _tecmag().write_cpmg_series(path, noise, rng, {**TRUTH["tecmag_cpmg_series"], **override})
+
+
 def write_tecmag_t1(path, noise, rng, name, **override):
     return _tecmag().write_t1(path, noise, rng, {**TRUTH["tecmag_t1"], **override})
 
@@ -174,6 +185,7 @@ def write_tecmag_t2d(path, noise, rng, name, **override):
 
 # each kind comes noise-free and at a signal-to-noise ratio of 100, 30 and 10: the first point of the decay (first echo; for T1 the recovered plateau; for T2-D the
 # first echo at the shortest delay) over the noise standard deviation of that value (what the page measures from the imaginary channel)
+SERIES_LEVELS = (("clean", False), ("snr30", 30))                                   # the arrayed CPMG comes noise-free and at SNR 30 (of its strongest record)
 LEVELS = (("clean", False), ("snr100", 100), ("snr30", 30), ("snr10", 10))
 NAMES = {"cpmg": ("kea_cpmg", write_cpmg), "t1": ("kea_t1", write_t1), "t2d": ("kea_t2d", write_t2d)}
 TECMAG_NAMES = {"cpmg": ("tecmag_cpmg", write_tecmag_cpmg), "t1": ("tecmag_t1", write_tecmag_t1), "t2d": ("tecmag_t2d", write_tecmag_t2d)}
@@ -194,6 +206,10 @@ def generate(out):
             rng = np.random.default_rng([SEED, 10 + list(TECMAG_NAMES).index(kind), int(noise)])
             writer(out / name, noise, rng, name)
             made.append(name)
+    for variant, noise in SERIES_LEVELS:
+        name = f"tecmag_cpmg_power_series_{variant}.tnt"
+        write_tecmag_cpmg_series(out / name, noise, np.random.default_rng([SEED, 20, int(noise)]), name)
+        made.append(name)
     return made
 
 

@@ -107,13 +107,15 @@ def _set_cpmg(td, params, out, source):
     }
 
 
-def _load_tecmag(path, timestamp_ms):
-    """A Tecmag .tnt file as a dataset: see tecmag.py for what is read from it and how."""
-    r = tecmag.load_tnt(path)
+def _load_tecmag(path, timestamp_ms, record=None):
+    """A Tecmag .tnt file as a dataset: see tecmag.py for what is read from it and how. An arrayed CPMG is one dataset per record (``record``, 0-based)."""
+    r = tecmag.load_tnt(path, record)
     params, kind = r["params"], r["kind"]
     ts = r["timestamp"] or (datetime.fromtimestamp(timestamp_ms / 1000) if timestamp_ms is not None else None)
     ts_ms = int(ts.timestamp() * 1000) if ts is not None else timestamp_ms
     source = {"dir": str(path.parent), "file": path.name, "format": "tecmag", "timestamp_ms": ts_ms}
+    if r.get("records"):
+        source["record"] = r["records"]["index"] + 1
     seq = sequences.describe(params)
     seq["kind"] = kind
     seq["reason"] = r["reason"] or ("" if kind else seq["reason"])
@@ -126,7 +128,7 @@ def _load_tecmag(path, timestamp_ms):
         "display": build_display(params, ts, from_file=True),
         "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
         "is_cpmg": False, "kind": kind, "supported": seq["supported"], "analysis": seq["analysis"], "reason": seq["reason"], "raw": None,
-        "source_format": "tecmag", "warnings": list(r["warnings"]),
+        "source_format": "tecmag", "warnings": list(r["warnings"]), "records": r.get("records"),
     }
     if seq["supported"]:
         try:
@@ -145,7 +147,7 @@ def _load_tecmag(path, timestamp_ms):
     return out
 
 
-def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
+def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None):
     """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
 
     timestamp_ms : file modification time in ms since epoch (from the browser's
@@ -158,7 +160,7 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
     if not par_path.is_file():
         tnt = tecmag.find(d)
         if tnt is not None:
-            return _load_tecmag(tnt, timestamp_ms)
+            return _load_tecmag(tnt, timestamp_ms, record)
         raise FileNotFoundError("neither acqu.par (Kea) nor a .tnt file (Tecmag) was found in the selected folder")
     params = read_kea_params(par_path)
 
@@ -206,87 +208,6 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
         _set_cpmg(td, params, out, source)
     if out.get("raw") is not None and out.get("supported"):
         _STATE["raw_out"] = out["raw"]
-    return out
-
-
-def load(dirpath, timestamp_ms=None, fallback_to_mtime=True):
-    """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
-
-    timestamp_ms : file modification time in ms since epoch (from the browser's
-        File.lastModified). If None: with fallback_to_mtime the data file's mtime
-        on disk is used (desktop use); otherwise no timestamp is shown (the browser's
-        in-memory files have no meaningful mtime, e.g. for bundled sample data).
-    """
-    d = Path(dirpath)
-    par_path = d / "acqu.par"
-    if not par_path.is_file():
-        tnt = tecmag.find(d)
-        if tnt is not None:
-            return _load_tecmag(tnt, timestamp_ms)
-        raise FileNotFoundError("neither acqu.par (Kea) nor a .tnt file (Tecmag) was found in the selected folder")
-    params = read_kea_params(par_path)
-
-    header = spec = None
-    data_path = d / "data.2d"
-    if data_path.is_file():
-        header, spec = read_kea_binary(data_path)
-
-    if timestamp_ms is not None:
-        ts = datetime.fromtimestamp(timestamp_ms / 1000)
-    elif fallback_to_mtime and data_path.is_file():
-        ts = datetime.fromtimestamp(data_path.stat().st_mtime)
-    elif fallback_to_mtime and (d / "data2D_Cp.2d").is_file():
-        ts = datetime.fromtimestamp((d / "data2D_Cp.2d").stat().st_mtime)
-    elif fallback_to_mtime and (d / "data.dat").is_file():
-        ts = datetime.fromtimestamp((d / "data.dat").stat().st_mtime)
-    else:
-        ts = None
-
-    seq = sequences.describe(params)
-    if seq["kind"] == "cpmg":
-        is_cpmg, reason = check_cpmg(params, header)
-        seq["supported"] = is_cpmg
-        seq["reason"] = reason
-    else:
-        is_cpmg, reason = False, seq["reason"]
-    _STATE.clear()
-    out = {
-        "version": __version__,
-        "display": build_display(params, ts),
-        "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
-        "is_cpmg": is_cpmg,
-        "kind": seq["kind"], "supported": seq["supported"], "analysis": seq["analysis"],
-        "reason": reason,
-        "raw": None,
-    }
-    source = {"dir": str(d), "timestamp_ms": timestamp_ms}
-    if seq["kind"] in ("t1", "t2d") and seq["supported"]:
-        try:
-            (_load_t1 if seq["kind"] == "t1" else _load_t2d)(d, params, out, source)
-        except (ValueError, OSError, KeyError) as exc:   # a malformed or incomplete folder: say so instead of crashing
-            out.update(supported=False, reason=f"{exc}" if not isinstance(exc, KeyError) else f"acqu.par has no {exc} entry")
-    if is_cpmg:
-        n_pts, n_echo = header["xDim"], header["yDim"]
-        td = spec[: n_pts * n_echo].reshape((n_pts, n_echo), order="F")
-        echo_s = 1e-6 * float(params["echoTime"]) * np.arange(1, n_echo + 1)
-        summed, _phase = echoes.integrate(td)
-        re, im = (td.real, td.imag) if np.iscomplexobj(td) else (td, np.zeros_like(td))
-        _STATE.clear()
-        _STATE.update(td=td, echo_s=echo_s, params=params, source={"dir": str(d), "timestamp_ms": timestamp_ms})
-        nucleus, why = constants.guess_nucleus(params.get("b1Freq"))
-        out["defaults"] = {"nucleus": nucleus, "nucleus_reason": why,
-                           "G": constants.DEFAULT_G_T_PER_M, "zero_fill": constants.DEFAULT_ZERO_FILL,
-                           "z_window_um": list(constants.DEFAULT_Z_WINDOW_UM)}
-        out["raw"] = {
-            "n_points": n_pts,
-            "n_echoes": n_echo,
-            "echo_time_s": _clean(echo_s),
-            "real": _clean(re),   # [point][echo]
-            "imag": _clean(im),
-            "summed": _clean(summed),
-        }
-    if out.get("raw") is not None and out.get("supported"):
-        _STATE["raw_out"] = out["raw"]                    # what the Raw data tab shows; the saved raw-data figure uses it
     return out
 
 
@@ -716,7 +637,8 @@ def save_bundle(opts):
     notes += list((res.get("multiexp") or {}).get("selected", {}).get("warnings", []) or [])
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     src_file = (_STATE.get("source") or {}).get("file")
-    folder = f"processed_{Path(src_file).stem + '_' if src_file else ''}{stamp}"                 # a Tecmag file is one dataset of many in its folder: its name keeps results apart
+    rec = (_STATE.get("source") or {}).get("record")
+    folder = f"processed_{Path(src_file).stem + '_' if src_file else ''}{f'rec{rec}_' if rec else ''}{stamp}"                 # a Tecmag file is one dataset of many in its folder: its name keeps results apart
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         files = []

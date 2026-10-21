@@ -59,17 +59,17 @@ def _log(quiet, *a):
 
 # ── one dataset ──────────────────────────────────────────────────────────────
 
-def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_name=None, command=None, quiet=True, only_kind=None):
+def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_name=None, command=None, quiet=True, only_kind=None, record=None):
     """Process one data folder (acqu.par + data.2d). Returns a summary dict; never raises for bad data (status says why)."""
     t_start = time.perf_counter()
     folder, tnt = _resolve(folder)
     p = P.validate(params) if params is not None else P.defaults()
-    row = {"dataset": rel_name or (tnt.name if tnt else folder.name), "folder": str(folder), "status": "failed", "reason": "", "timestamp_utc": None,
+    row = {"dataset": rel_name or ((tnt.name + (f" [record {int(record) + 1}]" if record is not None else "")) if tnt else folder.name), "folder": str(folder), "status": "failed", "reason": "", "timestamp_utc": None,
            "timestamp_local": None, "mode": p["processing"]["echo"], "output_dir": None, "warnings": []}
     try:
         data2d = tnt or _data_file(folder)
         mtime = data2d.stat().st_mtime if data2d else None
-        info = pipeline.load(tnt or folder, mtime * 1000 if mtime else None, fallback_to_mtime=True)
+        info = pipeline.load(tnt or folder, mtime * 1000 if mtime else None, fallback_to_mtime=True, record=record)
         if info.get("source_format") == "tecmag":                 # Tecmag: the experiment date stored in the file, not the file's time
             mtime = pipeline._STATE["source"]["timestamp_ms"] / 1000 if info["supported"] and pipeline._STATE.get("source") else mtime
             row["warnings"] += info.get("warnings", [])
@@ -77,6 +77,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
             row["timestamp_utc"] = _utc(mtime).isoformat(timespec="seconds")
             row["timestamp_local"] = datetime.datetime.fromtimestamp(mtime).isoformat(timespec="seconds")
         row["kind"] = info["kind"]
+        if info.get("records"):                                       # an arrayed CPMG: this record of the file
+            row.update(file=tnt.name if tnt else None, record=info["records"]["index"] + 1, array_value=info["records"]["labels"][info["records"]["index"]])
         if only_kind and info["kind"] != only_kind:               # a batch uses one sequence's settings; other sequences are left alone
             row.update(status="skipped", reason=f"a {info['kind']} dataset; this batch is {only_kind}")
             return row
@@ -120,7 +122,8 @@ def run_dataset(folder, params=None, *, params_text=None, params_path=None, rel_
 
         # ── write everything ──
         out_cfg = p["output"]
-        base = f"processed_{tnt.stem + '_' if tnt else ''}{_stamp()}"
+        rec = (pipeline._STATE.get("source") or {}).get("record")
+        base = f"processed_{tnt.stem + '_' if tnt else ''}{f'rec{rec}_' if rec else ''}{_stamp()}"
         parent = folder if not out_cfg["directory"] else Path(out_cfg["directory"]) / (rel_name or (tnt.name if tnt else folder.name))
         parent.mkdir(parents=True, exist_ok=True)
         out_dir = _unique_dir(parent, base)
@@ -249,15 +252,20 @@ def run_batch(root, params=None, *, params_text=None, params_path=None, jobs=Non
     root = Path(root)
     p = P.validate(params) if params is not None else P.defaults()
     jobs = jobs or p["batch"]["jobs"]
-    folders = discover(root)
+    found = discover(root)
+    items = []                                                                       # an arrayed CPMG (one echo train per record) is one dataset per record
+    for f in found:
+        n = tecmag.record_count(f) if f.is_file() else 1
+        items += [(f, k) for k in range(n)] if n > 1 else [(f, None)]
     overrides = _read_overrides(p["batch"]["timestamps_file"], root)
-    stamps = {f: _timestamp(f, overrides) for f in folders}
-    order = sorted(folders, key=lambda f: (stamps[f] is None, stamps[f] or datetime.datetime.max.replace(tzinfo=datetime.timezone.utc), str(f)))
+    stamps = {f: _timestamp(f, overrides) for f in found}
+    order = sorted(items, key=lambda it: (stamps[it[0]] is None, stamps[it[0]] or datetime.datetime.max.replace(tzinfo=datetime.timezone.utc), str(it[0]), it[1] or 0))
     _log(quiet, f"{len(order)} datasets under {root}; {jobs} job(s)")
-    t0 = _parse_t0(p["batch"]["t0"], [stamps[f] for f in order])
+    t0 = _parse_t0(p["batch"]["t0"], [stamps[f] for f, _k in order])
     text = params_text if params_text is not None else P.dump_toml(p)
     # every dataset is processed with the same params; per-dataset results go inside each data folder (or the output directory)
-    tasks = [((f, p), {"params_text": text, "params_path": params_path, "rel_name": str(f.relative_to(root)) or f.name, "command": command}) for f in order]
+    tasks = [((f, p), {"params_text": text, "params_path": params_path, "command": command, "record": k,
+                       "rel_name": (str(f.relative_to(root)) or f.name) + ("" if k is None else f" [record {k + 1}]")}) for f, k in order]
     rows = []
     if jobs == 1:
         for i, t in enumerate(tasks, 1):
@@ -270,7 +278,7 @@ def run_batch(root, params=None, *, params_text=None, params_path=None, jobs=Non
             for i, r in enumerate(pool.map(_work, tasks), 1):
                 rows.append(r)
                 _log(quiet, f"[{i}/{len(tasks)}] {r['dataset']}: {r['status']}{(' — ' + r['reason']) if r['reason'] else ''} ({r['seconds']} s)")
-    for r, f in zip(rows, order):
+    for r, (f, _k) in zip(rows, order):
         t = stamps[f]
         r["elapsed_min"] = (t - t0).total_seconds() / 60 if (t and t0) else None
 
@@ -286,7 +294,8 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     fams = [("T2", "cpmg"), ("T1", "t1")]                                   # a folder may mix sequences: separate column families
     has = {lab: any(r.get("kind") == kind for r in rows) for lab, kind in fams}
     maxn = {lab: max((r["result"]["multiexp"]["n"] for r in rows if r.get("kind") == kind and r.get("result") and r["result"]["multiexp"]), default=0) for lab, kind in fams}
-    head = ["dataset", "kind", "timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "excluded_first", "echo_time_us", "seconds", "output_dir"]
+    arrayed = any(r.get("record") for r in rows)
+    head = ["dataset", "kind"] + (["record", "array_value"] if arrayed else []) + ["timestamp_utc", "timestamp_local", "elapsed_min", "status", "reason", "mode", "n_echoes", "excluded_first", "echo_time_us", "seconds", "output_dir"]
     for lab, _ in fams:
         for k in range(1, maxn[lab] + 1):
             head += [f"{lab}_{k}_s", f"{lab}_{k}_se", f"amplitude_{k}" if lab == "T2" else f"T1_amplitude_{k}", f"fraction_{k}" if lab == "T2" else f"T1_fraction_{k}"]
@@ -306,7 +315,7 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
     for r in rows:
         res = r.get("result") or {}
         me, il = res.get("multiexp"), res.get("ilt")
-        line = [r["dataset"], r.get("kind"), r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("exclude_first"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
+        line = [r["dataset"], r.get("kind")] + ([r.get("record"), r.get("array_value")] if arrayed else []) + [r["timestamp_utc"], r["timestamp_local"], r.get("elapsed_min"), r["status"], r["reason"], r["mode"], r.get("n_echoes"), r.get("exclude_first"), r.get("echo_time_us"), r.get("seconds"), r["output_dir"]]
         for lab, kind in fams:
             for k in range(maxn[lab]):
                 c = me["components"][k] if (me and r.get("kind") == kind and k < len(me["components"])) else None
@@ -350,6 +359,11 @@ def write_batch(bdir, rows, p, params_text, params_path, command, root, t0):
         (bdir / "batch_report.pdf").write_bytes(report.build_batch(rows, p, str(root), t0))
     if p["output"]["figures"]:
         from . import figures
+        for stem in sorted({r["file"] for r in rows if r.get("record") and r.get("file")}):                       # an arrayed CPMG: the fits against the array value
+            ok = [r for r in rows if r["status"] == "ok" and r.get("file") == stem and r.get("kind") == "cpmg" and r.get("result") and r["result"]["multiexp"]]
+            if len(ok) >= 2:
+                fig = figures.timeseries_figure(ok, p["output"]["titles"], "T2", x=[r["record"] for r in ok], xlabel="Record", xticklabels=[r["array_value"] for r in ok])
+                figures.save_figure(fig, bdir / f"array_series_{Path(stem).stem}.{p['output']['figure_format']}", p["output"]["figure_format"], p["output"]["figure_dpi"])
         for sym, kind, name in (("T2", "cpmg", "timeseries"), ("T1", "t1", "timeseries_T1")):
             ok = [r for r in rows if r["status"] == "ok" and r.get("kind") == kind and r.get("result") and r["result"]["multiexp"]]
             if len(ok) >= 2:
