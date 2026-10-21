@@ -24,8 +24,9 @@
     <button type="button" role="tab" id="tab-raw" aria-controls="panel-raw" aria-selected="false" disabled><span>2</span> Raw data</button>
     <button type="button" role="tab" id="tab-process" aria-controls="panel-process" aria-selected="false" disabled><span>3</span> Process</button>
     <button type="button" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled><span>4</span> Results</button>
+    <button type="button" role="tab" id="tab-batch" aria-controls="panel-batch" aria-selected="false" disabled><span>5</span> Batch</button>
   </nav>
-  <p id="dataset-banner" class="dataset-banner" role="status" hidden>Dataset: <strong id="dataset-banner-name"></strong></p>
+  <p id="dataset-banner" class="dataset-banner" role="status" hidden>Dataset: <strong id="dataset-banner-name"></strong> <span id="dataset-banner-format" class="badge" hidden></span></p>
 
   <!-- 1 · Load -->
   <section role="tabpanel" id="panel-load" aria-labelledby="tab-load">
@@ -56,6 +57,11 @@
   <!-- 2 · Raw data -->
   <section role="tabpanel" id="panel-raw" aria-labelledby="tab-raw" hidden>
     <h2>Raw data</h2>
+    <div id="record-nav" class="record-nav" hidden>
+      <button type="button" id="rec-prev" class="secondary" aria-label="Previous dataset">‹ Previous</button>
+      <span id="rec-label" role="status"></span>
+      <button type="button" id="rec-next" class="secondary" aria-label="Next dataset">Next ›</button>
+    </div>
     <div class="plots">
       <div class="plot-card">
         <div id="plot-decay"></div>
@@ -270,26 +276,7 @@
 
     </form>
 
-    <section id="batch-card" class="batch-card" hidden>
-      <h3>Batch: the same settings on every dataset</h3>
-      <p class="message warn">Batch mode processes every dataset in the folder with the settings on this tab, one after another, here in your browser. It can take a long time (every dataset is a full run), and the page stays busy while it works. Your data still never leave this computer.</p>
-      <p id="batch-readiness" class="note"></p>
-      <p class="note">Only datasets of the same kind as this one are processed (others are listed as skipped). The T₂ range and other numbers above are used as they are for every dataset.</p>
-      <div class="save-opts">
-        <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
-        <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
-        <label><input type="checkbox" id="batch-report" checked> PDF report for every dataset, and a batch report</label>
-      </div>
-      <div class="save-bar">
-        <button type="button" id="batch-run">Run batch…</button>
-        <button type="button" id="batch-stop" class="secondary" hidden>Stop after this dataset</button>
-        <button type="button" id="batch-export" class="secondary" title="Download params.toml and a script that runs the whole batch on your own computer">Export params + script instead</button>
-        <progress id="batch-progress" max="1" value="0" hidden></progress>
-        <span id="batch-status" class="status" role="status"></span>
-      </div>
-      <ul id="batch-log" class="batch-log"></ul>
-      <div id="batch-fits" class="batch-fits" hidden></div>
-    </section>
+
   </section>
 
   <!-- shared by the Process tab: one Run button -->
@@ -526,6 +513,32 @@ python process_nmr.py DATA_ROOT --batch      # every dataset under a folder</pre
         </div>
       </div>
     </details>
+  </section>
+
+  <!-- 5 · Batch -->
+  <section role="tabpanel" id="panel-batch" aria-labelledby="tab-batch" hidden>
+    <h2>Batch</h2>
+    <p class="note">Run the settings from the Process tab on every dataset that was loaded (a folder of datasets, several files, or the records of an arrayed file). Try the settings on one dataset first.</p>
+    <section id="batch-card" class="batch-card">
+      <h3>Batch: the same settings on every dataset</h3>
+      <p class="message warn">Batch mode processes every dataset in the folder with the settings on the Process tab, one after another, here in your browser. It can take a long time (every dataset is a full run), and the page stays busy while it works. Your data still never leave this computer.</p>
+      <p id="batch-readiness" class="note"></p>
+      <p class="note">Only datasets of the same kind as this one are processed (others are listed as skipped). The T₂ range and other numbers on the Process tab are used as they are for every dataset.</p>
+      <div class="save-opts">
+        <label><input type="checkbox" id="batch-figs" checked> Figures for every dataset</label>
+        <label><input type="checkbox" id="batch-csv" checked> Tables for every dataset</label>
+        <label><input type="checkbox" id="batch-report" checked> PDF report for every dataset, and a batch report</label>
+      </div>
+      <div class="save-bar">
+        <button type="button" id="batch-run">Run batch…</button>
+        <button type="button" id="batch-stop" class="secondary" hidden>Stop after this dataset</button>
+        <button type="button" id="batch-export" class="secondary" title="Download params.toml and a script that runs the whole batch on your own computer">Export params + script instead</button>
+        <progress id="batch-progress" max="1" value="0" hidden></progress>
+        <span id="batch-status" class="status" role="status"></span>
+      </div>
+      <ul id="batch-log" class="batch-log"></ul>
+      <div id="batch-fits" class="batch-fits" hidden></div>
+    </section>
   </section>
 
   <dialog id="batch-dialog" aria-labelledby="batch-dialog-title">

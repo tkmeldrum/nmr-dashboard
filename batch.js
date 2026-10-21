@@ -6,6 +6,7 @@ import { exportOptions, duration } from "./uncertainty.js";
 import { figureStyle } from "./plotstyle.js";
 import { bytes, writeInto } from "./save.js";
 import { makeZip } from "./zip.js";
+import { setTabEnabled } from "./tabs.js";
 
 const run = { active: false, stop: false };
 let reopen = async () => {};
@@ -31,8 +32,9 @@ export function refreshBatch() {
     $("batch-banner-text").textContent = `${n} datasets were found in this folder and are shown one at a time. To process all of them with the same settings, ` +
       "first try your settings on a single dataset (choose it above, then run it on the Process tab), then use Batch at the bottom of the Process tab.";
   }
-  $("batch-card").hidden = n < 2 || !(state.result && state.result.supported);
-  if ($("batch-card").hidden) return;
+  const ready = n >= 2 && !!(state.result && state.result.supported);
+  setTabEnabled("batch", ready);
+  if (!ready) return;
   let now = null;
   try { now = JSON.stringify(readSettings()); } catch (_) { /* invalid settings: the run will say so */ }
   const last = state.lastRun;
