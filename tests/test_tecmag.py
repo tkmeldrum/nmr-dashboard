@@ -5,7 +5,7 @@ from datetime import datetime
 
 import numpy as np
 import pytest
-from sample_data import (CPMG_SNR100, DATA, TECMAG_CPMG_CLEAN, TECMAG_CPMG_SNR100, TECMAG_T1_CLEAN, TECMAG_T1_SNR100, TECMAG_T2D_CLEAN, TECMAG_T2D_SNR100, TRUTH,
+from sample_data import (TECMAG_SERIES_CLEAN, TECMAG_SERIES_SNR30, CPMG_SNR100, DATA, TECMAG_CPMG_CLEAN, TECMAG_CPMG_SNR100, TECMAG_T1_CLEAN, TECMAG_T1_SNR100, TECMAG_T2D_CLEAN, TECMAG_T2D_SNR100, TRUTH,
                          tecmag_variant)
 from tnt_writer import write_tnt
 
@@ -177,11 +177,11 @@ def test_an_unreadable_file_raises_a_message_not_a_crash(tmp_path):
         load(tmp_path / "bad.tnt")
 
 
-def test_a_cpmg_with_several_records_is_declined(tmp_path):
+def test_several_records_without_amplitude_tables_are_numbered(tmp_path):
     p = tmp_path / "c.tnt"
     write_tnt(p, np.ones((3, 256), complex), points_per_window=8, dwell_s=2e-6, sequence_file="CPMG", variables={"nrEchoes": "32", "tE": "100u"}, locv=("tE",))
     r = load(p)
-    assert not r["supported"] and "3 records" in r["reason"]
+    assert r["supported"] and r["records"]["labels"] == ["record 1", "record 2", "record 3"] and r["records"]["description"] == "record number"
 
 
 def test_a_delay_table_that_does_not_match_the_records_is_declined(tmp_path):
@@ -367,3 +367,82 @@ def test_the_new_options_travel_through_the_params_file():
     assert P.from_settings(*P.to_settings(p, [1e-3, 2e-3]))["ft"]["flip_z"] is True
     with pytest.raises(ValueError, match="t1.amplitude"):
         P.validate({"t1": {"amplitude": "second"}})
+
+
+# ── an arrayed CPMG: one .tnt with an echo train per pulse amplitude ───────────
+
+LABELS = [f"90°: {a}%, 180°: {b}%" for a, b in zip((10, 14, 18, 22, 26, 30), (20, 28, 36, 44, 52, 60))]          # what the sample file's tables say
+
+
+def test_an_arrayed_cpmg_is_one_dataset_per_record_named_from_the_amplitude_tables():
+    r = load(TECMAG_SERIES_CLEAN)
+    assert r["supported"] and r["kind"] == "cpmg" and r["records"]["n"] == 6 and r["records"]["labels"] == LABELS and r["records"]["index"] == 0
+    assert "rf182" in r["records"]["description"] and "rf192" in r["records"]["description"] and "%" in r["records"]["description"]
+    assert {x["label"]: x["value"] for x in r["display"]}["Record"] == "1 of 6: " + LABELS[0]
+    for k in (0, 3, 5):
+        rk = load(TECMAG_SERIES_CLEAN, None, False, record=k)
+        assert rk["records"]["index"] == k and rk["params_all"]["record"] == k + 1 and rk["params_all"]["array_label"] == LABELS[k]
+    with pytest.raises(ValueError, match="record 7 does not exist"):
+        load(TECMAG_SERIES_CLEAN, None, False, record=6)
+
+
+def test_a_single_echo_train_has_no_records_and_rejects_a_record_number():
+    assert load(TECMAG_CPMG_SNR100)["records"] is None
+    with pytest.raises(ValueError, match="does not exist"):
+        load(TECMAG_CPMG_SNR100, None, False, record=1)
+
+
+def test_every_record_is_analysed_on_its_own_and_follows_the_nutation_curve():
+    amp = np.sin(np.pi / 2 * np.array([10, 14, 18, 22, 26, 30]) / 20.0)                              # the signal the file was made with
+    t2 = TRUTH["tecmag_cpmg_series"]["T2_s"]
+    first = []
+    for k in range(6):
+        load(TECMAG_SERIES_CLEAN, None, False, record=k)
+        res = process({**CPMG_FIT, "exclude_first": 0})
+        first.append(res["decay"]["y"][0])
+        assert [x["T2"] for x in res["multiexp"]["selected"]["components"]] == pytest.approx(t2, rel=0.01)       # T2 does not depend on the power
+    assert np.array(first) / first[0] == pytest.approx(amp / amp[0], rel=1e-3)
+
+
+def test_the_arrayed_dataset_reaches_provenance_and_the_saved_folder_name():
+    load(TECMAG_SERIES_CLEAN, None, False, record=2)
+    process(CPMG_FIT)
+    from nmrdash.pipeline import save_bundle
+    rec = get_provenance({"dataset": "x"}, {})["record"]
+    assert rec["acquisition"]["record"] == 3 and rec["acquisition"]["records"] == 6 and rec["acquisition"]["array_label"] == LABELS[2]
+    assert save_bundle({"figure_format": "png", "dpi": 50, "csv": True, "figures": False, "report": False})["folder"].startswith("processed_tecmag_cpmg_power_series_clean_rec3_")
+
+
+def test_a_batch_expands_an_arrayed_file_into_its_records_in_order_and_plots_the_array(tmp_path):
+    from nmrdash import runner
+    shutil.copy(TECMAG_SERIES_SNR30, tmp_path / "series.tnt")
+    shutil.copy(TECMAG_CPMG_SNR100, tmp_path / "single.tnt")
+    rows, bdir = runner.run_batch(tmp_path, _fast(), quiet=True)
+    series = [r for r in rows if r.get("file") == "series.tnt"]
+    assert [r["record"] for r in series] == [1, 2, 3, 4, 5, 6] and [r["array_value"] for r in series] == LABELS and all(r["status"] == "ok" for r in rows)
+    assert [r["dataset"] for r in series][:2] == ["series.tnt [record 1]", "series.tnt [record 2]"] and sum(r.get("record") is None for r in rows) == 1
+    import csv as _csv
+    table = list(_csv.DictReader(open(bdir / "batch_summary.csv")))
+    assert "record" in table[0] and "array_value" in table[0] and (bdir / "array_series_series.png").read_bytes()[:4] == b"\x89PNG"
+    outs = sorted(p.name for p in tmp_path.iterdir() if p.name.startswith("processed_series_rec"))
+    assert len(outs) == 6
+
+
+def test_the_page_batch_runs_one_record_of_an_arrayed_file(tmp_path):
+    import base64
+    import os
+    from nmrdash import webbatch
+    settings = {"kind": "cpmg", "echo": "integrate", "multiexp": {"enabled": True, "n": 1, "offset": True, "ci_level": 0.95, "compare": False}, "ilt": {"enabled": False}}
+    webbatch.start({"settings": settings, "options": {"mcmc": {"enabled": False}, "bootstrap": {"enabled": False}}, "style": {}, "kind": "cpmg", "root_name": "demo",
+                    "output": {"figure_format": "png", "dpi": 50, "samples": False}})
+    for i in (1, 0):                                                                      # run out of order: the summary is sorted by record
+        os.makedirs(f"{webbatch.ROOT}/{i}")
+        shutil.copy(TECMAG_SERIES_CLEAN, f"{webbatch.ROOT}/{i}/{TECMAG_SERIES_CLEAN.name}")
+        out = webbatch.run_one({"i": i, "label": f"series · {LABELS[i]}", "timestamp_ms": 1_700_000_000_000, "record": i})
+        assert out["status"] == "ok" and out["folder"].startswith(f"processed_{TECMAG_SERIES_CLEAN.stem}_rec{i + 1}_")
+        assert json.loads(base64.b64decode(out["files"]["provenance.json"]))["acquisition"]["record"] == i + 1
+    fin = webbatch.finish()
+    import csv as _csv
+    import io
+    table = list(_csv.DictReader(io.StringIO(base64.b64decode(fin["files"]["batch_summary.csv"]).decode())))
+    assert [r["record"] for r in table] == ["1", "2"] and table[0]["array_value"] == LABELS[0]

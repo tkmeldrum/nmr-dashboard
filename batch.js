@@ -88,7 +88,7 @@ async function runBatch() {
       try {
         const { files, timestampMs } = await state.readDatasetFiles(ds);
         await rpc("stage_dataset", i, files);
-        out = await rpc("batch_run_one", { i, label: ds.label, timestamp_ms: timestampMs });
+        out = await rpc("batch_run_one", { i, label: ds.label, timestamp_ms: timestampMs, record: ds.record ?? null });
       } catch (err) {
         out = { status: "failed", reason: err.message, files: {}, folder: null };
       }
@@ -97,7 +97,7 @@ async function runBatch() {
       else log(`${out.status === "skipped" ? "–" : "✗"} ${ds.label}: ${out.status}${out.reason ? " — " + out.reason : ""}`, out.status === "failed" ? "bad" : "");
       if (out.folder) {
         if (folderMode) await writeInto(ds.dir.handle, out.folder, out.files);
-        else for (const [name, b64] of Object.entries(out.files)) zipEntries.push({ path: `${ds.label}/${out.folder}/${name}`, bytes: bytes(b64) });
+        else for (const [name, b64] of Object.entries(out.files)) zipEntries.push({ path: `${ds.label.replace(/[^\w.\- /]+/g, "_")}/${out.folder}/${name}`, bytes: bytes(b64) });
       }
       bar.value = i + 1;
     }

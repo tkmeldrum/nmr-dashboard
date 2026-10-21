@@ -37,6 +37,7 @@ const onWorkerMessage = (e) => {
       msg.className = "message warn"; msg.hidden = false;
       return;
     }
+    expandRecords(m.result);
     showResult(m.result);
     setBusy(null);
   } else if (m.type === "reply") {
@@ -81,11 +82,11 @@ function restartPython() {
 startWorker();
 
 function sendLoad(payload) {
-  state.lastPayload = { files: Object.fromEntries(Object.entries(payload.files).map(([k, v]) => [k, v.slice(0)])), timestampMs: payload.timestampMs };   // the transfer below empties the originals
+  state.lastPayload = { files: Object.fromEntries(Object.entries(payload.files).map(([k, v]) => [k, v.slice(0)])), timestampMs: payload.timestampMs, record: payload.record };   // the transfer below empties the originals
   $("status").textContent = "Reading data…";
   setBusy("Reading and phasing the data…");
   worker.postMessage(
-    { type: "load", files: payload.files, timestampMs: payload.timestampMs },
+    { type: "load", files: payload.files, timestampMs: payload.timestampMs, record: payload.record },
     Object.values(payload.files)
   );
 }
@@ -238,9 +239,24 @@ async function openDataset(i) {
   state.dataDir = ds.dir.handle || null;                 // where "Save to the data folder" writes (only with a real folder handle)
   document.dispatchEvent(new Event("datasetchange"));
   refreshBatch();
-  const payload = { files, timestampMs };
+  const payload = { files, timestampMs, record: ds.record };
   if (state.ready) sendLoad(payload);
   else { state.pending = payload; $("status").textContent = "Python is still loading; your data will open as soon as it's ready."; }
+}
+
+// A Tecmag file with several echo trains (an arrayed CPMG, e.g. one per pulse power) is one dataset per record: once Python has read the file
+// (record 1 is open), the dataset list is replaced by one entry per record, named by what the sequence says about each.
+function expandRecords(r) {
+  const i = state.datasetIndex, ds = datasets[i];
+  if (!ds || !ds.tnt || ds.record !== undefined || !r.records || r.records.n < 2) return;
+  datasets.splice(i, 1, ...r.records.labels.map((label, k) => ({ ...ds, record: k, label: `${ds.label} · ${label}` })));
+  state.datasets = datasets;
+  const sel = $("dataset-select");
+  sel.replaceChildren(...datasets.map((d, j) => Object.assign(document.createElement("option"), { value: j, textContent: d.label })));
+  sel.value = i;
+  $("chooser").hidden = false;
+  setDatasetName(datasets[i].label);
+  refreshBatch();
 }
 
 $("dataset-select").addEventListener("change", (e) => openDataset(+e.target.value));
@@ -278,6 +294,18 @@ $("sample-select").addEventListener("change", async (e) => {
   state.dirHandle = state.dataDir = null;
   document.dispatchEvent(new Event("datasetchange"));
   try {
+    const tntName = s.files.find((f) => /\.tnt$/i.test(f));
+    if (tntName) {
+      const r = await fetch(`${s.path}/${tntName}`);
+      if (!r.ok) throw new Error(`${tntName}: HTTP ${r.status}`);
+      const file = new File([await r.arrayBuffer()], tntName);
+      const entry = { name: tntName, getFile: async () => file };
+      datasets = state.datasets = [{ label: "sample: " + s.label, dir: { name: "samples" }, files: [entry], tnt: entry }];
+      state.dirHandle = state.dataDir = null;
+      $("dataset-select").replaceChildren(Object.assign(document.createElement("option"), { value: 0, textContent: datasets[0].label }));
+      $("chooser").hidden = true;
+      return openDataset(0);
+    }
     const files = {};
     for (const name of s.files.filter((f) => f !== "data.1d")) {
       const r = await fetch(`${s.path}/${name}`);

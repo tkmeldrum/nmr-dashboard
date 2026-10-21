@@ -596,11 +596,11 @@ def mcmc_trace_figure(mcmc, titles=True):
     return fig
 
 
-def timeseries_figure(rows, titles=True, symbol="T2"):
+def timeseries_figure(rows, titles=True, symbol="T2", x=None, xlabel=None, xticklabels=None):
     """Batch: each multi-exponential time constant (T2 or T1) and the total amplitude against elapsed time (or dataset number)."""
     plt = _plt()
-    use_t = all(r.get("elapsed_min") is not None for r in rows)
-    x = np.array([r["elapsed_min"] if use_t else i for i, r in enumerate(rows)], float)
+    use_t = x is None and all(r.get("elapsed_min") is not None for r in rows)
+    x = np.array(x if x is not None else [r["elapsed_min"] if use_t else i for i, r in enumerate(rows)], float)
     n = max(r["result"]["multiexp"]["n"] for r in rows)
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(7.2, 6), sharex=True)
     for k in range(n):
@@ -615,9 +615,12 @@ def timeseries_figure(rows, titles=True, symbol="T2"):
     a2.plot(x, [r["result"]["multiexp"]["total_amplitude"] for r in rows], "o-", ms=4, lw=1, color=_BLUE)
     a2.set_ylabel("Total amplitude (arb.)")
     _sci_axis(a2)
-    a2.set_xlabel("Elapsed time (min)" if use_t else "Dataset number")
+    a2.set_xlabel(xlabel or ("Elapsed time (min)" if use_t else "Dataset number"))
+    if xticklabels is not None:
+        a2.set_xticks(x)
+        a2.set_xticklabels(xticklabels, rotation=30, ha="right", fontsize=8)
     if titles:
-        a1.set_title("Multi-exponential fit vs time")
+        a1.set_title("Multi-exponential fit vs " + ("array" if xticklabels is not None else "time"))
     fig.tight_layout()
     return fig
 

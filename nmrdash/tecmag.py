@@ -135,8 +135,45 @@ def _timestamp(tnt):
     return dt, None
 
 
-def load_tnt(path):
+def _array_labels(tnt, n):
+    """How to name the n records of an arrayed CPMG: from the pulse-amplitude tables of the sequence (a linear scale of 0-100, i.e. percent amplitude), else by number.
+
+    Returns (labels, description): e.g. (['90°: 20%, 180°: 40%', ...], 'pulse amplitude (%)'). The table of each amplitude cell of the sequence is used when it holds one value
+    per record, the first as the 90° pulse and the second as the 180° pulse (a CPMG's order); the user remains responsible for knowing which record is which.
+    """
+    cols = []
+    for name, cells in tnt.pseq["rows"].items():
+        if "ampl" not in name.lower():
+            continue
+        for cell in cells:
+            for kind, tname in cell["tables"].items():
+                t = tnt.table(tname) if kind != "phase" else None
+                vals = [parse_value(v) for v in t["values"]] if t else []
+                if len(vals) == n and all(isinstance(v, float) and v == v for v in vals):
+                    cols.append((tname, vals))
+    if not cols:
+        return [f"record {k + 1}" for k in range(n)], "record number"
+    names = ["90°", "180°"] if len(cols) == 2 else ["pulse"] if len(cols) == 1 else [f"table {c[0]}" for c in cols]
+    labels = [", ".join(f"{nm}: {c[1][k]:g}%" for nm, c in zip(names, cols)) for k in range(n)]
+    return labels, "pulse amplitude (%) " + " / ".join(f"{nm} {c[0]}" for nm, c in zip(names, cols))
+
+
+def record_count(path):
+    """How many datasets a .tnt file holds for the batch: the records of an arrayed CPMG, else 1 (cheap for files that cannot be arrayed: only the header is read)."""
+    try:
+        if read_header(path)["points"][1] <= 1:
+            return 1
+        r = load_tnt(path)
+    except (TntError, ValueError):
+        return 1
+    return (r.get("records") or {}).get("n", 1)
+
+
+def load_tnt(path, record=None):
     """Read a .tnt file as the dashboard needs it.
+
+    An arrayed CPMG (one echo train per record, e.g. one per pulse power) gives one dataset per record: ``record`` (0-based; default the first) picks which, and the result's
+    ``records`` ({n, labels, index, description}) names them all.
 
     Returns a dict: ``kind`` ('cpmg', 't1', 't2d' or None), ``reason`` (why not, when None), ``params`` (Kea vocabulary), ``warnings`` (list of str),
     ``timestamp`` (datetime or None), ``file`` (name), and by kind: ``td`` (CPMG: points × echoes, complex), ``t1`` ({'t', 'y'}), ``t2d`` ({'raw', 'tau_s',
@@ -181,10 +218,15 @@ def load_tnt(path):
     pw_s = (params.get("pulseLength") or 0.0) * 1e-6
 
     if kind == "cpmg":
-        if len(records) != 1:
-            out["reason"] = f"this file holds {len(records)} records; CPMG analysis takes one echo train"
-            return out
-        td = _td(records[0], layout)
+        n_rec = len(records)
+        k = 0 if record is None else int(record)
+        if not 0 <= k < n_rec:
+            raise ValueError(f"record {k + 1} does not exist: the file holds {n_rec}")
+        if n_rec > 1:
+            labels, desc = _array_labels(tnt, n_rec)
+            out["records"] = {"n": n_rec, "labels": labels, "index": k, "description": desc}
+            params.update(record=k + 1, records=n_rec, array_label=labels[k])
+        td = _td(records[k], layout)
         out["td"] = td
         note = _centre_note(td)
         if note:

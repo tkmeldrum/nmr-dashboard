@@ -13,7 +13,7 @@ Live site: https://dashboard.meldrumlab.org/ (use **Explore test data** to try i
 
 **Tecmag data (`.tnt`).** `nmrdash` reads Tecmag files too (CPMG, T1 saturation recovery, stimulated-echo T₂–D), using the sequence's own variables and delay tables, so the
 same analyses apply. Drop a folder with `.tnt` files (each file is one dataset; a batch can mix Kea folders and `.tnt` files) or drop `.tnt` files onto the drop zone directly (results then come as a .zip);
-the command-line tool takes `.tnt` files and folders too. The gradient is not in a Tecmag file: `ft.G` and `t2d.gradient` default to `"auto"`, which means 6.59 T/m for Tecmag data
+a `.tnt` file with several echo trains (an arrayed CPMG, e.g. one per pulse power) is one dataset per record, named from the sequence's amplitude tables, and a batch gives a table and a plot against the array; the command-line tool takes `.tnt` files and folders too. The gradient is not in a Tecmag file: `ft.G` and `t2d.gradient` default to `"auto"`, which means 6.59 T/m for Tecmag data
 and 23.67 T/m for Kea data (set a number to override). The experiment date stored in the file is the time stamp. What is read and the assumptions made are in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §9.
 

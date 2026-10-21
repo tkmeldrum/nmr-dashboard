@@ -41,6 +41,8 @@ def tecmag_variant(path, kind, noisy=True, **override):
     return path
 
 
+TECMAG_SERIES_CLEAN, TECMAG_SERIES_SNR30 = DATA / "tecmag_cpmg_power_series_clean.tnt", DATA / "tecmag_cpmg_power_series_snr30.tnt"
+
 # every kind at signal-to-noise ratios of 30 and 10 (SNR100 is the one most tests use); see tools/make_synthetic_data.py for how the SNR is defined
 SNR_LEVELS = (100, 30, 10)
 KEA = {(kind, snr): DATA / f"kea_{kind}_snr{snr}" for kind in ("cpmg", "t1", "t2d") for snr in SNR_LEVELS}
