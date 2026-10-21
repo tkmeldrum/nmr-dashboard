@@ -98,13 +98,22 @@ def height(b, scale=1.0):
 MIN_FIT = 0.55           # a figure may shrink to this fraction of its size to fill the rest of a page instead of leaving it empty
 
 
+def _keep_height(blocks, i, scale):
+    """The room the blocks that must stay with block i need: a heading stays with what follows it, and so does a note marked keep_next (a note and its table are never parted)."""
+    total, j = 0.0, i
+    while j + 1 < len(blocks) and (blocks[j]["type"] == "h2" or blocks[j].get("keep_next")):
+        nxt = blocks[j + 1]
+        total += height(nxt, scale) * (MIN_FIT if nxt["type"] == "image" else 1.0)
+        j += 1
+    return total
+
+
 def paginate(blocks, scale=1.0):
     """Flow the blocks onto pages. A heading is never left at the bottom of a page; tables and images are not split (a figure may shrink to fit the space left)."""
     pages, cur, used = [], [], 0.0
     for i, b in enumerate(blocks):
         h = height(b, scale)
-        nxt = blocks[i + 1] if b["type"] == "h2" and i + 1 < len(blocks) else None
-        keep = (height(nxt, scale) * (MIN_FIT if nxt["type"] == "image" else 1.0)) if nxt else 0.0
+        keep = _keep_height(blocks, i, scale)
         extra = (_lh(SIZES["note"]) if b.get("caption") else 0) + 0.1 if b["type"] == "image" else 0.0       # caption and padding do not shrink with the figure
         if b["type"] == "image" and cur and used + h > CONTENT_H and CONTENT_H - used - extra >= MIN_FIT * (h - extra):
             b = dict(b, fit=(CONTENT_H - used - extra - 0.02) / (h - extra))                                 # shrink into the space that is left
@@ -522,6 +531,63 @@ def _row_result(r):
     return "–"
 
 
+ROWS_PER_TABLE = 24          # a long table is cut into pieces, because a table is never split across pages
+
+
+def _pm(v, se):
+    """'value ± SE' in scientific notation for a table cell; just the value when the fit gave no usable uncertainty."""
+    return F.pair(v, se, sci=True) if F.ok_unc(v, se) else f"{F.fmt_sci(v)} (± n/d)"
+
+
+def _run_label(r):
+    return r["dataset"] + (f"\n{r['array_value']}" if r.get("array_value") else "")
+
+
+def _fit_tables(ok):
+    """Per-run fit parameters for a batch: one table per kind of analysis (CPMG T₂, T1 T₁, T₂–D populations), a row per run, with the uncertainties the fit reported."""
+    blocks = []
+    for kind, sym, name in (("cpmg", "T₂", "Multi-exponential T₂ fits"), ("t1", "T₁", "Saturation-recovery T₁ fits")):
+        sel = [r for r in ok if r.get("kind") == kind and (r.get("result") or {}).get("multiexp")]
+        if not sel:
+            continue
+        n = min(3, max(len(r["result"]["multiexp"]["components"]) for r in sel))
+        with_amp = n <= 2
+        with_chi = any(r["result"]["multiexp"].get("chi2_red") is not None for r in sel)
+        head = ["run"] + [c for k in range(1, n + 1) for c in ([f"{sym},{k} (s)"] + (["amplitude"] if with_amp else []) + ["fraction"])] + ["offset"] + ([] if with_amp else ["total amplitude"]) + (["χ²ᵣ"] if with_chi else [])         # with the amplitudes shown, their sum is the total
+        widths = [1.3] + ([1.2] + ([1.0] if with_amp else []) + [0.6]) * n + [0.85] + ([] if with_amp else [0.9]) + ([0.5] if with_chi else [])
+        trows = []
+        for r in sel:
+            me = r["result"]["multiexp"]
+            row = [_run_label(r)]
+            for k in range(n):
+                c = me["components"][k] if k < len(me["components"]) else None
+                row += ([_pm(c["T2"], c["T2_se"])] + ([_pm(c["A"], c.get("A_se"))] if with_amp else []) + [F.pct(c["fraction"], 0)]) if c else ["–"] * (2 + with_amp)
+            row += ["–" if me.get("offset") is None else F.fmt_sci(me["offset"])] + ([] if with_amp else [F.fmt_sci(me["total_amplitude"])]) + ([F.fmt(me["chi2_red"]) if me.get("chi2_red") is not None else "–"] if with_chi else [])
+            trows.append(row)
+        sc = CONTENT_W / sum(widths)
+        blocks.append(dict(para(f"{name} ({len(sel)} runs): each component with the uncertainty the fit reported, then the constant offset (and, for three components, the total amplitude: with fewer, it is the sum of the amplitudes shown).", size="note", color=MUTED), keep_next=True))
+        for i in range(0, len(trows), ROWS_PER_TABLE):
+            blocks.append(table(head, trows[i:i + ROWS_PER_TABLE], [w * sc for w in widths], size="note"))
+    sel = [r for r in ok if r.get("kind") == "t2d" and ((r.get("result") or {}).get("t2d") or {}).get("model")]
+    if sel:
+        head = ["run", "K", "population", "T₂ (s)", "D (m²/s)", "fraction", "χ²/point", "note"]
+        widths = [1.5, 0.35, 0.7, 1.15, 1.15, 0.8, 0.6, 0.9]
+        trows = []
+        for r in sel:
+            m = r["result"]["t2d"]["model"]
+            for i, p in enumerate(m["populations"]):
+                note = "; ".join(x for x in (f"D at the {p['D_at_limit']} limit" if p.get("D_at_limit") else "", f"T₂ at the {p['T2_at_limit']} limit" if p.get("T2_at_limit") else "",
+                                              "" if p.get("supported", True) else "not supported") if x)
+                trows.append([_run_label(r) if i == 0 else "", str(m["K"]) if i == 0 else "", str(i + 1), _pm(p["T2"], p.get("T2_se")), _pm(p["D"], p.get("D_se")),
+                              (F.pct(p["fraction"], 0) if p.get("fraction_se") is None else f"{F.pct(p['fraction'], 0)} ± {F.pct(p['fraction_se'], 0)}"),
+                              F.fmt(m["chi2_per_point"]) if i == 0 else "", note])
+        sc = CONTENT_W / sum(widths)
+        blocks.append(dict(para(f"T₂–D few-population fits ({len(sel)} runs): one row per population.", size="note", color=MUTED), keep_next=True))
+        for i in range(0, len(trows), ROWS_PER_TABLE):
+            blocks.append(table(head, trows[i:i + ROWS_PER_TABLE], [w * sc for w in widths], size="note"))
+    return ([h2("Fit parameters")] + blocks) if blocks else []
+
+
 def build_batch(rows, params, root_name, t0=None, params_text=None):
     """A report for a whole batch: what was run, one line per dataset, the time series, and a note on how to read them."""
     ok = [r for r in rows if r["status"] == "ok"]
@@ -532,7 +598,9 @@ def build_batch(rows, params, root_name, t0=None, params_text=None):
                       ["Time zero", t0.isoformat() if t0 else "none", "Tool", f"nmrdash {__import__('nmrdash').__version__}"]], [0.9, 3.0, 0.9, 2.4], size="note"),
          h2("Datasets")]
     trows = [[r["dataset"], (r.get("timestamp_utc") or "–")[:19].replace("T", " "), "–" if r.get("elapsed_min") is None else f"{r['elapsed_min']:.1f}", r["status"], _row_result(r)] for r in rows]
-    B.append(table(["dataset", "measured (UTC)", "min", "status", "main result"], trows, [1.5, 1.3, 0.5, 0.7, 3.2], size="note"))
+    for i in range(0, len(trows), ROWS_PER_TABLE):
+        B.append(table(["dataset", "measured (UTC)", "min", "status", "main result"], trows[i:i + ROWS_PER_TABLE], [1.5, 1.3, 0.5, 0.7, 3.2], size="note"))
+    B += _fit_tables(ok)
     figs = []
     for sym, kind, name in (("T2", "cpmg", "decay"), ("T1", "t1", "recovery")):
         sel = [r for r in ok if r.get("kind") == kind and (r.get("result") or {}).get("multiexp")]

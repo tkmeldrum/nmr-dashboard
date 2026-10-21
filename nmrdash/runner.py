@@ -188,7 +188,7 @@ def _key_results(res, mcmc, boot):
             out["t2d"]["model"] = {"K": m["K"], "recommended_k": m["recommended_k"], "chi2_per_point": m["chi2_per_point"],
                                    "populations": [{k: p[k] for k in ("T2", "T2_se", "D", "D_se", "A", "fraction", "fraction_se", "supported", "D_at_limit", "T2_at_limit")} for p in m["populations"]]}
     if me:
-        out["multiexp"] = {"n": me["n"], "components": [{"T2": c["T2"], "T2_se": c["T2_se"], "A": c["A"], "A_se": c["A_se"], "fraction": c["fraction"]} for c in me["components"]],
+        out["multiexp"] = {"n": me["n"], "components": [{"T2": c["T2"], "T2_se": c["T2_se"], "A": c["A"], "A_se": c["A_se"], "fraction": c["fraction"], "fraction_se": c.get("fraction_se")} for c in me["components"]],
                            "offset": me["offset_value"], "mean_T2": me["mean_T2"], "mean_T2_se": me["mean_T2_se"], "total_amplitude": me["total_amplitude"],
                            "chi2_red": me["chi2_red"], "resid_sd_over_amp": me["resid_sd_over_amp"], "rss": me["rss"], "mse": me["mse"],
                            "recommended_n": (res["multiexp"].get("recommended_n"))}
