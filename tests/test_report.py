@@ -230,3 +230,56 @@ def test_the_page_batch_carries_the_report_option(tmp_path, monkeypatch):
         out = webbatch.run_one({"i": i, "label": f"d{i}", "timestamp_ms": ts})
         assert "report.pdf" in out["files"]
     assert "batch_report.pdf" in webbatch.finish()["files"]
+
+
+# ── the batch report's table of per-run fit parameters ────────────────────────
+
+def _cells(blocks):
+    return [[c for r in b["rows"] for c in r] for b in blocks if b["type"] == "table"]
+
+
+def test_the_batch_report_has_a_per_run_fit_parameter_table_for_each_kind():
+    comp = lambda T, f, se=1e-4: {"T2": T, "T2_se": se, "A": 100.0 * f, "A_se": 3.0, "fraction": f, "fraction_se": 0.02}
+    me = lambda n, comps: {"n": n, "components": comps, "offset": 1.5, "total_amplitude": 100.0, "chi2_red": 1.02}
+    rows = [{"dataset": "s.tnt [record 1]", "array_value": "90°: 10, 180°: 20", "status": "ok", "kind": "cpmg", "timestamp_utc": "2026-10-01T09:00:00+00:00", "elapsed_min": 0.0, "warnings": [],
+             "result": {"multiexp": me(2, [comp(0.005, 0.4), comp(0.02, 0.6)]), "t2d": None}},
+            {"dataset": "s.tnt [record 2]", "array_value": "90°: 14, 180°: 28", "status": "ok", "kind": "cpmg", "timestamp_utc": "2026-10-01T09:00:00+00:00", "elapsed_min": 0.0, "warnings": [],
+             "result": {"multiexp": me(2, [comp(0.0051, 0.41, None), comp(0.021, 0.59)]), "t2d": None}},
+            {"dataset": "t1.tnt", "status": "ok", "kind": "t1", "timestamp_utc": None, "elapsed_min": None, "warnings": [],
+             "result": {"multiexp": {**me(1, [comp(0.8, 1.0, 0.01)]), "chi2_red": None}, "t2d": None}},
+            {"dataset": "d.tnt", "status": "ok", "kind": "t2d", "timestamp_utc": None, "elapsed_min": None, "warnings": [],
+             "result": {"multiexp": None, "t2d": {"peaks": [], "model": {"K": 2, "chi2_per_point": 1.01, "populations": [
+                 {"T2": 0.003, "T2_se": 1e-4, "D": 1.5e-9, "D_se": 5e-11, "fraction": 0.4, "fraction_se": 0.01, "supported": True},
+                 {"T2": 0.012, "T2_se": 2e-4, "D": 3e-10, "D_se": None, "fraction": 0.6, "fraction_se": 0.01, "supported": True, "D_at_limit": "low"}]}}}},
+            {"dataset": "skipped", "status": "skipped", "kind": None, "reason": "no", "timestamp_utc": None, "elapsed_min": None}]
+    blocks = report._fit_tables([r for r in rows if r["status"] == "ok"])
+    assert blocks[0]["text"] == "Fit parameters"
+    cpmg, t1, t2d = [b for b in blocks if b["type"] == "table"]
+    assert cpmg["header"][:4] == ["run", "T₂,1 (s)", "amplitude", "fraction"] and cpmg["header"][-2:] == ["offset", "χ²ᵣ"] and len(cpmg["rows"]) == 2
+    assert cpmg["rows"][0][0] == "s.tnt [record 1]\n90°: 10, 180°: 20" and "±" in cpmg["rows"][0][1] and cpmg["rows"][0][3] == "40%" and "n/d" in cpmg["rows"][1][1]      # no uncertainty: said so
+    assert t1["header"][1] == "T₁,1 (s)" and "χ²ᵣ" not in t1["header"] and t1["header"][-1] == "offset" and len(t1["rows"]) == 1                                                 # recovery data have no noise channel, so no χ²
+    assert t2d["header"][:3] == ["run", "K", "population"] and len(t2d["rows"]) == 2 and t2d["rows"][0][0] == "d.tnt" and t2d["rows"][1][0] == "" and "D at the low limit" in t2d["rows"][1][-1]
+    assert "40% ± 1%" in t2d["rows"][0][5]
+    assert report.build_batch(rows, P.defaults(), "demo")[:5] == b"%PDF-"
+
+
+def test_a_long_batch_table_is_cut_into_pieces_that_fit_a_page():
+    comp = {"T2": 0.01, "T2_se": 1e-4, "A": 1.0, "A_se": 0.1, "fraction": 1.0, "fraction_se": 0.0}
+    rows = [{"dataset": f"run{i}", "status": "ok", "kind": "cpmg", "timestamp_utc": None, "elapsed_min": None, "warnings": [],
+             "result": {"multiexp": {"n": 1, "components": [comp], "offset": None, "total_amplitude": 1.0, "chi2_red": 1.0}, "t2d": None}} for i in range(60)]
+    tables = [b for b in report._fit_tables(rows) if b["type"] == "table"]
+    assert len(tables) == 3 and sum(len(b["rows"]) for b in tables) == 60 and max(len(b["rows"]) for b in tables) <= report.ROWS_PER_TABLE
+    assert all(report.height(b) < report.CONTENT_H for b in tables)
+    assert len(report.paginate(tables)[0]) >= 1                                          # and they flow onto pages
+
+
+def test_the_arrayed_batch_report_carries_the_fit_table(tmp_path):
+    shutil.copy(DATA / "tecmag_cpmg_power_series_snr30.tnt", tmp_path / "series.tnt")
+    p = P.defaults()
+    p["multiexp"]["compare"] = False
+    p["ilt"]["max_grid_points"] = 40
+    rows, bdir = runner.run_batch(tmp_path, p, quiet=True)
+    blocks = report._fit_tables([r for r in rows if r["status"] == "ok"])
+    (cpmg,) = [b for b in blocks if b["type"] == "table"]
+    assert len(cpmg["rows"]) == 6 and [r[0].split("\n")[1] for r in cpmg["rows"]][0] == "90°: 10, 180°: 20"
+    assert (bdir / "batch_report.pdf").read_bytes()[:5] == b"%PDF-"
