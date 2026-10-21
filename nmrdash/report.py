@@ -540,12 +540,14 @@ def _pm(v, se):
 
 
 def _run_label(r):
-    return r["dataset"] + (f"\n{r['array_value']}" if r.get("array_value") else "")
+    av = r.get("array_value")
+    return r["dataset"] + (f"\n{av}" if av and av not in r["dataset"] else "")                # the page's labels already carry the array value; the script's do not
 
 
-def _fit_tables(ok):
-    """Per-run fit parameters for a batch: one table per kind of analysis (CPMG T₂, T1 T₁, T₂–D populations), a row per run, with the uncertainties the fit reported."""
-    blocks = []
+def fit_table_data(ok):
+    """Per-run fit parameters for a batch, as plain data: [{title, note, header, rows}], one table per kind of analysis (CPMG T₂, T1 T₁, T₂–D populations), a row per run
+    (a row per population for T₂–D), with the uncertainties the fit reported. The PDF report and the page's batch screen both show this."""
+    out = []
     for kind, sym, name in (("cpmg", "T₂", "Multi-exponential T₂ fits"), ("t1", "T₁", "Saturation-recovery T₁ fits")):
         sel = [r for r in ok if r.get("kind") == kind and (r.get("result") or {}).get("multiexp")]
         if not sel:
@@ -564,14 +566,11 @@ def _fit_tables(ok):
                 row += ([_pm(c["T2"], c["T2_se"])] + ([_pm(c["A"], c.get("A_se"))] if with_amp else []) + [F.pct(c["fraction"], 0)]) if c else ["–"] * (2 + with_amp)
             row += ["–" if me.get("offset") is None else F.fmt_sci(me["offset"])] + ([] if with_amp else [F.fmt_sci(me["total_amplitude"])]) + ([F.fmt(me["chi2_red"]) if me.get("chi2_red") is not None else "–"] if with_chi else [])
             trows.append(row)
-        sc = CONTENT_W / sum(widths)
-        blocks.append(dict(para(f"{name} ({len(sel)} runs): each component with the uncertainty the fit reported, then the constant offset (and, for three components, the total amplitude: with fewer, it is the sum of the amplitudes shown).", size="note", color=MUTED), keep_next=True))
-        for i in range(0, len(trows), ROWS_PER_TABLE):
-            blocks.append(table(head, trows[i:i + ROWS_PER_TABLE], [w * sc for w in widths], size="note"))
+        out.append({"title": f"{name} ({len(sel)} runs)", "header": head, "rows": trows, "widths": widths,
+                    "note": "each component with the uncertainty the fit reported, then the constant offset (and, for three components, the total amplitude: with fewer, it is the sum of the amplitudes shown)."})
     sel = [r for r in ok if r.get("kind") == "t2d" and ((r.get("result") or {}).get("t2d") or {}).get("model")]
     if sel:
         head = ["run", "K", "population", "T₂ (s)", "D (m²/s)", "fraction", "χ²/point", "note"]
-        widths = [1.5, 0.35, 0.7, 1.15, 1.15, 0.8, 0.6, 0.9]
         trows = []
         for r in sel:
             m = r["result"]["t2d"]["model"]
@@ -581,10 +580,19 @@ def _fit_tables(ok):
                 trows.append([_run_label(r) if i == 0 else "", str(m["K"]) if i == 0 else "", str(i + 1), _pm(p["T2"], p.get("T2_se")), _pm(p["D"], p.get("D_se")),
                               (F.pct(p["fraction"], 0) if p.get("fraction_se") is None else f"{F.pct(p['fraction'], 0)} ± {F.pct(p['fraction_se'], 0)}"),
                               F.fmt(m["chi2_per_point"]) if i == 0 else "", note])
-        sc = CONTENT_W / sum(widths)
-        blocks.append(dict(para(f"T₂–D few-population fits ({len(sel)} runs): one row per population.", size="note", color=MUTED), keep_next=True))
-        for i in range(0, len(trows), ROWS_PER_TABLE):
-            blocks.append(table(head, trows[i:i + ROWS_PER_TABLE], [w * sc for w in widths], size="note"))
+        out.append({"title": f"T₂–D few-population fits ({len(sel)} runs)", "header": head, "rows": trows, "widths": [1.5, 0.35, 0.7, 1.15, 1.15, 0.8, 0.6, 0.9],
+                    "note": "one row per population."})
+    return out
+
+
+def _fit_tables(ok):
+    """The fit parameter tables as report blocks (a heading, then for each table a note kept with it, cut into pieces that fit a page)."""
+    blocks = []
+    for t in fit_table_data(ok):
+        sc = CONTENT_W / sum(t["widths"])
+        blocks.append(dict(para(f"{t['title']}: {t['note']}", size="note", color=MUTED), keep_next=True))
+        for i in range(0, len(t["rows"]), ROWS_PER_TABLE):
+            blocks.append(table(t["header"], t["rows"][i:i + ROWS_PER_TABLE], [w * sc for w in t["widths"]], size="note"))
     return ([h2("Fit parameters")] + blocks) if blocks else []
 
 

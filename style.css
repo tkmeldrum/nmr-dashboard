@@ -76,6 +76,13 @@ h3 { margin:1.75rem 0 .5rem; } h4 { margin:1.25rem 0 .4rem; }
 .plot-card > div.tall { height:30rem; }
 #plot-spectrum, #plot-lcurve { height:22rem; }
 .table-wrap { overflow-x:auto; max-width:60rem; }
+.batch-fits { margin-top:1rem; }
+.batch-fits h4 { margin:1rem 0 .2rem; }
+.batch-fits .table-wrap { max-width:none; }
+.batch-fits table { width:100%; border-collapse:collapse; font-size:.88rem; }
+.batch-fits th, .batch-fits td { padding:.25rem .6rem; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+.batch-fits td:first-child { white-space:pre-line; min-width:12rem; }
+.batch-fits td:not(:first-child), .batch-fits th { white-space:nowrap; }
 table.grid { width:auto; min-width:24rem; }
 table.grid th { text-align:left; padding:.3rem .8rem; border-bottom:2px solid var(--line); color:var(--muted); font-weight:600; }
 table.grid td { width:auto; padding:.3rem .8rem; white-space:nowrap; color:var(--fg); }
