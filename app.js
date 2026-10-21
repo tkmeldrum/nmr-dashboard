@@ -5,7 +5,7 @@ import { initBatch, refreshBatch } from "./batch.js";
 import { initParamsLoad } from "./paramsload.js";
 import { initSave } from "./save.js";
 import { initFeedback } from "./feedback.js";
-import { initTabs, setTabEnabled, showTab } from "./tabs.js";
+import { currentTab, initTabs, setTabEnabled, showTab } from "./tabs.js";
 import { setBusy, withBusy } from "./busy.js";
 import { applyKind } from "./kinds.js";
 import { initRaw, renderRaw } from "./raw.js";
@@ -39,7 +39,12 @@ const onWorkerMessage = (e) => {
     }
     expandRecords(m.result);
     showResult(m.result);
+    const tag = $("dataset-banner-format");
+    tag.textContent = m.result.source_format === "tecmag" ? "Tecmag" : "Kea";           // detected from the files, not chosen
+    tag.hidden = false;
+    updateRecordNav();
     setBusy(null);
+    if (currentTab() === "raw" && m.result.supported) withBusy("Drawing the raw-data plots…", renderRaw);      // stepped to another dataset from the Raw data tab
   } else if (m.type === "reply") {
     handleReply(m);
   } else if (m.type === "progress") {
@@ -174,6 +179,24 @@ function setDatasetName(text) {
   $("dataset-banner").hidden = !text;
 }
 
+// Arrows on the Raw data tab step through the loaded datasets (the records of an arrayed file, or the datasets of a folder); the one left open is the one the Process tab uses.
+function updateRecordNav() {
+  const n = datasets.length, i = state.datasetIndex ?? 0;
+  $("record-nav").hidden = n < 2;
+  if (n < 2) return;
+  $("rec-label").textContent = `${i + 1} of ${n}: ${datasets[i].label}`;
+  $("rec-prev").disabled = i <= 0;
+  $("rec-next").disabled = i >= n - 1;
+  $("dataset-select").value = i;
+}
+
+function stepDataset(delta) {
+  const j = (state.datasetIndex ?? 0) + delta;
+  if (j >= 0 && j < datasets.length) openDataset(j);
+}
+$("rec-prev").addEventListener("click", () => stepDataset(-1));
+$("rec-next").addEventListener("click", () => stepDataset(1));
+
 function resetSections() {
   hideMessage();
   setDatasetName("");
@@ -182,7 +205,7 @@ function resetSections() {
   state.provenance = null;
   $("prov-details").hidden = true;
   resetUncertainty();
-  for (const t of ["raw", "process", "results"]) setTabEnabled(t, false);
+  for (const t of ["raw", "process", "results", "batch"]) setTabEnabled(t, false);
   showTab("load");
 }
 
@@ -233,6 +256,10 @@ async function openDataset(i) {
   if (!ds) return;
   state.datasetIndex = i;
   hideMessage();
+  state.results = null;                                    // results belong to the dataset that was processed
+  resetUncertainty();
+  setTabEnabled("results", false);
+  updateRecordNav();
   setBusy("Reading the files from disk…");
   const { files, timestampMs } = await readDatasetFiles(ds);
   setDatasetName(ds.label);
@@ -256,6 +283,7 @@ function expandRecords(r) {
   sel.value = i;
   $("chooser").hidden = false;
   setDatasetName(datasets[i].label);
+  updateRecordNav();
   refreshBatch();
 }
 

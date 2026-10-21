@@ -192,7 +192,7 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None):
         "version": __version__,
         "display": build_display(params, ts),
         "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
-        "is_cpmg": is_cpmg,
+        "is_cpmg": is_cpmg, "source_format": "kea",
         "kind": seq["kind"], "supported": seq["supported"], "analysis": seq["analysis"],
         "reason": reason,
         "raw": None,

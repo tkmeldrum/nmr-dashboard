@@ -1,8 +1,8 @@
 // Left-to-right workflow tabs.
 import { $ } from "./state.js";
 
-export const TABS = ["load", "raw", "process", "results"];
-const NAMES = { load: "Load", raw: "Raw data", process: "Process", results: "Results" };
+export const TABS = ["load", "raw", "process", "results", "batch"];
+const NAMES = { load: "Load", raw: "Raw data", process: "Process", results: "Results", batch: "Batch" };
 let onShow = () => {};
 
 export function showTab(name) {
@@ -49,7 +49,7 @@ function updateNav() {
   document.querySelectorAll(".tab-nav button[data-go]").forEach((b) => {
     const target = b.dataset.go, off = $("tab-" + target).disabled;
     b.disabled = off;
-    b.textContent = b.dataset.dir === "back" ? `← ${NAMES[target]}` : off && target === "results" ? "Results appear after you run the processing" : `${NAMES[target]} →`;
+    b.textContent = b.dataset.dir === "back" ? `← ${NAMES[target]}` : off && target === "results" ? "Results appear after you run the processing" : off && target === "batch" ? "Batch is for several datasets" : `${NAMES[target]} →`;
   });
 }
 
