@@ -11,6 +11,10 @@ ANALYSIS = {
 }
 SUPPORTED = {"cpmg", "t1", "t2d"}
 
+# Some Kea software versions write no `experiment` entry. The page then offers these names to pick from; CPMG is the default.
+CHOICES = ["CPMG", "T1Sat", "SSE-T2"]
+DEFAULT = "CPMG"
+
 
 def normalise(name):
     return re.sub(r"[^a-z0-9]", "", str(name or "").lower())

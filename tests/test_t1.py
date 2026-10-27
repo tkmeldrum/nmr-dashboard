@@ -37,6 +37,22 @@ def test_supported_and_unsupported_sequences_explain_themselves():
     assert "no `experiment`" in sequences.describe({})["reason"]
 
 
+def _without_experiment(src, dst):
+    shutil.copytree(src, dst)
+    par = dst / "acqu.par"
+    par.write_text("".join(l for l in par.read_text().splitlines(True) if not l.startswith("experiment")))
+    return dst
+
+
+def test_a_folder_with_no_experiment_entry_defaults_to_cpmg_and_can_be_told_otherwise(tmp_path):
+    d = _without_experiment(Path(__file__).resolve().parent.parent / "test_data" / "kea_cpmg_clean", tmp_path / "d")
+    r = load(d, fallback_to_mtime=False)
+    assert r["sequence_assumed"] and r["kind"] == "cpmg" and r["supported"] and r["params_all"]["experiment"] == "CPMG"
+    assert load(d, fallback_to_mtime=False, sequence="T1Sat")["kind"] == "t1"
+    real = load(Path(__file__).resolve().parent.parent / "test_data" / "kea_cpmg_clean", fallback_to_mtime=False, sequence="T1Sat")
+    assert not real["sequence_assumed"] and real["kind"] == "cpmg"        # the file's own entry wins
+
+
 def test_a_cpmg_folder_with_a_wrong_sequence_name_is_not_processed_as_cpmg(tmp_path):
     d = tmp_path / "x"
     shutil.copytree(CPMG_SNR100, d)

@@ -31,7 +31,7 @@ async function init() {
   postMessage({ type: "ready" });
 }
 
-function loadDataset({ files, timestampMs, record }) {
+function loadDataset({ files, timestampMs, record, sequence }) {
   // files: { name: ArrayBuffer }. Replace whatever was loaded before.
   if (pyodide.FS.analyzePath("/data").exists) {
     for (const n of pyodide.FS.readdir("/data")) {
@@ -44,9 +44,10 @@ function loadDataset({ files, timestampMs, record }) {
     pyodide.FS.writeFile("/data/" + name, new Uint8Array(buf));
   }
   pyodide.globals.set("_ts_ms", timestampMs ?? undefined);   // JS null would arrive as jsnull, not None
+  pyodide.globals.set("_sequence", sequence ?? undefined);   // only used when acqu.par has no `experiment` entry
   pyodide.globals.set("_record", record ?? undefined);       // which echo train of an arrayed Tecmag file
   const json = pyodide.runPython(
-    "import json\nfrom nmrdash.pipeline import load\njson.dumps(load('/data', _ts_ms, fallback_to_mtime=False, record=_record))"
+    "import json\nfrom nmrdash.pipeline import load\njson.dumps(load('/data', _ts_ms, fallback_to_mtime=False, record=_record, sequence=_sequence))"
   );
   postMessage({ type: "loaded", result: JSON.parse(json) });
 }

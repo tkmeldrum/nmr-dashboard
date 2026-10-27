@@ -22,7 +22,7 @@ and 23.67 T/m for Kea data (set a number to override). The experiment date store
 0. **The sequence decides the analysis.** The `experiment` entry in `acqu.par` is read (spelling variants tolerated): **CPMG**
    → exponential decay (T₂), with FT, ILT and per-position fits; **T1Sat** → saturation recovery (T₁); **SSE-T2** → T₂–D
    correlation (a 2D inversion plus a few-population model). The page shows the detected analysis on the Load tab and offers only the
-   controls that apply.
+   controls that apply. Some Kea software versions write no `experiment` entry: the sequence is then assumed to be CPMG, and a drop-down on the Load tab lets you pick **T1Sat** or **SSE-T2** instead (the command-line tool and batches assume CPMG).
 1. **Load**: drag a folder in or click to browse. A parent folder with several experiments gets a dropdown.
    Shows the curated parameters (sequence, `data.2d` timestamp, pulse length with 90°/180° amplitudes in dB, echo
    time, echoes, points, dwell, repetition time, scans, data directory); everything else is under "Show all parameters".

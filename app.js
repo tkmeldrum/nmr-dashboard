@@ -87,11 +87,11 @@ function restartPython() {
 startWorker();
 
 function sendLoad(payload) {
-  state.lastPayload = { files: Object.fromEntries(Object.entries(payload.files).map(([k, v]) => [k, v.slice(0)])), timestampMs: payload.timestampMs, record: payload.record };   // the transfer below empties the originals
+  state.lastPayload = { files: Object.fromEntries(Object.entries(payload.files).map(([k, v]) => [k, v.slice(0)])), timestampMs: payload.timestampMs, record: payload.record, sequence: payload.sequence };   // the transfer below empties the originals
   $("status").textContent = "Reading data…";
   setBusy("Reading and phasing the data…");
   worker.postMessage(
-    { type: "load", files: payload.files, timestampMs: payload.timestampMs, record: payload.record },
+    { type: "load", files: payload.files, timestampMs: payload.timestampMs, record: payload.record, sequence: payload.sequence },
     Object.values(payload.files)
   );
 }
@@ -413,6 +413,21 @@ function fillTable(table, rows) {
   }));
 }
 
+// Some Kea software versions write no `experiment` entry in acqu.par: the sequence is then assumed (CPMG) and can be changed here.
+function showSequencePicker(r) {
+  const pick = $("sequence-pick");
+  pick.hidden = !r.sequence_assumed;
+  if (!r.sequence_assumed) return;
+  $("sequence-select").replaceChildren(...r.sequence_choices.map((s) => Object.assign(document.createElement("option"), { value: s, textContent: s })));
+  $("sequence-select").value = r.params_all.experiment;
+}
+
+$("sequence-select").addEventListener("change", (e) => {
+  if (!state.lastPayload) return;
+  const payload = { ...state.lastPayload, sequence: e.target.value };
+  sendLoad(payload);                                       // the dataset is read again under the chosen sequence
+});
+
 function showResult(r) {
   refreshBatch();
   fillTable($("params"), r.display.map((x) => [x.label, x.value]));
@@ -420,9 +435,10 @@ function showResult(r) {
   $("params-section").hidden = false;
   const seq = r.params_all.experiment;
   $("analysis-line").textContent = r.analysis ? `Sequence “${seq}” → ${r.analysis} analysis${r.supported ? "" : " (not available yet)"}` : (seq ? `Sequence “${seq}”: no analysis available` : "");
+  showSequencePicker(r);
 
   if (!r.supported) {
-    return showMessage("This dataset cannot be analysed: " + r.reason + ". Its parameters are shown above.", "warn");
+    return showMessage("This dataset cannot be analysed: " + r.reason + ". Its parameters are shown below.", "warn");
   }
   applyKind(r.kind);                                  // the sequence name decides which analysis the page offers
   if (r.warnings && r.warnings.length) showMessage("Check this dataset: " + r.warnings.join(" "), "warn");   // Tecmag: odd time stamp, echo layout notes

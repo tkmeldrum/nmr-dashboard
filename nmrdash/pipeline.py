@@ -147,13 +147,15 @@ def _load_tecmag(path, timestamp_ms, record=None):
     return out
 
 
-def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None):
+def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None, sequence=None):
     """Read acqu.par + data.2d from dirpath; return a JSON-ready dict for the UI.
 
     timestamp_ms : file modification time in ms since epoch (from the browser's
         File.lastModified). If None: with fallback_to_mtime the data file's mtime
         on disk is used (desktop use); otherwise no timestamp is shown (the browser's
         in-memory files have no meaningful mtime, e.g. for bundled sample data).
+    sequence : the sequence to assume (one of sequences.CHOICES) when acqu.par has no `experiment` entry; default CPMG.
+        An `experiment` entry in the file always wins.
     """
     d = Path(dirpath)
     par_path = d / "acqu.par"
@@ -163,6 +165,9 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None):
             return _load_tecmag(tnt, timestamp_ms, record)
         raise FileNotFoundError("neither acqu.par (Kea) nor a .tnt file (Tecmag) was found in the selected folder")
     params = read_kea_params(par_path)
+    assumed = not params.get("experiment")
+    if assumed:
+        params["experiment"] = sequence or sequences.DEFAULT
 
     header = spec = None
     data_path = d / "data.2d"
@@ -193,6 +198,7 @@ def load(dirpath, timestamp_ms=None, fallback_to_mtime=True, record=None):
         "display": build_display(params, ts),
         "params_all": {k: (v if isinstance(v, (str, int, float, list)) else str(v)) for k, v in params.items()},
         "is_cpmg": is_cpmg, "source_format": "kea",
+        "sequence_assumed": assumed, "sequence_choices": sequences.CHOICES,
         "kind": seq["kind"], "supported": seq["supported"], "analysis": seq["analysis"],
         "reason": reason,
         "raw": None,
