@@ -6,3 +6,4 @@ site/
 tests/data_private/
 nmrdash/_buildinfo.py
 vendor/
+test_data/
